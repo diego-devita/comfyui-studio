@@ -204,61 +204,28 @@ WORKDIR /comfyui
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
     pip install -r requirements.txt
 
-# ── Custom nodes: install helper script ───────────────────
-# This script is used by the 4 RUN blocks below to clone
-# and install custom nodes from nodes.txt.
+# ── Custom nodes: install helper ──────────────────────────
+# install_nodes.sh reads nodes.txt and installs nodes between
+# section markers. COPY as a real file instead of generating
+# inline to avoid shell escaping issues.
 COPY nodes.txt /tmp/nodes.txt
-
-# Helper script to install a section of nodes.txt.
-# Usage: install_nodes.sh <start_marker> <end_marker>
-# Reads lines between the two markers (exclusive).
-RUN printf '#!/bin/bash\n\
-set -e\n\
-START="$1"; END="$2"\n\
-IN_SECTION=false\n\
-while IFS= read -r line; do\n\
-  trimmed=$(echo "$line" | sed "s/^[[:space:]]*//")\n\
-  if echo "$trimmed" | grep -q "^# ── $START"; then IN_SECTION=true; continue; fi\n\
-  if echo "$trimmed" | grep -q "^# ── $END"; then break; fi\n\
-  [ "$IN_SECTION" = false ] && continue\n\
-  [ -z "$trimmed" ] && continue\n\
-  echo "$trimmed" | grep -q "^#" && continue\n\
-  repo=$(echo "$trimmed" | awk "{print \\$1}")\n\
-  req_file=$(echo "$trimmed" | awk "{print \\$2}")\n\
-  post_cmd=$(echo "$trimmed" | cut -d" " -f3-)\n\
-  name=$(basename "$repo" .git)\n\
-  echo ""\n\
-  echo "=== Installing $name ==="\n\
-  git clone --depth 1 "$repo"\n\
-  cd "$name"\n\
-  if [ -n "$req_file" ] && [ -f "$req_file" ]; then\n\
-    echo "  → pip install -r $req_file"\n\
-    pip install -r "$req_file" --extra-index-url https://download.pytorch.org/whl/'${PYTORCH_INDEX}'\n\
-  elif [ -z "$req_file" ] && [ -f requirements.txt ]; then\n\
-    echo "  → pip install -r requirements.txt"\n\
-    pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/'${PYTORCH_INDEX}'\n\
-  fi\n\
-  if [ -n "$post_cmd" ] && [ "$post_cmd" != " " ]; then\n\
-    echo "  → Running: $post_cmd"\n\
-    eval "$post_cmd"\n\
-  fi\n\
-  cd ..\n\
-done < /tmp/nodes.txt\n' > /tmp/install_nodes.sh && chmod +x /tmp/install_nodes.sh
+COPY install_nodes.sh /tmp/install_nodes.sh
+RUN chmod +x /tmp/install_nodes.sh
 
 # ── Custom nodes: Fundamentals / QoL ─────────────────────
 WORKDIR /comfyui/custom_nodes
-RUN /tmp/install_nodes.sh "Fundamentals" "Image Generation"
+RUN /tmp/install_nodes.sh "Fundamentals" "Image Generation" "${PYTORCH_INDEX}"
 
 # ── Custom nodes: Image Generation ───────────────────────
-RUN /tmp/install_nodes.sh "Image Generation" "Video Generation"
+RUN /tmp/install_nodes.sh "Image Generation" "Video Generation" "${PYTORCH_INDEX}"
 
 # ── Custom nodes: Video Generation ───────────────────────
-RUN /tmp/install_nodes.sh "Video Generation" "CivitAI Integration"
+RUN /tmp/install_nodes.sh "Video Generation" "CivitAI Integration" "${PYTORCH_INDEX}"
 
 # ── Custom nodes: CivitAI Integration ────────────────────
-RUN /tmp/install_nodes.sh "CivitAI Integration" "ENDOFFILE"
+RUN /tmp/install_nodes.sh "CivitAI Integration" "ENDOFFILE" "${PYTORCH_INDEX}"
 
-# ── Clean up pip cache from all node installs ─────────────
+# ── Clean up ──────────────────────────────────────────────
 RUN rm -rf /root/.cache/pip /tmp/nodes.txt /tmp/install_nodes.sh
 
 # ── FastAPI + backoffice dependencies ─────────────────────
