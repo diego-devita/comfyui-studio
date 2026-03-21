@@ -877,8 +877,16 @@
         return;
       }
 
-      const data = await resp.json();
-      displayResult(data);
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.startsWith('video/') || contentType.startsWith('image/') || contentType === 'application/octet-stream') {
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const isVideo = contentType.startsWith('video/');
+        displayResult({ outputs: { type: isVideo ? 'video' : 'image', url: url } });
+      } else {
+        const data = await resp.json();
+        displayResult(data);
+      }
 
     } catch (e) {
       if (e.message !== 'auth') {
