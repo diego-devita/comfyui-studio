@@ -423,6 +423,8 @@
         }
         $updateResult.textContent = 'Updated: ' + data.updated.join(', ');
         $updateResult.style.color = 'var(--success)';
+        // Refresh status to reflect updated components
+        initialLoad();
       } else if (data.message) {
         $updateResult.textContent = data.message;
         $updateResult.style.color = 'var(--muted)';
