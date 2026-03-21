@@ -705,7 +705,7 @@ async def sync_models():
         remote_version = remote.get("version", 0)
         local_version = _models_data.get("version", 0)
 
-        if remote_version > local_version:
+        if type(remote_version) != type(local_version) or remote_version > local_version:
             # Write to /workspace so it persists and overrides the baked-in version
             MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
             MODELS_JSON.write_text(json.dumps(remote, indent=2, ensure_ascii=False))
@@ -1041,7 +1041,9 @@ async def sync_workflows():
             for remote in remote_index:
                 wf_id = remote["id"]
                 local = local_index.get(wf_id)
-                if not local or remote["version"] > local["version"]:
+                remote_v = remote.get("version", 0)
+                local_v = local.get("version", 0) if local else None
+                if not local or type(remote_v) != type(local_v) or remote_v > local_v:
                     # Ensure workspace directory for this workflow
                     wf_dir = WORKFLOWS_DIR / wf_id
                     wf_dir.mkdir(parents=True, exist_ok=True)
