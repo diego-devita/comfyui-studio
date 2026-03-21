@@ -397,7 +397,10 @@
       <div class="progress-bar-wrap">
         <div class="progress-bar-fill" id="progressFill"></div>
       </div>
-      <div class="progress-pct" id="progressPct"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="progress-pct" id="progressPct"></div>
+        <div class="progress-pct" id="progressElapsed" style="color:var(--muted);"></div>
+      </div>
     </div>
 
     <!-- Result -->
@@ -442,7 +445,30 @@
   const $progressStep = document.getElementById('progressStep');
   const $progressFill = document.getElementById('progressFill');
   const $progressPct  = document.getElementById('progressPct');
+  const $progressElapsed = document.getElementById('progressElapsed');
   const $resultPanel  = document.getElementById('resultPanel');
+
+  let execStartTime = null;
+  let elapsedTimer = null;
+
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? m + 'm ' + sec + 's' : sec + 's';
+  }
+
+  function startElapsedTimer() {
+    execStartTime = Date.now();
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => {
+      $progressElapsed.textContent = fmtElapsed(Date.now() - execStartTime);
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+  }
 
   // ── Utilities ──
   function escHtml(str) {
@@ -747,6 +773,8 @@
     $progressFill.style.width = '0%';
     $progressFill.classList.remove('indeterminate');
     $progressPct.textContent = '';
+    $progressElapsed.textContent = '';
+    startElapsedTimer();
 
     try {
       const formData = new FormData();
@@ -794,6 +822,7 @@
       startStatusPolling();
 
     } catch (e) {
+      stopElapsedTimer();
       if (e.message !== 'auth') {
         showExecError(e.message);
       }
@@ -842,13 +871,16 @@
 
       } else if (status === 'completed' || status === 'done' || status === 'success') {
         stopPolling();
+        stopElapsedTimer();
+        var totalTime = execStartTime ? fmtElapsed(Date.now() - execStartTime) : '';
         $progressPanel.classList.remove('visible');
-        await fetchResult();
+        await fetchResult(totalTime);
         $generateBtn.disabled = false;
         $generateBtn.innerHTML = '&#9654; Generate';
 
       } else if (status === 'error' || status === 'failed') {
         stopPolling();
+        stopElapsedTimer();
         $progressPanel.classList.remove('visible');
         showExecError(data.error || data.message || 'Execution failed.');
         $generateBtn.disabled = false;
@@ -868,7 +900,7 @@
   }
 
   // ── Fetch Result ──
-  async function fetchResult() {
+  async function fetchResult(totalTime) {
     try {
       const resp = await apiFetch('/api/run/result/' + encodeURIComponent(currentPromptId));
       if (!resp.ok) {
@@ -882,9 +914,10 @@
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         const isVideo = contentType.startsWith('video/');
-        displayResult({ outputs: { type: isVideo ? 'video' : 'image', url: url } });
+        displayResult({ outputs: { type: isVideo ? 'video' : 'image', url: url }, totalTime: totalTime });
       } else {
         const data = await resp.json();
+        data.totalTime = totalTime;
         displayResult(data);
       }
 
@@ -941,6 +974,13 @@
       actions.appendChild(dlLink);
       $resultPanel.appendChild(actions);
     });
+
+    if (data.totalTime) {
+      const timeInfo = document.createElement('div');
+      timeInfo.style.cssText = 'color:var(--muted);font-size:13px;margin-top:8px;';
+      timeInfo.textContent = 'Completed in ' + data.totalTime;
+      $resultPanel.appendChild(timeInfo);
+    }
 
     $resultPanel.classList.add('visible');
   }
