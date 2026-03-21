@@ -1,16 +1,17 @@
 """
 ComfyUI Studio — Model Manager
-FastAPI backend for managing ComfyUI model downloads with queue-based
-downloading, SSE progress streaming, and HTTP Basic Auth.
+FastAPI backend for managing ComfyUI model downloads with a parallel download
+pool, per-download speed tracking, SSE progress streaming, and HTTP Basic Auth.
 """
 
 import asyncio
 import json
 import os
-import queue
 import secrets
+import shutil
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -96,13 +97,19 @@ def _www(filename: str) -> Path:
     return WWW_DEFAULT / filename
 
 
-# ── Download state & queue ───────────────────────────────────────────────────
+# ── Download state & parallel pool ──────────────────────────────────────────
 # In-memory state, resets on process restart.
 # filename -> {"status": "queued"|"downloading"|"done"|"error",
-#              "bytes": int, "total": int, "error": str}
+#              "bytes": int, "total": int, "speed": float, "error": str|None,
+#              "_last_bytes": int, "_last_time": float}
 
 _download_state: dict = {}
-_download_queue: queue.Queue = queue.Queue()
+
+_max_concurrent = int(os.environ.get("MAX_CONCURRENT_DOWNLOADS", "3"))
+_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="dl")
+_pending_queue: list[dict] = []  # ordered list of model dicts waiting to download
+_active_count = 0
+_queue_lock = threading.Lock()
 
 
 def _inject_auth(url: str) -> tuple[str, dict]:
@@ -122,11 +129,32 @@ def _inject_auth(url: str) -> tuple[str, dict]:
     return url, headers
 
 
+def _schedule_downloads() -> None:
+    """
+    Scheduler: submit pending downloads to the executor up to _max_concurrent.
+    Must be called with _queue_lock held.
+    """
+    global _active_count
+    while _active_count < _max_concurrent and _pending_queue:
+        item = _pending_queue.pop(0)
+        _active_count += 1
+        _executor.submit(_do_download, item)
+
+
+def _on_download_complete() -> None:
+    """Called when a download finishes (success or error). Decrements active count
+    and tries to schedule more pending downloads."""
+    global _active_count
+    with _queue_lock:
+        _active_count -= 1
+        _schedule_downloads()
+
+
 def _do_download(item: dict) -> None:
     """
-    Download a single model file. Called by the worker thread.
+    Download a single model file. Submitted to the thread pool executor.
     Writes to a .tmp file during transfer and renames on success.
-    Updates _download_state with byte progress every 8 MB chunk.
+    Updates _download_state with byte progress and rolling speed every 8 MB chunk.
     """
     filename = item["file"]
     dest_dir = Path(MODELS_BASE) / item["dest"]
@@ -135,7 +163,16 @@ def _do_download(item: dict) -> None:
     dest_file = dest_dir / filename
     tmp_file = dest_dir / f"{filename}.tmp"
 
-    _download_state[filename] = {"status": "downloading", "bytes": 0, "total": 0}
+    now = time.time()
+    _download_state[filename] = {
+        "status": "downloading",
+        "bytes": 0,
+        "total": 0,
+        "speed": 0.0,
+        "error": None,
+        "_last_bytes": 0,
+        "_last_time": now,
+    }
 
     url, headers = _inject_auth(item["url"])
 
@@ -143,7 +180,8 @@ def _do_download(item: dict) -> None:
         with requests.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers) as r:
             r.raise_for_status()
             total = int(r.headers.get("Content-Length", 0))
-            _download_state[filename]["total"] = total
+            state = _download_state[filename]
+            state["total"] = total
 
             written = 0
             with open(tmp_file, "wb") as f:
@@ -151,14 +189,27 @@ def _do_download(item: dict) -> None:
                     if chunk:
                         f.write(chunk)
                         written += len(chunk)
-                        _download_state[filename]["bytes"] = written
+                        state["bytes"] = written
+
+                        # Update rolling speed estimate (approx every 1 second)
+                        now = time.time()
+                        elapsed = now - state["_last_time"]
+                        if elapsed >= 1.0:
+                            state["speed"] = (state["bytes"] - state["_last_bytes"]) / elapsed
+                            state["_last_bytes"] = state["bytes"]
+                            state["_last_time"] = now
 
         # Atomic rename on success
         tmp_file.rename(dest_file)
+        final_size = dest_file.stat().st_size
         _download_state[filename] = {
             "status": "done",
-            "bytes": dest_file.stat().st_size,
+            "bytes": final_size,
             "total": total,
+            "speed": 0.0,
+            "error": None,
+            "_last_bytes": 0,
+            "_last_time": 0.0,
         }
 
     except Exception as e:
@@ -168,29 +219,36 @@ def _do_download(item: dict) -> None:
             "status": "error",
             "bytes": 0,
             "total": 0,
+            "speed": 0.0,
             "error": str(e),
+            "_last_bytes": 0,
+            "_last_time": 0.0,
         }
 
-
-def _download_worker() -> None:
-    """Background worker that processes the download queue sequentially."""
-    while True:
-        item = _download_queue.get()
-        try:
-            _do_download(item)
-        except Exception as e:
-            _download_state[item["file"]] = {
-                "status": "error",
-                "bytes": 0,
-                "total": 0,
-                "error": str(e),
-            }
-        finally:
-            _download_queue.task_done()
+    finally:
+        _on_download_complete()
 
 
-# Start the single download worker on module load
-threading.Thread(target=_download_worker, daemon=True).start()
+def _enqueue_download(model: dict) -> None:
+    """Add a model to the pending queue and trigger the scheduler."""
+    filename = model["file"]
+    _download_state[filename] = {
+        "status": "queued",
+        "bytes": 0,
+        "total": 0,
+        "speed": 0.0,
+        "error": None,
+        "_last_bytes": 0,
+        "_last_time": 0.0,
+    }
+    with _queue_lock:
+        _pending_queue.append(model)
+        _schedule_downloads()
+
+
+def _clean_state(state: dict) -> dict:
+    """Return a copy of a download state dict with internal fields stripped out."""
+    return {k: v for k, v in state.items() if not k.startswith("_")}
 
 
 # ── Request schemas ──────────────────────────────────────────────────────────
@@ -198,6 +256,10 @@ threading.Thread(target=_download_worker, daemon=True).start()
 
 class BatchDownloadRequest(BaseModel):
     filenames: list[str]
+
+
+class SettingsUpdate(BaseModel):
+    max_concurrent: int = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -208,12 +270,12 @@ async def health():
     return {"status": "ok"}
 
 
-# List all models with current status
+# List all models with current status and global stats
 @app.get("/api/admin/models")
 async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
     _reload_models()
 
-    categories_out = []
+    result_categories = []
     for cat in _models_data.get("categories", []):
         models_out = []
         for m in cat.get("models", []):
@@ -234,6 +296,7 @@ async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
                 "progress": 0.0,
                 "on_disk_bytes": 0,
                 "expected_bytes": int(m.get("size_gb", 0) * 1_000_000_000),
+                "speed": 0.0,
                 "error": None,
             }
 
@@ -241,6 +304,7 @@ async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
                 entry["status"] = "downloading"
                 entry["on_disk_bytes"] = state["bytes"]
                 entry["expected_bytes"] = state["total"] or entry["expected_bytes"]
+                entry["speed"] = state.get("speed", 0.0)
                 if state["total"] > 0:
                     entry["progress"] = round(state["bytes"] / state["total"] * 100, 1)
                 else:
@@ -264,13 +328,42 @@ async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
 
             models_out.append(entry)
 
-        categories_out.append({
+        result_categories.append({
             "id": cat.get("id", ""),
             "name": cat.get("name", ""),
             "models": models_out,
         })
 
-    return JSONResponse({"categories": categories_out})
+    # ── Compute stats ────────────────────────────────────────────────────
+    queued_count = sum(1 for s in _download_state.values() if s.get("status") == "queued")
+    downloading_count = sum(1 for s in _download_state.values() if s.get("status") == "downloading")
+    global_speed = sum(s.get("speed", 0) for s in _download_state.values() if s.get("status") == "downloading")
+
+    # Disk usage
+    try:
+        usage = shutil.disk_usage(str(MODELS_BASE))
+        models_bytes = sum(f.stat().st_size for f in Path(MODELS_BASE).rglob("*") if f.is_file())
+        free_bytes = usage.free
+    except Exception:
+        models_bytes = 0
+        free_bytes = 0
+
+    # Count present/missing from the response data
+    present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
+    total_count = sum(len(cat["models"]) for cat in result_categories)
+
+    return JSONResponse({
+        "stats": {
+            "queued_count": queued_count,
+            "downloading_count": downloading_count,
+            "present_count": present_count,
+            "total_count": total_count,
+            "global_speed": global_speed,
+            "models_bytes": models_bytes,
+            "free_bytes": free_bytes,
+        },
+        "categories": result_categories,
+    })
 
 
 # Queue a single model download
@@ -289,9 +382,8 @@ async def models_download(
     if state.get("status") in ("downloading", "queued"):
         return JSONResponse({"status": state["status"], "file": filename})
 
-    # Enqueue
-    _download_state[filename] = {"status": "queued", "bytes": 0, "total": 0}
-    _download_queue.put(model)
+    # Enqueue via the parallel pool scheduler
+    _enqueue_download(model)
     return JSONResponse({"status": "queued", "file": filename})
 
 
@@ -316,8 +408,7 @@ async def models_download_batch(
             skipped.append(filename)
             continue
 
-        _download_state[filename] = {"status": "queued", "bytes": 0, "total": 0}
-        _download_queue.put(model)
+        _enqueue_download(model)
         queued.append(filename)
 
     return JSONResponse({"queued": queued, "skipped": skipped})
@@ -331,12 +422,7 @@ async def models_status(_: HTTPBasicCredentials = Depends(require_auth)):
         while True:
             downloads = {}
             for filename, state in _download_state.items():
-                downloads[filename] = {
-                    "status": state.get("status", "unknown"),
-                    "bytes": state.get("bytes", 0),
-                    "total": state.get("total", 0),
-                    "error": state.get("error"),
-                }
+                downloads[filename] = _clean_state(state)
             payload = json.dumps({"downloads": downloads, "timestamp": time.time()})
             yield f"data: {payload}\n\n"
             await asyncio.sleep(1)
@@ -374,6 +460,23 @@ async def models_delete(
             del _download_state[filename]
 
     return JSONResponse({"status": "deleted", "file": filename})
+
+
+# ── Settings endpoints ───────────────────────────────────────────────────────
+
+@app.get("/api/admin/settings")
+async def get_settings(_: HTTPBasicCredentials = Depends(require_auth)):
+    return {"max_concurrent": _max_concurrent}
+
+
+@app.put("/api/admin/settings")
+async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
+    global _max_concurrent
+    if body.max_concurrent is not None:
+        _max_concurrent = max(1, min(10, body.max_concurrent))
+        with _queue_lock:
+            _schedule_downloads()  # might start more downloads
+    return {"max_concurrent": _max_concurrent}
 
 
 # ── HTML pages ───────────────────────────────────────────────────────────────

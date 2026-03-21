@@ -22,6 +22,7 @@
     --body: system-ui, -apple-system, 'Segoe UI', sans-serif;
     --radius-card: 8px;
     --radius-sm: 4px;
+    --status-bar-h: 38px;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,7 +48,7 @@
 
   /* ── Header ── */
   header {
-    padding: 28px 40px;
+    padding: 24px 40px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -65,13 +66,14 @@
     white-space: nowrap;
   }
   .logo span { color: var(--accent); }
-  .logo-sub {
+  .logo small {
     font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 3px;
     color: var(--muted);
     text-transform: uppercase;
-    margin-top: 4px;
+    margin-left: 14px;
+    font-weight: 400;
   }
 
   .header-actions { display: flex; gap: 12px; align-items: center; }
@@ -100,57 +102,196 @@
   .btn--danger:hover:not(:disabled) { border-color: var(--error); background: var(--error); color: #fff; }
   .btn--sm { padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }
 
-  /* ── Toolbar (tabs + search) ── */
-  .toolbar {
-    padding: 0 40px;
+  /* ── Status bar ── */
+  .status-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #0e0e18;
     border-bottom: 1px solid var(--border);
-  }
-
-  .tab-row {
+    padding: 0 40px;
+    height: var(--status-bar-h);
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 0;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-    -webkit-overflow-scrolling: touch;
-  }
-  .tab-row::-webkit-scrollbar { height: 3px; }
-  .tab-row::-webkit-scrollbar-track { background: transparent; }
-  .tab-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  .tab {
-    padding: 14px 20px;
     font-family: var(--mono);
     font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
     color: var(--muted);
-    cursor: pointer;
-    border: none;
-    background: none;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-    transition: all 0.15s ease;
-    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab .tab-count { opacity: 0.6; }
-  .tab .tab-missing { color: var(--error); opacity: 0.8; font-size: 10px; }
+  .status-bar::-webkit-scrollbar { display: none; }
+
+  .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 0 16px;
+  }
+  .stat:not(:last-child) {
+    border-right: 1px solid var(--border);
+  }
+  .stat--downloading { color: var(--accent); }
+  .stat--queued { color: var(--queued); }
+  .stat--present { color: var(--success); }
+  .stat--disk { color: var(--muted); }
+  .stat--concurrent { color: var(--muted); }
+  .stat--concurrent select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    outline: none;
+  }
+  .stat--concurrent select:focus { border-color: var(--accent); }
+
+  /* ── Filter panel ── */
+  .filter-panel {
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+  }
 
   .filter-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 40px;
-    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    padding: 10px 0;
+    flex-wrap: wrap;
+  }
+  .filter-row:not(:last-child) {
+    border-bottom: 1px solid rgba(42, 42, 58, 0.4);
   }
 
+  .filter-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+
+  .tag-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filter-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .filter-tag:hover {
+    border-color: #4a4a5a;
+    color: var(--text);
+  }
+
+  /* Category filter tags */
+  .filter-tag.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+
+  /* Status-specific filter tags when active */
+  .filter-tag[data-status="present"].active {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(68, 255, 136, 0.06);
+  }
+  .filter-tag[data-status="missing"].active {
+    border-color: var(--muted);
+    color: var(--text);
+    background: rgba(136, 136, 160, 0.08);
+  }
+  .filter-tag[data-status="queued"].active {
+    border-color: var(--queued);
+    color: var(--queued);
+    background: rgba(255, 170, 68, 0.06);
+  }
+  .filter-tag[data-status="downloading"].active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .filter-tag[data-status="error"].active {
+    border-color: var(--error);
+    color: var(--error);
+    background: rgba(255, 68, 102, 0.06);
+  }
+
+  /* Tag filter pills (model tags) */
+  .filter-tag[data-tag] {
+    border-color: #2a2a3a;
+    color: var(--muted);
+  }
+  .filter-tag[data-tag].active {
+    border-color: #7a7a9a;
+    color: var(--text);
+    background: rgba(224, 224, 232, 0.06);
+  }
+
+  /* Sort + View buttons */
+  .sort-group, .view-group {
+    display: flex;
+    gap: 4px;
+  }
+
+  .sort-btn, .view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .sort-btn:hover, .view-btn:hover {
+    border-color: #4a4a5a;
+    color: var(--text);
+  }
+  .sort-btn.active, .view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .sort-btn .sort-arrow {
+    font-size: 10px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .sort-btn .sort-arrow.desc {
+    transform: rotate(180deg);
+  }
+
+  /* Search input */
   .search-input {
     flex: 1;
-    max-width: 480px;
-    padding: 10px 16px 10px 38px;
+    padding: 10px 16px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -163,53 +304,37 @@
   .search-input::placeholder { color: var(--muted); }
   .search-input:focus { border-color: var(--accent); }
 
-  .search-wrap {
-    position: relative;
-    flex: 1;
-    max-width: 480px;
-  }
-  .search-wrap::before {
-    content: '\1F50D';
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 14px;
-    opacity: 0.5;
-    pointer-events: none;
-  }
-
-  .filter-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
-
-  .filter-stats {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
   /* ── Main content ── */
   main { padding: 32px 40px 64px; }
 
-  .category-section { display: none; }
-  .category-section.active { display: block; }
+  /* ── Category sections ── */
+  .category-section {
+    margin-bottom: 36px;
+    transition: opacity 0.2s ease;
+  }
+  .category-section.section-hidden { display: none; }
 
   .section-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 24px;
-    gap: 16px;
-    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
   }
-
   .section-title {
     font-family: var(--display);
     font-weight: 700;
-    font-size: 18px;
+    font-size: 16px;
+    text-transform: capitalize;
+  }
+  .section-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
   }
 
-  /* ── Card grid ── */
+  /* ── Card grid: extended ── */
   .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -225,6 +350,7 @@
     flex-direction: column;
     gap: 12px;
     transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
   }
   .model-card.status-downloading {
     border-color: var(--accent);
@@ -234,7 +360,7 @@
     border-color: var(--error);
     box-shadow: 0 0 20px rgba(255, 68, 102, 0.06);
   }
-  .model-card.hidden { display: none; }
+  .model-card.card-hidden { display: none; }
 
   .card-top {
     display: flex;
@@ -278,6 +404,19 @@
   .source-badge.civitai { background: #2a1f3a; color: #c0a0ff; }
   .source-badge.huggingface { background: #1f2a1f; color: #a0d0a0; }
   .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
+
+  .source-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    opacity: 0.6;
+    transition: opacity 0.15s, color 0.15s;
+    line-height: 1;
+  }
+  .source-link:hover {
+    opacity: 1;
+    color: var(--accent);
+  }
 
   /* ── Tags ── */
   .card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -380,6 +519,85 @@
     margin-top: auto;
   }
 
+  /* ── Compact view ── */
+  .card-grid.compact {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .card-grid.compact .model-card {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 12px;
+    border-radius: 0;
+    position: relative;
+  }
+  .card-grid.compact .model-card:first-child {
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+  .card-grid.compact .model-card:last-child {
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
+  }
+
+  .card-grid.compact .card-top {
+    display: contents;
+  }
+  .card-grid.compact .card-info {
+    min-width: 0;
+  }
+  .card-grid.compact .card-name {
+    font-size: 13px;
+    margin-bottom: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-grid.compact .card-meta {
+    display: none;
+  }
+  .card-grid.compact .card-compact-size {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .card-grid.compact .card-compact-source {
+    display: block;
+  }
+  .card-grid.compact .card-tags,
+  .card-grid.compact .progress-wrap,
+  .card-grid.compact .card-error,
+  .card-grid.compact .source-link {
+    display: none !important;
+  }
+  .card-grid.compact .card-actions {
+    margin-top: 0;
+  }
+  .card-grid.compact .card-actions .btn {
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+
+  /* Compact: thin progress underline for downloading */
+  .card-grid.compact .model-card.status-downloading::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 0 0 0 var(--radius-card);
+    transition: width 0.8s linear;
+    width: var(--compact-progress, 0%);
+  }
+
+  /* Hide compact-only elements in extended mode */
+  .card-compact-size { display: none; }
+  .card-compact-source { display: none; }
+
   /* ── Spinner ── */
   .spinner {
     display: inline-block;
@@ -480,12 +698,18 @@
   /* ── Responsive ── */
   @media (max-width: 640px) {
     header { padding: 20px 20px; }
-    .toolbar { padding: 0 20px; }
-    .filter-row { padding: 12px 20px; flex-wrap: wrap; }
+    .status-bar { padding: 0 20px; }
+    .filter-panel { padding: 0 20px; }
     main { padding: 20px 20px 48px; }
     .card-grid { grid-template-columns: 1fr; }
+    .card-grid.compact .model-card {
+      grid-template-columns: 1fr auto auto;
+    }
+    .card-grid.compact .card-compact-size,
+    .card-grid.compact .card-compact-source { display: none !important; }
     .logo { font-size: 18px; }
-    .section-header { flex-direction: column; align-items: flex-start; }
+    .logo small { display: block; margin-left: 0; margin-top: 4px; }
+    .filter-label { min-width: 60px; }
   }
 </style>
 </head>
@@ -507,28 +731,58 @@
 
 <!-- Header -->
 <header>
-  <div>
-    <div class="logo">ComfyUI <span>Studio</span></div>
-    <div class="logo-sub">Model Manager</div>
-  </div>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Model Manager</small></div>
   <div class="header-actions">
-    <button class="btn" id="globalDownloadAll">Download All Missing</button>
+    <button class="btn" id="globalDlAll">Download All Missing</button>
   </div>
 </header>
 
-<!-- Tab bar -->
-<nav class="toolbar">
-  <div class="tab-row" id="tabRow"></div>
-</nav>
+<!-- Status bar -->
+<div class="status-bar" id="statusBar">
+  <span class="stat stat--downloading" id="statDownloading">0 downloading</span>
+  <span class="stat stat--queued" id="statQueued">0 queued</span>
+  <span class="stat stat--present" id="statPresent">0 / 0 present</span>
+  <span class="stat stat--disk" id="statDisk">--</span>
+  <span class="stat stat--concurrent">
+    Parallel: <select id="maxConcurrent"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
+  </span>
+</div>
 
-<!-- Filter / search row -->
-<div class="filter-row">
-  <div class="search-wrap">
-    <input class="search-input" type="text" id="searchInput" placeholder="Filter by name, filename, or tag...">
+<!-- Filter panel -->
+<div class="filter-panel">
+  <div class="filter-row">
+    <span class="filter-label">Categories</span>
+    <div id="categoryFilters" class="tag-group"></div>
   </div>
-  <div class="filter-right">
-    <span class="filter-stats" id="filterStats"></span>
-    <button class="btn btn--sm" id="tabDownloadMissing">Download Missing</button>
+  <div class="filter-row">
+    <span class="filter-label">Tags</span>
+    <div id="tagFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Status</span>
+    <div id="statusFilters" class="tag-group">
+      <button class="filter-tag active" data-status="present">present</button>
+      <button class="filter-tag active" data-status="missing">missing</button>
+      <button class="filter-tag active" data-status="queued">queued</button>
+      <button class="filter-tag active" data-status="downloading">downloading</button>
+      <button class="filter-tag active" data-status="error">error</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Sort</span>
+    <div class="sort-group" id="sortGroup">
+      <button class="sort-btn active" data-sort="name">Name <span class="sort-arrow">&#9650;</span></button>
+      <button class="sort-btn" data-sort="size">Size</button>
+      <button class="sort-btn" data-sort="status">Status</button>
+    </div>
+    <span class="filter-label" style="margin-left:auto">View</span>
+    <div class="view-group" id="viewGroup">
+      <button class="view-btn active" data-view="extended">Extended</button>
+      <button class="view-btn" data-view="compact">Compact</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search models...">
   </div>
 </div>
 
@@ -547,10 +801,17 @@
   // ── State ──
   let authHeader = null;
   let categories = [];
-  let activeTab = null;
+  let activeCategories = new Set();
+  let activeTags = new Set();
+  let activeStatuses = new Set(['present', 'missing', 'queued', 'downloading', 'error']);
+  let currentSort = 'name';
+  let sortAscending = true;
+  let currentView = 'extended';
+  let searchQuery = '';
   let pollTimer = null;
-  const cardMap = {};       // filename -> {el, refs}
-  const sectionMap = {};    // categoryId -> section DOM
+  const cardMap = {};
+  const sectionMap = {};
+  let allTags = [];
 
   // ── DOM refs ──
   const $loginOverlay = document.getElementById('loginOverlay');
@@ -558,13 +819,20 @@
   const $loginPass    = document.getElementById('loginPass');
   const $loginBtn     = document.getElementById('loginBtn');
   const $loginError   = document.getElementById('loginError');
-  const $tabRow       = document.getElementById('tabRow');
   const $searchInput  = document.getElementById('searchInput');
-  const $filterStats  = document.getElementById('filterStats');
   const $main         = document.getElementById('mainContent');
   const $loading      = document.getElementById('loadingState');
-  const $globalDlAll  = document.getElementById('globalDownloadAll');
-  const $tabDlMissing = document.getElementById('tabDownloadMissing');
+  const $globalDlAll  = document.getElementById('globalDlAll');
+  const $categoryFilters = document.getElementById('categoryFilters');
+  const $tagFilters   = document.getElementById('tagFilters');
+  const $statusFilters = document.getElementById('statusFilters');
+  const $sortGroup    = document.getElementById('sortGroup');
+  const $viewGroup    = document.getElementById('viewGroup');
+  const $statDownloading = document.getElementById('statDownloading');
+  const $statQueued   = document.getElementById('statQueued');
+  const $statPresent  = document.getElementById('statPresent');
+  const $statDisk     = document.getElementById('statDisk');
+  const $maxConcurrent = document.getElementById('maxConcurrent');
 
   // ── Utilities ──
   function fmtBytes(bytes) {
@@ -576,7 +844,7 @@
   }
 
   function fmtSize(gb) {
-    if (!gb) return '—';
+    if (!gb) return '--';
     if (gb < 0.01) return (gb * 1024).toFixed(0) + ' MB';
     return gb + ' GB';
   }
@@ -604,6 +872,20 @@
       throw new Error('Unauthorized');
     }
     return resp;
+  }
+
+  function makeSourceLink(url) {
+    if (!url) return '';
+    if (url.includes('civitai.com/api/download/models/')) {
+      const match = url.match(/models\/(\d+)/);
+      if (match) return 'https://civitai.com/models/' + match[1];
+    }
+    return url;
+  }
+
+  function statusOrder(status) {
+    const order = { downloading: 0, queued: 1, error: 2, missing: 3, present: 4 };
+    return order[status] !== undefined ? order[status] : 5;
   }
 
   // ── Auth ──
@@ -668,107 +950,264 @@
       }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
-      // No auth needed or browser cached it
-      authHeader = null; // rely on browser session
+      authHeader = null;
       hideLogin();
       const data = await resp.json();
       handleModelData(data);
       $loading.style.display = 'none';
       startPolling();
     } catch (e) {
-      // Network error or auth required
       showLogin();
     }
   }
+
+  // ── Tag extraction ──
+  function extractAllTags(cats) {
+    const freq = {};
+    for (const cat of cats) {
+      for (const m of cat.models) {
+        for (const t of (m.tags || [])) {
+          freq[t] = (freq[t] || 0) + 1;
+        }
+      }
+    }
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .map(e => e[0]);
+  }
+
+  // ── Build filter UI ──
+  function buildCategoryFilters(cats) {
+    $categoryFilters.innerHTML = '';
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.category = cat.id;
+      btn.textContent = cat.name;
+      if (activeCategories.has(cat.id)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeCategories.has(cat.id)) {
+          activeCategories.delete(cat.id);
+          btn.classList.remove('active');
+        } else {
+          activeCategories.add(cat.id);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $categoryFilters.appendChild(btn);
+    });
+  }
+
+  function buildTagFilters(tags) {
+    $tagFilters.innerHTML = '';
+    const top20 = tags.slice(0, 20);
+    top20.forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.tag = tag;
+      btn.textContent = tag;
+      if (activeTags.has(tag)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeTags.has(tag)) {
+          activeTags.delete(tag);
+          btn.classList.remove('active');
+        } else {
+          activeTags.add(tag);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $tagFilters.appendChild(btn);
+    });
+  }
+
+  // Status filter click handlers
+  $statusFilters.querySelectorAll('.filter-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const status = btn.dataset.status;
+      if (activeStatuses.has(status)) {
+        activeStatuses.delete(status);
+        btn.classList.remove('active');
+      } else {
+        activeStatuses.add(status);
+        btn.classList.add('active');
+      }
+      applyFiltersAndSort();
+    });
+  });
+
+  // Sort button click handlers
+  $sortGroup.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sort = btn.dataset.sort;
+      if (currentSort === sort) {
+        sortAscending = !sortAscending;
+      } else {
+        currentSort = sort;
+        sortAscending = true;
+      }
+      // Update active states
+      $sortGroup.querySelectorAll('.sort-btn').forEach(b => {
+        b.classList.remove('active');
+        const arrow = b.querySelector('.sort-arrow');
+        if (arrow) arrow.remove();
+      });
+      btn.classList.add('active');
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow' + (sortAscending ? '' : ' desc');
+      arrow.innerHTML = '&#9650;';
+      btn.appendChild(arrow);
+      sortCards();
+    });
+  });
+
+  // View toggle click handlers
+  $viewGroup.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (currentView === view) return;
+      currentView = view;
+      $viewGroup.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyView();
+    });
+  });
+
+  // Search handler
+  $searchInput.addEventListener('input', () => {
+    searchQuery = $searchInput.value.trim().toLowerCase();
+    applyFiltersAndSort();
+  });
+
+  // Concurrent downloads handler
+  $maxConcurrent.addEventListener('change', async () => {
+    const val = parseInt($maxConcurrent.value, 10);
+    try {
+      await apiFetch('/api/admin/settings', {
+        method: 'PUT',
+        body: { max_concurrent_downloads: val }
+      });
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        console.error('Failed to update concurrent setting:', e);
+      }
+    }
+  });
 
   // ── Data handling ──
   function handleModelData(data) {
     const cats = data.categories || [];
     categories = cats;
-    buildTabs(cats);
+
+    // Attach _category and _searchText to each model
+    cats.forEach(cat => {
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    allTags = extractAllTags(cats);
+    buildCategoryFilters(cats);
+    buildTagFilters(allTags);
     cats.forEach(buildSection);
     cats.forEach(cat => {
       cat.models.forEach(m => updateCard(cat.id, m));
     });
-    if (!activeTab && cats.length > 0) {
-      switchTab(cats[0].id);
-    } else if (activeTab) {
-      switchTab(activeTab);
+
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
     }
-    updateFilterStats();
+
+    applyFiltersAndSort();
   }
 
   function mergeModelData(data) {
     const cats = data.categories || [];
     categories = cats;
-    updateTabCounts(cats);
+
     cats.forEach(cat => {
-      // Ensure section exists
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    const newTags = extractAllTags(cats);
+    if (newTags.join(',') !== allTags.join(',')) {
+      allTags = newTags;
+      buildTagFilters(allTags);
+    }
+
+    cats.forEach(cat => {
       if (!sectionMap[cat.id]) buildSection(cat);
       cat.models.forEach(m => updateCard(cat.id, m));
     });
-    applyFilter();
-    updateFilterStats();
-  }
 
-  // ── Tabs ──
-  function buildTabs(cats) {
-    $tabRow.innerHTML = '';
-    cats.forEach(cat => {
-      const btn = document.createElement('button');
-      btn.className = 'tab';
-      btn.dataset.tab = cat.id;
-      btn.addEventListener('click', () => switchTab(cat.id));
-      $tabRow.appendChild(btn);
-      updateTabLabel(btn, cat);
-    });
-  }
-
-  function updateTabLabel(btn, cat) {
-    const total = cat.models.length;
-    const missing = cat.models.filter(m => m.status === 'missing').length;
-    let label = escHtml(cat.name) + ' <span class="tab-count">(' + total + ')</span>';
-    if (missing > 0) {
-      label += ' <span class="tab-missing">\u00b7 ' + missing + ' missing</span>';
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
     }
-    btn.innerHTML = label;
+
+    applyFiltersAndSort();
   }
 
-  function updateTabCounts(cats) {
-    cats.forEach(cat => {
-      const btn = $tabRow.querySelector(`[data-tab="${cat.id}"]`);
-      if (btn) updateTabLabel(btn, cat);
-    });
+  // ── Status bar ──
+  function updateStatusBar(stats) {
+    if (!stats) return;
+
+    const dlCount = stats.downloading_count || 0;
+    const dlSpeed = stats.total_speed_bytes || 0;
+    if (dlCount > 0 && dlSpeed > 0) {
+      $statDownloading.textContent = dlCount + ' downloading @ ' + fmtBytes(dlSpeed) + '/s';
+    } else if (dlCount > 0) {
+      $statDownloading.textContent = dlCount + ' downloading';
+    } else {
+      $statDownloading.textContent = '0 downloading';
+    }
+
+    const queuedCount = stats.queued_count || 0;
+    $statQueued.textContent = queuedCount + ' queued';
+
+    const presentCount = stats.present_count || 0;
+    const totalCount = stats.total_count || 0;
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
+
+    const modelBytes = stats.models_bytes;
+    const freeBytes = stats.free_bytes;
+    if (modelBytes != null && freeBytes != null) {
+      $statDisk.textContent = 'Models: ' + fmtBytes(modelBytes) + ' \u00b7 Free: ' + fmtBytes(freeBytes);
+    }
   }
 
-  function switchTab(id) {
-    activeTab = id;
-
-    // Update tab buttons
-    $tabRow.querySelectorAll('.tab').forEach(t => {
-      t.classList.toggle('active', t.dataset.tab === id);
+  function computeStatusBarFromData() {
+    let dlCount = 0, queuedCount = 0, presentCount = 0, totalCount = 0;
+    categories.forEach(cat => {
+      cat.models.forEach(m => {
+        totalCount++;
+        if (m.status === 'downloading') dlCount++;
+        else if (m.status === 'queued') queuedCount++;
+        else if (m.status === 'present') presentCount++;
+      });
     });
-
-    // Show/hide sections
-    Object.keys(sectionMap).forEach(sid => {
-      sectionMap[sid].classList.toggle('active', sid === id);
-    });
-
-    applyFilter();
-    updateFilterStats();
+    $statDownloading.textContent = dlCount + ' downloading';
+    $statQueued.textContent = queuedCount + ' queued';
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
   }
 
   // ── Sections ──
   function buildSection(cat) {
     if (sectionMap[cat.id]) return;
 
-    const section = document.createElement('div');
+    const section = document.createElement('section');
     section.className = 'category-section';
     section.dataset.category = cat.id;
 
     const header = document.createElement('div');
     header.className = 'section-header';
-    header.innerHTML = `<h2 class="section-title">${escHtml(cat.name)}</h2>`;
+    header.innerHTML = '<h2 class="section-title">' + escHtml(cat.name) + '</h2><span class="section-count"></span>';
     section.appendChild(header);
 
     const grid = document.createElement('div');
@@ -780,6 +1219,86 @@
     sectionMap[cat.id] = section;
   }
 
+  // ── Filter logic ──
+  function isCardVisible(model) {
+    if (activeCategories.size > 0 && !activeCategories.has(model._category)) return false;
+    if (activeTags.size > 0) {
+      const modelTags = new Set(model.tags || []);
+      for (const t of activeTags) {
+        if (!modelTags.has(t)) return false;
+      }
+    }
+    if (activeStatuses.size > 0 && !activeStatuses.has(model.status)) return false;
+    if (searchQuery && !model._searchText.includes(searchQuery)) return false;
+    return true;
+  }
+
+  function applyFiltersAndSort() {
+    // Apply visibility
+    Object.values(cardMap).forEach(entry => {
+      const visible = isCardVisible(entry.model);
+      if (visible) {
+        entry.el.classList.remove('card-hidden');
+      } else {
+        entry.el.classList.add('card-hidden');
+      }
+    });
+
+    // Sort cards
+    sortCards();
+
+    // Update section visibility and counts
+    updateSectionVisibility();
+  }
+
+  function sortCards() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const cards = [...grid.children].sort((a, b) => {
+        const entryA = cardMap[a.dataset.file];
+        const entryB = cardMap[b.dataset.file];
+        if (!entryA || !entryB) return 0;
+        const ma = entryA.model;
+        const mb = entryB.model;
+        let cmp = 0;
+        if (currentSort === 'name') cmp = ma.name.localeCompare(mb.name);
+        else if (currentSort === 'size') cmp = (ma.size_gb || 0) - (mb.size_gb || 0);
+        else if (currentSort === 'status') cmp = statusOrder(ma.status) - statusOrder(mb.status);
+        return sortAscending ? cmp : -cmp;
+      });
+      cards.forEach(c => grid.appendChild(c));
+    }
+  }
+
+  function updateSectionVisibility() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const visibleCards = grid.querySelectorAll('.model-card:not(.card-hidden)');
+      const count = visibleCards.length;
+      const countEl = section.querySelector('.section-count');
+      if (countEl) countEl.textContent = '(' + count + ' shown)';
+      if (count === 0) {
+        section.classList.add('section-hidden');
+      } else {
+        section.classList.remove('section-hidden');
+      }
+    }
+  }
+
+  function applyView() {
+    Object.values(sectionMap).forEach(section => {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) return;
+      if (currentView === 'compact') {
+        grid.classList.add('compact');
+      } else {
+        grid.classList.remove('compact');
+      }
+    });
+  }
+
   // ── Cards ──
   function createCard(catId, m) {
     const card = document.createElement('div');
@@ -787,27 +1306,33 @@
     card.dataset.file = m.file;
     card.dataset.category = catId;
 
-    card.innerHTML = `
-      <div class="card-top">
-        <div class="card-info">
-          <div class="card-name" data-ref="name"></div>
-          <div class="card-meta" data-ref="meta"></div>
-        </div>
-        <div class="status-badge missing" data-ref="badge">MISSING</div>
-      </div>
-      <div class="card-tags" data-ref="tags"></div>
-      <div class="progress-wrap" data-ref="progress">
-        <div class="progress-bar"><div class="progress-fill" data-ref="fill"></div></div>
-        <div class="progress-meta">
-          <span data-ref="pct">&mdash;</span>
-          <span data-ref="pbytes">&mdash;</span>
-        </div>
-      </div>
-      <div class="card-error" data-ref="error"></div>
-      <div class="card-actions">
-        <button class="btn btn--sm" data-ref="actionBtn"></button>
-      </div>
-    `;
+    const sourceUrl = makeSourceLink(m.url);
+    const linkHtml = sourceUrl
+      ? '<a class="source-link" href="' + escHtml(sourceUrl) + '" target="_blank" rel="noopener" title="Open source page">\u2197</a>'
+      : '';
+
+    card.innerHTML =
+      '<div class="card-top">' +
+        '<div class="card-info">' +
+          '<div class="card-name" data-ref="name"></div>' +
+          '<div class="card-meta" data-ref="meta"></div>' +
+        '</div>' +
+        '<span class="card-compact-size" data-ref="compactSize"></span>' +
+        '<span class="card-compact-source" data-ref="compactSource"></span>' +
+        '<div class="status-badge missing" data-ref="badge">MISSING</div>' +
+      '</div>' +
+      '<div class="card-tags" data-ref="tags"></div>' +
+      '<div class="progress-wrap" data-ref="progress">' +
+        '<div class="progress-bar"><div class="progress-fill" data-ref="fill"></div></div>' +
+        '<div class="progress-meta">' +
+          '<span data-ref="pct">&mdash;</span>' +
+          '<span data-ref="pbytes">&mdash;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-error" data-ref="error"></div>' +
+      '<div class="card-actions">' +
+        '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
+      '</div>';
 
     // Cache refs
     const refs = {};
@@ -822,19 +1347,25 @@
     const sourceClass = (m.source || '').toLowerCase();
     const sourceName = escHtml(m.source || 'unknown');
     const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
-    refs.meta.innerHTML = `<span>${escHtml(sizeStr)}</span><span class="source-badge ${badgeClass}">${sourceName}</span>`;
+    refs.meta.innerHTML = '<span>' + escHtml(sizeStr) + '</span>' +
+      '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>' +
+      linkHtml;
+
+    // Compact-mode columns
+    refs.compactSize.textContent = sizeStr;
+    const compactSourceEl = refs.compactSource;
+    compactSourceEl.innerHTML = '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>';
 
     if (m.tags && m.tags.length > 0) {
-      refs.tags.innerHTML = m.tags.map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('');
+      refs.tags.innerHTML = m.tags.map(t => '<span class="tag-pill">' + escHtml(t) + '</span>').join('');
     }
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
 
-    const grid = document.querySelector(`[data-grid="${catId}"]`);
+    const grid = document.querySelector('[data-grid="' + catId + '"]');
     if (grid) grid.appendChild(card);
 
-    const entry = { el: card, refs, model: m, searchText: '' };
-    entry.searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+    const entry = { el: card, refs: refs, model: m };
     cardMap[m.file] = entry;
     return entry;
   }
@@ -845,9 +1376,7 @@
       entry = createCard(catId, m);
     }
 
-    const prev = entry.model;
     entry.model = m;
-    entry.searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
 
     const { el, refs } = entry;
     const badge = refs.badge;
@@ -858,12 +1387,14 @@
     const btn = refs.actionBtn;
     const errorEl = refs.error;
 
-    // Remove old status class
-    el.className = 'model-card';
-    if (el.classList.contains('hidden')) el.classList.add('hidden');
+    // Reset status classes
+    el.classList.remove('status-downloading', 'status-error', 'status-present', 'status-missing', 'status-queued');
+    el.classList.add('status-' + m.status);
 
     badge.className = 'status-badge ' + m.status;
-    el.classList.add('status-' + m.status);
+
+    // Reset compact progress
+    el.style.setProperty('--compact-progress', '0%');
 
     switch (m.status) {
       case 'present':
@@ -907,11 +1438,17 @@
         if (m.expected_bytes && m.expected_bytes > 0 && m.progress != null) {
           fill.classList.remove('indeterminate');
           fill.style.width = m.progress.toFixed(1) + '%';
-          pct.textContent = m.progress.toFixed(1) + '%';
+          el.style.setProperty('--compact-progress', m.progress.toFixed(1) + '%');
+
+          const speedStr = m.speed_bytes ? ' \u00b7 ' + fmtBytes(m.speed_bytes) + '/s' : '';
+          pct.textContent = m.progress.toFixed(1) + '%' + speedStr;
         } else {
           fill.classList.add('indeterminate');
           fill.style.width = '';
-          pct.textContent = '...';
+          el.style.setProperty('--compact-progress', '50%');
+
+          const speedStr = m.speed_bytes ? fmtBytes(m.speed_bytes) + '/s' : '...';
+          pct.textContent = speedStr;
         }
 
         const dlBytes = m.on_disk_bytes || 0;
@@ -992,7 +1529,7 @@
     try {
       const resp = await apiFetch('/api/admin/models/download-batch', {
         method: 'POST',
-        body: { filenames }
+        body: { filenames: filenames }
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -1020,59 +1557,6 @@
     $globalDlAll.textContent = 'Download All Missing';
   });
 
-  $tabDlMissing.addEventListener('click', async () => {
-    if (!activeTab) return;
-    const cat = categories.find(c => c.id === activeTab);
-    if (!cat) return;
-    const filenames = cat.models.filter(m => m.status === 'missing').map(m => m.file);
-    if (!filenames.length) { alert('No missing models in this category.'); return; }
-    $tabDlMissing.disabled = true;
-    $tabDlMissing.textContent = 'Queuing ' + filenames.length + '...';
-    await downloadMissing(filenames);
-    $tabDlMissing.disabled = false;
-    $tabDlMissing.textContent = 'Download Missing';
-  });
-
-  // ── Search/filter ──
-  $searchInput.addEventListener('input', () => {
-    applyFilter();
-    updateFilterStats();
-  });
-
-  function applyFilter() {
-    const query = $searchInput.value.trim().toLowerCase();
-    Object.values(cardMap).forEach(entry => {
-      const inActiveTab = entry.el.dataset.category === activeTab;
-      const matchesSearch = !query || entry.searchText.includes(query);
-      if (inActiveTab && matchesSearch) {
-        entry.el.classList.remove('hidden');
-      } else if (inActiveTab) {
-        entry.el.classList.add('hidden');
-      }
-    });
-  }
-
-  function updateFilterStats() {
-    if (!activeTab) { $filterStats.textContent = ''; return; }
-    const cat = categories.find(c => c.id === activeTab);
-    if (!cat) return;
-
-    const query = $searchInput.value.trim().toLowerCase();
-    let visible = 0;
-    cat.models.forEach(m => {
-      const entry = cardMap[m.file];
-      if (entry && !entry.el.classList.contains('hidden')) visible++;
-    });
-
-    if (query) {
-      $filterStats.textContent = visible + ' / ' + cat.models.length + ' shown';
-    } else {
-      const present = cat.models.filter(m => m.status === 'present').length;
-      const missing = cat.models.filter(m => m.status === 'missing').length;
-      $filterStats.textContent = present + ' present \u00b7 ' + missing + ' missing';
-    }
-  }
-
   // ── Polling ──
   function startPolling() {
     stopPolling();
@@ -1090,7 +1574,6 @@
       const data = await resp.json();
       mergeModelData(data);
     } catch (e) {
-      // Auth error already handled by apiFetch
       if (e.message !== 'Unauthorized') {
         console.error('Poll error:', e);
       }
