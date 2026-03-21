@@ -51,11 +51,6 @@ WWW_DEFAULT = Path("/app/www")
 
 COMFY_URL = "http://127.0.0.1:8188"
 
-MODELS_REPO = os.environ.get(
-    "MODELS_REPO",
-    "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/app/models.json",
-)
-
 REPO_BASE = os.environ.get(
     "REPO_BASE",
     "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main",
@@ -700,10 +695,10 @@ async def update_settings(body: SettingsUpdate):
 
 @app.post("/api/admin/models/sync")
 async def sync_models():
-    """Fetch the latest models.json from the configured MODELS_REPO."""
+    """Fetch the latest models.json from the repo."""
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get(MODELS_REPO)
+            r = await client.get(f"{REPO_BASE}/app/models.json")
             r.raise_for_status()
             remote = r.json()
 
@@ -991,10 +986,7 @@ async def install_workflow_models(workflow_id: str):
 
 @app.post("/api/admin/workflows/sync")
 async def sync_workflows():
-    WORKFLOWS_REPO_BASE = os.environ.get(
-        "WORKFLOWS_REPO",
-        "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows",
-    )
+    WORKFLOWS_REPO_BASE = f"{REPO_BASE}/workflows"
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
