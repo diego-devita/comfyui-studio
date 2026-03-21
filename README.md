@@ -40,24 +40,25 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     DOCKER IMAGE (build time)                │
-│                                                              │
-│   /comfyui        ComfyUI + 29 custom nodes (baked in)       │
-│   /app            Web app baseline (fallback)                │
-│   /start.sh       Boot script                                │
-│                                                              │
-│   NOT in image:   models, workflows, catalogs, live app code │
-├─────────────────────────────────────────────────────────────┤
-│                   PERSISTENT VOLUME (runtime)                 │
-│                                                              │
-│   /workspace/app/               ← live app code (from repo)  │
-│   /workspace/www/               ← live frontend (from repo)  │
-│   /workspace/ComfyUI/           ← copied from /comfyui       │
-│   /workspace/ComfyUI/models/    ← downloaded via Model Mgr   │
-│   /workspace/models.json        ← fetched from repo          │
-│   /workspace/workflows/         ← fetched from repo          │
-│   /workspace/version.json       ← tracks component versions  │
+┌────────────────────────────────────────────────────────────┐
+│               DOCKER IMAGE (build time)                    │
+│                                                            │
+│  /comfyui     ComfyUI + 29 custom nodes (baked in)         │
+│  /app         Web app baseline (fallback)                  │
+│  /start.sh    Boot script                                  │
+│                                                            │
+│  NOT in image: models, workflows, catalogs, live app code  │
+├────────────────────────────────────────────────────────────┤
+│             PERSISTENT VOLUME (runtime)                    │
+│                                                            │
+│  /workspace/app/            ← live app code (from repo)    │
+│  /workspace/www/            ← live frontend (from repo)    │
+│  /workspace/ComfyUI/        ← copied from /comfyui         │
+│  /workspace/ComfyUI/models/ ← downloaded via Model Mgr     │
+│  /workspace/models.json     ← fetched from repo            │
+│  /workspace/workflows/      ← fetched from repo            │
+│  /workspace/version.json    ← tracks component versions    │
+└────────────────────────────────────────────────────────────┘
 └─────────────────────────────────────────────────────────────┘
 ```
 
