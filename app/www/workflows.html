@@ -209,25 +209,13 @@
 </head>
 <body>
 
-<!-- Login overlay -->
-<div class="login-overlay" id="loginOverlay">
-  <div class="login-box">
-    <h2>Authentication</h2>
-    <p>Enter credentials to access the workflow manager.</p>
-    <label for="loginUser">Username</label>
-    <input type="text" id="loginUser" autocomplete="username" autofocus>
-    <label for="loginPass">Password</label>
-    <input type="password" id="loginPass" autocomplete="current-password">
-    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
-    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
-  </div>
-</div>
-
 <!-- Navigation -->
 <nav class="main-nav">
-  <a href="/" class="nav-link">Models</a>
-  <a href="/workflows" class="nav-link active">Workflows</a>
-  <a href="/nodes" class="nav-link">Nodes</a>
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/workflows" class="nav-link active">Workflows</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
 </nav>
 
 <!-- Header -->
@@ -255,16 +243,10 @@
   'use strict';
 
   // ── State ──
-  let authHeader = null;
   let workflows = [];
   let pollTimer = null;
 
   // ── DOM refs ──
-  const $loginOverlay = document.getElementById('loginOverlay');
-  const $loginUser    = document.getElementById('loginUser');
-  const $loginPass    = document.getElementById('loginPass');
-  const $loginBtn     = document.getElementById('loginBtn');
-  const $loginError   = document.getElementById('loginError');
   const $main         = document.getElementById('mainContent');
   const $loading      = document.getElementById('loadingState');
   const $cardGrid     = document.getElementById('cardGrid');
@@ -278,95 +260,30 @@
     return d.innerHTML;
   }
 
-  function makeAuthHeader(user, pass) {
-    return 'Basic ' + btoa(user + ':' + pass);
-  }
-
   async function apiFetch(url, opts = {}) {
-    const headers = { ...(opts.headers || {}) };
-    if (authHeader) headers['Authorization'] = authHeader;
     if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
+      opts.headers = {...(opts.headers||{}), 'Content-Type': 'application/json'};
       opts.body = JSON.stringify(opts.body);
     }
-    const resp = await fetch(url, { ...opts, headers });
-    if (resp.status === 401) {
-      showLogin();
-      throw new Error('Unauthorized');
-    }
+    const resp = await fetch(url, opts);
+    if (resp.status === 401) { window.location = '/login'; throw new Error('auth'); }
     return resp;
   }
-
-  // ── Auth ──
-  function showLogin() {
-    $loginOverlay.classList.remove('hidden');
-    $loginUser.focus();
-    stopPolling();
-  }
-
-  function hideLogin() {
-    $loginOverlay.classList.add('hidden');
-    $loginError.style.display = 'none';
-  }
-
-  async function attemptLogin() {
-    const user = $loginUser.value.trim();
-    const pass = $loginPass.value;
-    if (!user) { $loginUser.focus(); return; }
-
-    $loginBtn.disabled = true;
-    $loginBtn.textContent = 'Signing in...';
-
-    const candidate = makeAuthHeader(user, pass);
-    try {
-      const resp = await fetch('/api/admin/workflows', {
-        headers: { 'Authorization': candidate }
-      });
-      if (resp.status === 401) {
-        $loginError.style.display = 'block';
-        $loginBtn.disabled = false;
-        $loginBtn.textContent = 'Sign In';
-        $loginPass.focus();
-        return;
-      }
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-
-      authHeader = candidate;
-      hideLogin();
-      const data = await resp.json();
-      handleWorkflowData(data);
-      $loading.style.display = 'none';
-      startPolling();
-    } catch (e) {
-      $loginError.style.display = 'block';
-      $loginError.textContent = 'Connection error: ' + e.message;
-      $loginBtn.disabled = false;
-      $loginBtn.textContent = 'Sign In';
-    }
-  }
-
-  $loginBtn.addEventListener('click', attemptLogin);
-  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
-  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
 
   // ── Initial load ──
   async function initialLoad() {
     try {
-      const resp = await fetch('/api/admin/workflows');
-      if (resp.status === 401) {
-        showLogin();
-        return;
-      }
+      const resp = await apiFetch('/api/admin/workflows');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
-      authHeader = null;
-      hideLogin();
       const data = await resp.json();
       handleWorkflowData(data);
       $loading.style.display = 'none';
       startPolling();
     } catch (e) {
-      showLogin();
+      if (e.message !== 'auth') {
+        console.error('Initial load error:', e);
+      }
     }
   }
 
@@ -552,7 +469,7 @@
         btn.textContent = 'Queued';
       }
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         alert('Error: ' + e.message);
         btn.disabled = false;
         btn.textContent = 'Install Missing';
@@ -573,7 +490,7 @@
         await pollWorkflows();
       }
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         alert('Error: ' + e.message);
       }
     } finally {
@@ -599,7 +516,7 @@
       const data = await resp.json();
       handleWorkflowData(data);
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         console.error('Poll error:', e);
       }
     }

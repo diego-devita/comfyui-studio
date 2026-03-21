@@ -254,6 +254,7 @@ RUN pip install \
 
 # ── App files ─────────────────────────────────────────────
 COPY app/ /app/
+COPY version.json /app/version.json
 
 # ── Startup script ────────────────────────────────────────
 COPY start.sh /start.sh

@@ -164,6 +164,8 @@ body::before {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.nav-logout { margin-left: auto; color: var(--error); }
+.nav-logout:hover { color: #ff6688; }
 
 /* ── Login Overlay ── */
 .login-overlay {

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Home</title>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  /* ── Header ── */
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .version-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-left: 14px;
+  }
+  .header-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── Main ── */
+  main { padding: 32px 40px 64px; max-width: 960px; }
+
+  /* ── Component Table ── */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+  .comp-table th,
+  .comp-table td {
+    padding: 12px 20px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .comp-table th {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(20, 20, 32, 0.8);
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table td { color: var(--text); }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .status-dot.green { background: var(--success); }
+  .status-dot.orange { background: var(--queued); }
+  .status-dot.red { background: var(--error); }
+
+  /* ── Update Button Row ── */
+  .update-row {
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .update-result {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── Stat Cards ── */
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 24px 20px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: #3a3a4a; }
+  .stat-card .stat-value {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 28px;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+  .stat-card .stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .stat-card .stat-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .stat-card .stat-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s;
+  }
+  .stat-card .stat-link:hover { opacity: 0.8; }
+
+  /* ── System Info ── */
+  .sys-info {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sys-info .status-dot { vertical-align: middle; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    header { padding: 20px 20px; }
+    main { padding: 20px 20px 48px; }
+    .stat-cards { grid-template-columns: 1fr; }
+    .logo { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link active">Home</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <span class="version-tag" id="versionTag">v3.0.0</span></div>
+  <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
+</header>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading system status...
+  </div>
+
+  <div id="dashContent" style="display:none;">
+    <!-- Component Table -->
+    <table class="comp-table" id="compTable">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="compBody">
+      </tbody>
+    </table>
+
+    <!-- Update Button -->
+    <div class="update-row">
+      <button class="btn" id="updateBtn">Check for Updates</button>
+      <span class="update-result" id="updateResult"></span>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="stat-cards" id="statCards">
+      <div class="stat-card">
+        <div class="stat-value" id="modelsCount">--</div>
+        <div class="stat-label">Models</div>
+        <div class="stat-sub" id="modelsSub">-- present</div>
+        <a href="/admin/models" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="workflowsCount">--</div>
+        <div class="stat-label">Workflows</div>
+        <div class="stat-sub" id="workflowsSub">-- ready</div>
+        <a href="/admin/workflows" class="stat-link">&#8594; Browse</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="nodesCount">--</div>
+        <div class="stat-label">Nodes</div>
+        <div class="stat-sub" id="nodesSub">packages</div>
+        <a href="/admin/nodes" class="stat-link">&#8594; View</a>
+      </div>
+    </div>
+
+    <!-- System Info -->
+    <div class="sys-info" id="sysInfo">
+      <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
+      <div id="diskInfo">Disk: --</div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Utilities ──
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function fmtBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024)        return bytes + ' B';
+    if (bytes < 1024 ** 2)   return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 ** 3)   return (bytes / 1024 ** 2).toFixed(1) + ' MB';
+    return (bytes / 1024 ** 3).toFixed(1) + ' GB';
+  }
+
+  async function apiFetch(url, opts = {}) {
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      opts.headers = {...(opts.headers||{}), 'Content-Type': 'application/json'};
+      opts.body = JSON.stringify(opts.body);
+    }
+    const resp = await fetch(url, opts);
+    if (resp.status === 401) { window.location = '/login'; throw new Error('auth'); }
+    return resp;
+  }
+
+  // ── DOM refs ──
+  const $loading      = document.getElementById('loadingState');
+  const $dash         = document.getElementById('dashContent');
+  const $compBody     = document.getElementById('compBody');
+  const $versionTag   = document.getElementById('versionTag');
+  const $lastUpdated  = document.getElementById('lastUpdated');
+  const $updateBtn    = document.getElementById('updateBtn');
+  const $updateResult = document.getElementById('updateResult');
+  const $modelsCount  = document.getElementById('modelsCount');
+  const $modelsSub    = document.getElementById('modelsSub');
+  const $workflowsCount = document.getElementById('workflowsCount');
+  const $workflowsSub = document.getElementById('workflowsSub');
+  const $nodesCount   = document.getElementById('nodesCount');
+  const $nodesSub     = document.getElementById('nodesSub');
+  const $comfyStatus  = document.getElementById('comfyStatus');
+  const $diskInfo     = document.getElementById('diskInfo');
+
+  // ── Status dot helper ──
+  function dotHtml(color, text) {
+    return '<span class="status-dot ' + color + '"></span>' + escHtml(text);
+  }
+
+  function statusDotColor(status) {
+    if (!status) return 'orange';
+    const s = status.toLowerCase();
+    if (s === 'running' || s === 'ok' || s === 'loaded' || s === 'ready') return 'green';
+    if (s === 'error' || s === 'failed' || s === 'stopped') return 'red';
+    return 'orange';
+  }
+
+  // ── Render status ──
+  function renderStatus(data) {
+    // Version
+    const version = data.version || '3.0.0';
+    $versionTag.textContent = 'v' + version;
+
+    // Date
+    const date = data.date || data.updated_at || '2026-03-21';
+    $lastUpdated.textContent = typeof date === 'string' ? date.substring(0, 10) : date;
+
+    // Component table
+    const components = data.components || [];
+    $compBody.innerHTML = '';
+
+    if (components.length > 0) {
+      components.forEach(c => {
+        const row = document.createElement('tr');
+        const color = statusDotColor(c.status);
+        row.innerHTML =
+          '<td>' + escHtml(c.name || '--') + '</td>' +
+          '<td>' + escHtml(c.version || '--') + '</td>' +
+          '<td>' + escHtml(c.date ? c.date.substring(0, 10) : '--') + '</td>' +
+          '<td>' + dotHtml(color, c.status_text || c.status || '--') + '</td>';
+        $compBody.appendChild(row);
+      });
+    } else {
+      // Build default rows from top-level data
+      const rows = [
+        { name: 'Backend', version: version, date: date, status: 'Running', color: 'green' },
+        { name: 'Frontend', version: version, date: date, status: 'Loaded', color: 'green' },
+      ];
+      if (data.models) {
+        rows.push({
+          name: 'Models Catalog',
+          version: data.models.catalog_version || '1.0.0',
+          date: date,
+          status: (data.models.total || 0) + ' models',
+          color: 'green'
+        });
+      }
+      if (data.workflows) {
+        rows.push({
+          name: 'Workflows',
+          version: data.workflows.catalog_version || '1.0.0',
+          date: date,
+          status: (data.workflows.total || 0) + ' workflows',
+          color: 'green'
+        });
+      }
+      rows.forEach(r => {
+        const row = document.createElement('tr');
+        row.innerHTML =
+          '<td>' + escHtml(r.name) + '</td>' +
+          '<td>' + escHtml(r.version) + '</td>' +
+          '<td>' + escHtml(typeof r.date === 'string' ? r.date.substring(0, 10) : String(r.date)) + '</td>' +
+          '<td>' + dotHtml(r.color, r.status) + '</td>';
+        $compBody.appendChild(row);
+      });
+    }
+
+    // Stat cards
+    const models = data.models || {};
+    $modelsCount.textContent = models.total || 0;
+    $modelsSub.textContent = (models.present || 0) + ' present';
+
+    const workflows = data.workflows || {};
+    $workflowsCount.textContent = workflows.total || 0;
+    $workflowsSub.textContent = (workflows.ready || 0) + ' ready';
+
+    const nodes = data.nodes || {};
+    $nodesCount.textContent = nodes.total || 0;
+    $nodesSub.textContent = 'packages';
+
+    // ComfyUI status
+    const comfy = data.comfyui || {};
+    const comfyRunning = comfy.running !== false;
+    const comfyPort = comfy.port || 8188;
+    if (comfyRunning) {
+      $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort);
+    } else {
+      $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: Not running');
+    }
+
+    // Disk info
+    const disk = data.disk || {};
+    const modelsDiskStr = disk.models_bytes ? fmtBytes(disk.models_bytes) + ' models' : (disk.models || '--');
+    const freeStr = disk.free_bytes ? fmtBytes(disk.free_bytes) + ' free' : (disk.free || '--');
+    $diskInfo.textContent = 'Disk: ' + modelsDiskStr + ' \u00b7 ' + freeStr;
+  }
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await apiFetch('/api/admin/system/status');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      renderStatus(data);
+      $loading.style.display = 'none';
+      $dash.style.display = '';
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $loading.innerHTML = '<span style="color:var(--error)">Failed to load system status: ' + escHtml(e.message) + '</span>';
+      }
+    }
+  }
+
+  // ── Check for Updates ──
+  $updateBtn.addEventListener('click', async () => {
+    $updateBtn.disabled = true;
+    $updateBtn.innerHTML = '<span class="spinner"></span> Checking...';
+    $updateResult.textContent = '';
+
+    try {
+      const resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        $updateResult.textContent = 'Error: ' + (err.detail || err.error || resp.status);
+        $updateResult.style.color = 'var(--error)';
+      } else {
+        const data = await resp.json();
+        if (data.updated && data.updated.length > 0) {
+          $updateResult.textContent = 'Updated: ' + data.updated.join(', ') + (data.restart_needed ? ' (restart needed)' : '');
+          $updateResult.style.color = 'var(--success)';
+        } else if (data.message) {
+          $updateResult.textContent = data.message;
+          $updateResult.style.color = 'var(--muted)';
+        } else {
+          $updateResult.textContent = 'Everything is up to date.';
+          $updateResult.style.color = 'var(--muted)';
+        }
+      }
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $updateResult.textContent = 'Error: ' + e.message;
+        $updateResult.style.color = 'var(--error)';
+      }
+    }
+
+    $updateBtn.disabled = false;
+    $updateBtn.textContent = 'Check for Updates';
+  });
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

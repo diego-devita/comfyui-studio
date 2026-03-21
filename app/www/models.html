@@ -611,69 +611,6 @@
   .spinner.sm { width: 8px; height: 8px; border-width: 1px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Login overlay ── */
-  .login-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 10, 15, 0.95);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .login-overlay.hidden { display: none; }
-
-  .login-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: 40px;
-    width: 360px;
-    max-width: 90vw;
-  }
-  .login-box h2 {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 20px;
-    margin-bottom: 8px;
-  }
-  .login-box p {
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 24px;
-  }
-  .login-box label {
-    display: block;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
-  .login-box input[type="text"],
-  .login-box input[type="password"] {
-    display: block;
-    width: 100%;
-    padding: 10px 14px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    margin-bottom: 16px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .login-box input:focus { border-color: var(--accent); }
-  .login-error {
-    color: var(--error);
-    font-size: 12px;
-    margin-bottom: 12px;
-    display: none;
-  }
-
   /* ── Empty state ── */
   .empty-state {
     text-align: center;
@@ -736,29 +673,19 @@
     color: var(--accent);
     border-bottom-color: var(--accent);
   }
+  .nav-logout { margin-left: auto; color: var(--error); }
+  .nav-logout:hover { color: #ff6688; }
 </style>
 </head>
 <body>
 
-<!-- Login overlay -->
-<div class="login-overlay" id="loginOverlay">
-  <div class="login-box">
-    <h2>Authentication</h2>
-    <p>Enter credentials to access the model manager.</p>
-    <label for="loginUser">Username</label>
-    <input type="text" id="loginUser" autocomplete="username" autofocus>
-    <label for="loginPass">Password</label>
-    <input type="password" id="loginPass" autocomplete="current-password">
-    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
-    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
-  </div>
-</div>
-
 <!-- Navigation -->
 <nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
   <a href="/admin/models" class="nav-link active">Models</a>
   <a href="/admin/workflows" class="nav-link">Workflows</a>
   <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
 </nav>
 
 <!-- Header -->
@@ -831,7 +758,6 @@
   'use strict';
 
   // ── State ──
-  let authHeader = null;
   let categories = [];
   let activeCategories = new Set();
   let activeTags = new Set();
@@ -846,11 +772,6 @@
   let allTags = [];
 
   // ── DOM refs ──
-  const $loginOverlay = document.getElementById('loginOverlay');
-  const $loginUser    = document.getElementById('loginUser');
-  const $loginPass    = document.getElementById('loginPass');
-  const $loginBtn     = document.getElementById('loginBtn');
-  const $loginError   = document.getElementById('loginError');
   const $searchInput  = document.getElementById('searchInput');
   const $main         = document.getElementById('mainContent');
   const $loading      = document.getElementById('loadingState');
@@ -887,22 +808,13 @@
     return d.innerHTML;
   }
 
-  function makeAuthHeader(user, pass) {
-    return 'Basic ' + btoa(user + ':' + pass);
-  }
-
   async function apiFetch(url, opts = {}) {
-    const headers = { ...(opts.headers || {}) };
-    if (authHeader) headers['Authorization'] = authHeader;
-    if (opts.body && typeof opts.body === 'object') {
-      headers['Content-Type'] = 'application/json';
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      opts.headers = {...(opts.headers||{}), 'Content-Type': 'application/json'};
       opts.body = JSON.stringify(opts.body);
     }
-    const resp = await fetch(url, { ...opts, headers });
-    if (resp.status === 401) {
-      showLogin();
-      throw new Error('Unauthorized');
-    }
+    const resp = await fetch(url, opts);
+    if (resp.status === 401) { window.location = '/login'; throw new Error('auth'); }
     return resp;
   }
 
@@ -920,76 +832,20 @@
     return order[status] !== undefined ? order[status] : 5;
   }
 
-  // ── Auth ──
-  function showLogin() {
-    $loginOverlay.classList.remove('hidden');
-    $loginUser.focus();
-    stopPolling();
-  }
-
-  function hideLogin() {
-    $loginOverlay.classList.add('hidden');
-    $loginError.style.display = 'none';
-  }
-
-  async function attemptLogin() {
-    const user = $loginUser.value.trim();
-    const pass = $loginPass.value;
-    if (!user) { $loginUser.focus(); return; }
-
-    $loginBtn.disabled = true;
-    $loginBtn.textContent = 'Signing in...';
-
-    const candidate = makeAuthHeader(user, pass);
-    try {
-      const resp = await fetch('/api/admin/models', {
-        headers: { 'Authorization': candidate }
-      });
-      if (resp.status === 401) {
-        $loginError.style.display = 'block';
-        $loginBtn.disabled = false;
-        $loginBtn.textContent = 'Sign In';
-        $loginPass.focus();
-        return;
-      }
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-
-      authHeader = candidate;
-      hideLogin();
-      const data = await resp.json();
-      handleModelData(data);
-      $loading.style.display = 'none';
-      startPolling();
-    } catch (e) {
-      $loginError.style.display = 'block';
-      $loginError.textContent = 'Connection error: ' + e.message;
-      $loginBtn.disabled = false;
-      $loginBtn.textContent = 'Sign In';
-    }
-  }
-
-  $loginBtn.addEventListener('click', attemptLogin);
-  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
-  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
-
   // ── Initial load ──
   async function initialLoad() {
     try {
-      const resp = await fetch('/api/admin/models');
-      if (resp.status === 401) {
-        showLogin();
-        return;
-      }
+      const resp = await apiFetch('/api/admin/models');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
-      authHeader = null;
-      hideLogin();
       const data = await resp.json();
       handleModelData(data);
       $loading.style.display = 'none';
       startPolling();
     } catch (e) {
-      showLogin();
+      if (e.message !== 'auth') {
+        console.error('Initial load error:', e);
+      }
     }
   }
 
@@ -1121,7 +977,7 @@
         body: { max_concurrent_downloads: val }
       });
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         console.error('Failed to update concurrent setting:', e);
       }
     }
@@ -1527,7 +1383,7 @@
           btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
         }
       } catch (e) {
-        if (e.message !== 'Unauthorized') {
+        if (e.message !== 'auth') {
           alert('Error: ' + e.message);
           btn.disabled = false;
           btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
@@ -1546,7 +1402,7 @@
           btn.innerHTML = '\uD83D\uDDD1 Delete';
         }
       } catch (e) {
-        if (e.message !== 'Unauthorized') {
+        if (e.message !== 'auth') {
           alert('Error: ' + e.message);
           btn.disabled = false;
           btn.innerHTML = '\uD83D\uDDD1 Delete';
@@ -1568,7 +1424,7 @@
         alert('Batch download error: ' + (err.detail || err.error || resp.status));
       }
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         alert('Error: ' + e.message);
       }
     }
@@ -1606,7 +1462,7 @@
       const data = await resp.json();
       mergeModelData(data);
     } catch (e) {
-      if (e.message !== 'Unauthorized') {
+      if (e.message !== 'auth') {
         console.error('Poll error:', e);
       }
     }

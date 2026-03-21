@@ -5,62 +5,66 @@ echo "=== ComfyUI Studio — starting ==="
 
 COMFYUI_IMAGE="/comfyui"
 COMFYUI_VOLUME="/workspace/ComfyUI"
-WORKFLOWS_REPO="${WORKFLOWS_REPO:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows}"
-MODELS_REPO="${MODELS_REPO:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/app/models.json}"
+REPO_BASE="${REPO_BASE:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main}"
 
-# ── STEP 0a: Fetch models catalog from repo ──────────────────────
-# The models.json catalog is NOT baked into the Docker image.
-# It is fetched from the configured repo and stored in /workspace.
-if [ ! -f "/workspace/models.json" ]; then
-    echo "[0a] First boot — fetching models catalog from repo..."
-    if curl -sf "${MODELS_REPO}" -o /workspace/models.json; then
-        echo "      OK — models catalog fetched"
-    else
-        echo "      WARNING: Could not fetch models catalog. Using baked-in default."
-    fi
+# ── STEP 0: Bootstrap app + catalogs from repo ──────────────────
+# The app code, model catalog, and workflows are NOT baked into the
+# Docker image (only a baseline fallback in /app). On first boot we
+# copy the baseline to /workspace and then fetch latest from the repo.
+
+# 0a: App code (main.py + www/)
+if [ ! -f "/workspace/app/main.py" ]; then
+    echo "[0a] First boot — copying app baseline to /workspace..."
+    cp -r /app /workspace/app
+    echo "      OK"
 else
-    echo "[0a] Models catalog already present — skipping fetch"
+    echo "[0a] App already present in /workspace — skipping"
 fi
 
-# ── STEP 0b: Fetch workflows from repo ───────────────────────────
-# Workflows are NOT baked into the Docker image. They are fetched
-# from the configured repo on first boot and updated via Sync.
+# 0b: Version manifest
+if [ ! -f "/workspace/version.json" ]; then
+    echo "[0b] Fetching version.json from repo..."
+    curl -sf "${REPO_BASE}/version.json" -o /workspace/version.json || \
+        cp /app/version.json /workspace/version.json 2>/dev/null || true
+fi
+
+# 0c: Models catalog
+if [ ! -f "/workspace/models.json" ]; then
+    echo "[0c] Fetching models catalog from repo..."
+    curl -sf "${REPO_BASE}/app/models.json" -o /workspace/models.json || \
+        echo "      WARNING: Could not fetch. Using baked-in default."
+else
+    echo "[0c] Models catalog already present — skipping"
+fi
+
+# 0d: Workflows
 if [ ! -f "/workspace/workflows/index.json" ]; then
-    echo "[0b] First boot — fetching workflows from repo..."
+    echo "[0d] Fetching workflows from repo..."
     mkdir -p /workspace/workflows
-    if curl -sf "${WORKFLOWS_REPO}/index.json" -o /workspace/workflows/index.json; then
-        # Parse index and download each workflow
-        for wf_id in $(python3 -c "import json,sys; [print(w['id']) for w in json.load(open('/workspace/workflows/index.json')).get('workflows',[])]" 2>/dev/null); do
+    if curl -sf "${REPO_BASE}/workflows/index.json" -o /workspace/workflows/index.json; then
+        for wf_id in $(python3 -c "import json; [print(w['id']) for w in json.load(open('/workspace/workflows/index.json')).get('workflows',[])]" 2>/dev/null); do
             mkdir -p "/workspace/workflows/${wf_id}"
-            curl -sf "${WORKFLOWS_REPO}/${wf_id}/manifest.yaml" -o "/workspace/workflows/${wf_id}/manifest.yaml" || true
-            curl -sf "${WORKFLOWS_REPO}/${wf_id}/workflow.json" -o "/workspace/workflows/${wf_id}/workflow.json" || true
+            curl -sf "${REPO_BASE}/workflows/${wf_id}/manifest.yaml" -o "/workspace/workflows/${wf_id}/manifest.yaml" || true
+            curl -sf "${REPO_BASE}/workflows/${wf_id}/workflow.json" -o "/workspace/workflows/${wf_id}/workflow.json" || true
             echo "      Fetched workflow: ${wf_id}"
         done
-        echo "      OK — workflows fetched"
     else
-        echo "      WARNING: Could not fetch workflows from repo. Use Sync in the UI later."
+        echo "      WARNING: Could not fetch workflows. Use Sync in the UI."
     fi
 else
-    echo "[0b] Workflows already present — skipping fetch"
+    echo "[0d] Workflows already present — skipping"
 fi
 
 # ── STEP 1: First boot — copy ComfyUI from image to volume ──────
-# /workspace is the RunPod persistent Network Volume.
-# On first boot /workspace/ComfyUI does not exist yet.
 if [ ! -d "${COMFYUI_VOLUME}" ]; then
     echo "[1/3] First boot — copying ComfyUI to /workspace..."
-
     cp -r "${COMFYUI_IMAGE}" "${COMFYUI_VOLUME}"
-    echo "      OK — ComfyUI copied to ${COMFYUI_VOLUME}"
+    echo "      OK"
 else
-    echo "[1/3] ComfyUI already present in ${COMFYUI_VOLUME} — skipping"
+    echo "[1/3] ComfyUI already present — skipping"
 fi
 
 # ── STEP 2: Start ComfyUI ────────────────────────────────────────
-# Environment variables:
-#   COMFYUI_FLAGS      — vram management (default: --highvram)
-#                        Use --lowvram or --normalvram for smaller GPUs
-#   COMFYUI_EXTRA_ARGS — any additional flags to pass to ComfyUI
 echo "[2/3] Starting ComfyUI on port 8188..."
 cd "${COMFYUI_VOLUME}"
 python main.py \
@@ -74,7 +78,6 @@ python main.py \
 COMFY_PID=$!
 echo "      ComfyUI PID: ${COMFY_PID}"
 
-# Wait for ComfyUI to be ready (max 120 seconds)
 echo "      Waiting for ComfyUI..."
 for i in $(seq 1 60); do
     if curl -s http://127.0.0.1:8188/system_stats > /dev/null 2>&1; then
@@ -83,18 +86,14 @@ for i in $(seq 1 60); do
     fi
     if [ "$i" -eq 60 ]; then
         echo "      WARNING: ComfyUI did not respond within 120 seconds."
-        echo "      Check /var/log/comfyui.log for errors."
     fi
     sleep 2
 done
 
-# ── STEP 3: Start model management backoffice ─────────────────────
-# Environment variables:
-#   API_KEY        — password for HTTP Basic Auth (default: changeme)
-#   CIVITAI_API_KEY — CivitAI API token for model downloads
-#   HF_TOKEN       — HuggingFace token for model downloads
-echo "[3/3] Starting model manager on port 8000..."
-cd /app
+# ── STEP 3: Start web application ────────────────────────────────
+# Runs from /workspace/app/ (hot-updatable), not from /app/ (baked).
+echo "[3/3] Starting web application on port 8000..."
+cd /workspace/app
 uvicorn main:app \
     --host 0.0.0.0 \
     --port 8000 \
@@ -102,13 +101,11 @@ uvicorn main:app \
     > /var/log/admin.log 2>&1 &
 
 ADMIN_PID=$!
-echo "      Model manager PID: ${ADMIN_PID}"
+echo "      Web app PID: ${ADMIN_PID}"
 
 echo "=== Services started ==="
-echo "    ComfyUI:       https://PODID-8188.proxy.runpod.net"
-echo "    Models:        https://PODID-8000.proxy.runpod.net/admin/models"
-echo "    Workflows:     https://PODID-8000.proxy.runpod.net/admin/workflows"
-echo "    Nodes:         https://PODID-8000.proxy.runpod.net/admin/nodes"
+echo "    ComfyUI Studio: https://PODID-8000.proxy.runpod.net"
+echo "    ComfyUI:        https://PODID-8188.proxy.runpod.net"
 
 # Keep the container alive — exit if ComfyUI dies
 wait ${COMFY_PID}

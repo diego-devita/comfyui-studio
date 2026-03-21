@@ -1,11 +1,14 @@
 """
-ComfyUI Studio — Model Manager
-FastAPI backend for managing ComfyUI model downloads with a parallel download
-pool, per-download speed tracking, SSE progress streaming, and HTTP Basic Auth.
+ComfyUI Studio — Backend
+FastAPI backend for managing ComfyUI models, workflows, nodes, and execution
+with a parallel download pool, per-download speed tracking, SSE progress
+streaming, and cookie/API-key authentication.
 """
 
 import asyncio
 import glob
+import hashlib
+import hmac as hmac_mod
 import json
 import os
 import random
@@ -22,14 +25,14 @@ from typing import Optional
 import httpx
 import requests
 import yaml  # requires: pyyaml
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="ComfyUI Studio — Model Manager")
+app = FastAPI(title="ComfyUI Studio")
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -53,26 +56,68 @@ MODELS_REPO = os.environ.get(
     "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/app/models.json",
 )
 
+REPO_BASE = os.environ.get(
+    "REPO_BASE",
+    "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main",
+)
+
+VERSION_JSON = Path("/workspace/version.json")
+VERSION_JSON_DEFAULT = Path("/app/version.json")  # baked fallback
+
 # Paths for workflows
 WORKFLOWS_DIR = Path("/workspace/workflows")
 WORKFLOWS_DIR_DEFAULT = Path("/app/workflows")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
-# All endpoints except /api/health require HTTP Basic Auth.
-# Username: anything — Password: must match API_KEY.
 
-security = HTTPBasic()
+COOKIE_NAME = "session"
+COOKIE_SECRET = hashlib.sha256(f"comfyui-studio:{API_KEY}".encode()).hexdigest()
 
 
-def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
-    if not secrets.compare_digest(credentials.password.encode(), API_KEY.encode()):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials
+def _sign_cookie(value: str) -> str:
+    sig = hmac_mod.new(COOKIE_SECRET.encode(), value.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{value}.{sig}"
 
+
+def _verify_cookie(cookie: str) -> bool:
+    if "." not in cookie:
+        return False
+    value, sig = cookie.rsplit(".", 1)
+    expected = hmac_mod.new(COOKIE_SECRET.encode(), value.encode(), hashlib.sha256).hexdigest()[:16]
+    return hmac_mod.compare_digest(sig, expected)
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    PUBLIC_PATHS = {"/login", "/api/auth/login", "/api/health"}
+    PUBLIC_PREFIXES = ("/api/health",)
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+
+        # Public paths
+        if path in self.PUBLIC_PATHS:
+            return await call_next(request)
+        for prefix in self.PUBLIC_PREFIXES:
+            if path.startswith(prefix):
+                return await call_next(request)
+
+        # X-API-Key header (for curl/scripts)
+        api_key_header = request.headers.get("X-API-Key", "")
+        if api_key_header and secrets.compare_digest(api_key_header, API_KEY):
+            return await call_next(request)
+
+        # Session cookie
+        cookie = request.cookies.get(COOKIE_NAME, "")
+        if cookie and _verify_cookie(cookie):
+            return await call_next(request)
+
+        # Not authenticated
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        return RedirectResponse(f"/login?next={path}", status_code=302)
+
+
+app.add_middleware(AuthMiddleware)
 
 # ── Models catalog ───────────────────────────────────────────────────────────
 
@@ -280,17 +325,180 @@ class SettingsUpdate(BaseModel):
     max_concurrent: int = None
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
+# ── Workflow helpers ──────────────────────────────────────────────────────────
 
-# Health check — no auth required
+
+def _workflows_path(subpath: str) -> Path:
+    """Resolve a workflow subpath: /workspace/workflows first, /app/workflows fallback."""
+    p = WORKFLOWS_DIR / subpath
+    if p.exists():
+        return p
+    return WORKFLOWS_DIR_DEFAULT / subpath
+
+
+def _load_manifest(workflow_id: str) -> dict:
+    """Load manifest.yaml for a workflow by its ID."""
+    p = _workflows_path(f"{workflow_id}/manifest.yaml")
+    if not p.exists():
+        return None
+    with open(p) as f:
+        return yaml.safe_load(f)
+
+
+def _load_workflow_json(workflow_id: str) -> dict:
+    """Load workflow.json for a workflow by its ID."""
+    p = _workflows_path(f"{workflow_id}/workflow.json")
+    if not p.exists():
+        return None
+    return json.loads(p.read_text())
+
+
+def _load_workflows_index_raw() -> dict:
+    """Load the full workflows index.json including version/date."""
+    p = _workflows_path("index.json")
+    if not p.exists():
+        return {"version": "0.0.0", "date": "", "workflows": []}
+    return json.loads(p.read_text())
+
+
+def _load_workflows_index() -> list:
+    """Load just the workflows list from index.json."""
+    return _load_workflows_index_raw().get("workflows", [])
+
+
+async def _get_installed_nodes() -> set:
+    """Query ComfyUI /object_info to get all installed node class_types."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{COMFY_URL}/object_info")
+            r.raise_for_status()
+            return set(r.json().keys())
+    except Exception:
+        return set()
+
+
+def _check_model_exists(filename: str) -> bool:
+    """Check if a model file exists anywhere under MODELS_BASE."""
+    # First try to find dest from models.json
+    _reload_models()
+    for cat in _models_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m["file"] == filename:
+                dest_path = Path(MODELS_BASE) / m["dest"] / m["file"]
+                return dest_path.exists()
+    # Fallback: search recursively
+    for p in Path(MODELS_BASE).rglob(filename):
+        if p.is_file():
+            return True
+    return False
+
+
+# ── Version helper ───────────────────────────────────────────────────────────
+
+
+def _load_version() -> dict:
+    p = VERSION_JSON if VERSION_JSON.exists() else VERSION_JSON_DEFAULT
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {"app_version": "0.0.0", "date": "", "components": {}}
+
+
+# ── Auth endpoints ───────────────────────────────────────────────────────────
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return HTMLResponse(_www("login.html").read_text())
+
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    body = await request.json()
+    key = body.get("api_key", "")
+    if not secrets.compare_digest(key.encode(), API_KEY.encode()):
+        raise HTTPException(401, "Invalid API key")
+    next_url = body.get("next", "/home")
+    response = JSONResponse({"status": "ok", "redirect": next_url})
+    response.set_cookie(
+        COOKIE_NAME,
+        _sign_cookie("authenticated"),
+        httponly=True,
+        samesite="lax",
+        path="/",
+        max_age=86400 * 7,
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return response
+
+
+# ── Root & page routes ───────────────────────────────────────────────────────
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse("/home", status_code=302)
+
+
+@app.get("/home", response_class=HTMLResponse)
+async def serve_home():
+    return HTMLResponse(_www("home.html").read_text())
+
+
+@app.get("/admin/models", response_class=HTMLResponse)
+async def serve_models():
+    return HTMLResponse(_www("models.html").read_text())
+
+
+@app.get("/admin/workflows", response_class=HTMLResponse)
+async def serve_workflows_page():
+    return HTMLResponse(_www("workflows.html").read_text())
+
+
+@app.get("/admin/nodes", response_class=HTMLResponse)
+async def serve_nodes_page():
+    return HTMLResponse(_www("nodes.html").read_text())
+
+
+@app.get("/run/{workflow_id}", response_class=HTMLResponse)
+async def serve_runner(workflow_id: str):
+    return HTMLResponse(_www("runner.html").read_text())
+
+
+@app.get("/static/{filename}")
+async def serve_static(filename: str):
+    p = _www(filename)
+    if not p.exists():
+        raise HTTPException(404)
+    content = p.read_text()
+    if filename.endswith(".css"):
+        media = "text/css"
+    elif filename.endswith(".js"):
+        media = "application/javascript"
+    else:
+        media = "text/plain"
+    return HTMLResponse(content, media_type=media)
+
+
+# ── Health endpoint ──────────────────────────────────────────────────────────
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
 
 
-# List all models with current status and global stats
+# ── Model management endpoints ───────────────────────────────────────────────
+
+
 @app.get("/api/admin/models")
-async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
+async def models_list():
     _reload_models()
 
     result_categories = []
@@ -386,12 +594,8 @@ async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
     })
 
 
-# Queue a single model download
 @app.post("/api/admin/models/download/{filename}")
-async def models_download(
-    filename: str,
-    _: HTTPBasicCredentials = Depends(require_auth),
-):
+async def models_download(filename: str):
     _reload_models()
     model = _find_model(filename)
     if not model:
@@ -407,12 +611,8 @@ async def models_download(
     return JSONResponse({"status": "queued", "file": filename})
 
 
-# Queue multiple model downloads at once
 @app.post("/api/admin/models/download-batch")
-async def models_download_batch(
-    body: BatchDownloadRequest,
-    _: HTTPBasicCredentials = Depends(require_auth),
-):
+async def models_download_batch(body: BatchDownloadRequest):
     _reload_models()
     queued = []
     skipped = []
@@ -434,9 +634,8 @@ async def models_download_batch(
     return JSONResponse({"queued": queued, "skipped": skipped})
 
 
-# SSE stream of download progress
 @app.get("/api/admin/models/status")
-async def models_status(_: HTTPBasicCredentials = Depends(require_auth)):
+async def models_status():
 
     async def event_stream():
         while True:
@@ -457,12 +656,8 @@ async def models_status(_: HTTPBasicCredentials = Depends(require_auth)):
     )
 
 
-# Delete a model file from disk
 @app.delete("/api/admin/models/{filename}")
-async def models_delete(
-    filename: str,
-    _: HTTPBasicCredentials = Depends(require_auth),
-):
+async def models_delete(filename: str):
     _reload_models()
     model = _find_model(filename)
     if not model:
@@ -484,13 +679,14 @@ async def models_delete(
 
 # ── Settings endpoints ───────────────────────────────────────────────────────
 
+
 @app.get("/api/admin/settings")
-async def get_settings(_: HTTPBasicCredentials = Depends(require_auth)):
+async def get_settings():
     return {"max_concurrent": _max_concurrent}
 
 
 @app.put("/api/admin/settings")
-async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
+async def update_settings(body: SettingsUpdate):
     global _max_concurrent
     if body.max_concurrent is not None:
         _max_concurrent = max(1, min(10, body.max_concurrent))
@@ -499,9 +695,11 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
     return {"max_concurrent": _max_concurrent}
 
 
-# Sync models catalog from remote repo
+# ── Models sync endpoint ────────────────────────────────────────────────────
+
+
 @app.post("/api/admin/models/sync")
-async def sync_models(_=Depends(require_auth)):
+async def sync_models():
     """Fetch the latest models.json from the configured MODELS_REPO."""
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -532,79 +730,154 @@ async def sync_models(_=Depends(require_auth)):
         raise HTTPException(500, f"Sync failed: {str(e)}")
 
 
-# ── Workflow helpers ──────────────────────────────────────────────────────────
+# ── System status & update endpoints ─────────────────────────────────────────
 
 
-def _workflows_path(subpath: str) -> Path:
-    """Resolve a workflow subpath: /workspace/workflows first, /app/workflows fallback."""
-    p = WORKFLOWS_DIR / subpath
-    if p.exists():
-        return p
-    return WORKFLOWS_DIR_DEFAULT / subpath
-
-
-def _load_manifest(workflow_id: str) -> dict:
-    """Load manifest.yaml for a workflow by its ID."""
-    p = _workflows_path(f"{workflow_id}/manifest.yaml")
-    if not p.exists():
-        return None
-    with open(p) as f:
-        return yaml.safe_load(f)
-
-
-def _load_workflow_json(workflow_id: str) -> dict:
-    """Load workflow.json for a workflow by its ID."""
-    p = _workflows_path(f"{workflow_id}/workflow.json")
-    if not p.exists():
-        return None
-    return json.loads(p.read_text())
-
-
-def _load_workflows_index_raw() -> dict:
-    """Load the full workflows index.json including version/date."""
-    p = _workflows_path("index.json")
-    if not p.exists():
-        return {"version": "0.0.0", "date": "", "workflows": []}
-    return json.loads(p.read_text())
-
-
-def _load_workflows_index() -> list:
-    """Load just the workflows list from index.json."""
-    return _load_workflows_index_raw().get("workflows", [])
-
-
-async def _get_installed_nodes() -> set:
-    """Query ComfyUI /object_info to get all installed node class_types."""
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(f"{COMFY_URL}/object_info")
-            r.raise_for_status()
-            return set(r.json().keys())
-    except Exception:
-        return set()
-
-
-def _check_model_exists(filename: str) -> bool:
-    """Check if a model file exists anywhere under MODELS_BASE."""
-    # First try to find dest from models.json
+@app.get("/api/admin/system/status")
+async def system_status():
+    ver = _load_version()
     _reload_models()
+
+    # Count models
+    total_models = sum(len(c.get("models", [])) for c in _models_data.get("categories", []))
+    present_models = 0
     for cat in _models_data.get("categories", []):
         for m in cat.get("models", []):
-            if m["file"] == filename:
-                dest_path = Path(MODELS_BASE) / m["dest"] / m["file"]
-                return dest_path.exists()
-    # Fallback: search recursively
-    for p in Path(MODELS_BASE).rglob(filename):
-        if p.is_file():
-            return True
-    return False
+            dest_path = Path(MODELS_BASE) / m["dest"] / m["file"]
+            if dest_path.exists():
+                present_models += 1
+
+    # Count workflows
+    wf_index = _load_workflows_index()
+    total_workflows = len(wf_index)
+
+    # ComfyUI status
+    comfyui_status = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(f"{COMFY_URL}/system_stats")
+            comfyui_status = "running" if r.status_code == 200 else "error"
+    except Exception:
+        comfyui_status = "unreachable"
+
+    # Disk
+    try:
+        usage = shutil.disk_usage(str(MODELS_BASE))
+        models_bytes = sum(f.stat().st_size for f in Path(MODELS_BASE).rglob("*") if f.is_file())
+        free_bytes = usage.free
+    except Exception:
+        models_bytes = 0
+        free_bytes = 0
+
+    return {
+        "app_version": ver.get("app_version", "0.0.0"),
+        "date": ver.get("date", ""),
+        "components": {
+            "backend": {
+                "version": ver.get("components", {}).get("backend", {}).get("version", "0.0.0"),
+                "status": "running",
+            },
+            "frontend": {
+                "version": ver.get("components", {}).get("frontend", {}).get("version", "0.0.0"),
+                "status": "loaded",
+            },
+            "models": {
+                "version": _models_data.get("version", "0.0.0"),
+                "date": _models_data.get("date", ""),
+                "count": total_models,
+                "present": present_models,
+            },
+            "workflows": {
+                "version": _load_workflows_index_raw().get("version", "0.0.0"),
+                "date": _load_workflows_index_raw().get("date", ""),
+                "count": total_workflows,
+            },
+        },
+        "comfyui": {"status": comfyui_status},
+        "disk": {"models_bytes": models_bytes, "free_bytes": free_bytes},
+    }
+
+
+@app.post("/api/admin/system/update")
+async def system_update():
+    """Fetch latest version.json from repo and update changed components."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(f"{REPO_BASE}/version.json")
+            r.raise_for_status()
+            remote_ver = r.json()
+
+        local_ver = _load_version()
+        updated = []
+        restart_needed = False
+
+        for comp_name, comp_info in remote_ver.get("components", {}).items():
+            local_comp = local_ver.get("components", {}).get(comp_name, {})
+            remote_v = comp_info.get("version", "0.0.0")
+            local_v = local_comp.get("version", "0.0.0")
+
+            if remote_v <= local_v:
+                continue
+
+            if "file" in comp_info:
+                # Single file component (backend, models)
+                file_url = f"{REPO_BASE}/{comp_info['file']}"
+                async with httpx.AsyncClient(timeout=30) as dl_client:
+                    fr = await dl_client.get(file_url)
+                if fr.status_code == 200:
+                    dest = Path("/workspace") / comp_info["file"]
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(fr.text)
+                    updated.append(comp_name)
+                    if comp_name == "backend":
+                        restart_needed = True
+
+            elif "dir" in comp_info:
+                # Directory component (frontend, workflows)
+                if comp_name == "frontend":
+                    # Download file list from repo
+                    async with httpx.AsyncClient(timeout=30) as dl_client:
+                        for fname in [
+                            "styles.css",
+                            "home.html",
+                            "login.html",
+                            "models.html",
+                            "workflows.html",
+                            "nodes.html",
+                            "runner.html",
+                        ]:
+                            fu = f"{REPO_BASE}/app/www/{fname}"
+                            fres = await dl_client.get(fu)
+                            if fres.status_code == 200:
+                                dest = Path("/workspace/www")
+                                dest.mkdir(parents=True, exist_ok=True)
+                                (dest / fname).write_text(fres.text)
+                    updated.append("frontend")
+                elif comp_name == "workflows":
+                    # Reuse existing workflow sync logic
+                    updated.append("workflows")
+
+        # Save updated version.json
+        if updated:
+            Path("/workspace").mkdir(parents=True, exist_ok=True)
+            VERSION_JSON.write_text(json.dumps(remote_ver, indent=2))
+            if "models" in updated:
+                _reload_models()
+
+        return {
+            "updated": updated,
+            "restart_needed": restart_needed,
+            "message": f"Updated: {', '.join(updated)}" if updated else "Everything up to date",
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Update failed: {str(e)}")
 
 
 # ── Workflow Manager endpoints ───────────────────────────────────────────────
 
 
 @app.get("/api/admin/workflows")
-async def list_workflows(_=Depends(require_auth)):
+async def list_workflows():
     index_raw = _load_workflows_index_raw()
     index = index_raw.get("workflows", [])
     installed_nodes = await _get_installed_nodes()
@@ -657,7 +930,7 @@ async def list_workflows(_=Depends(require_auth)):
 
 
 @app.get("/api/admin/workflows/{workflow_id}")
-async def get_workflow(workflow_id: str, _=Depends(require_auth)):
+async def get_workflow(workflow_id: str):
     index = _load_workflows_index()
     entry = next((e for e in index if e["id"] == workflow_id), None)
     if not entry:
@@ -690,7 +963,7 @@ async def get_workflow(workflow_id: str, _=Depends(require_auth)):
 
 
 @app.post("/api/admin/workflows/{workflow_id}/install-models")
-async def install_workflow_models(workflow_id: str, _=Depends(require_auth)):
+async def install_workflow_models(workflow_id: str):
     index = _load_workflows_index()
     entry = next((e for e in index if e["id"] == workflow_id), None)
     if not entry:
@@ -717,8 +990,8 @@ async def install_workflow_models(workflow_id: str, _=Depends(require_auth)):
 
 
 @app.post("/api/admin/workflows/sync")
-async def sync_workflows(_=Depends(require_auth)):
-    REPO_BASE = os.environ.get(
+async def sync_workflows():
+    WORKFLOWS_REPO_BASE = os.environ.get(
         "WORKFLOWS_REPO",
         "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows",
     )
@@ -726,7 +999,7 @@ async def sync_workflows(_=Depends(require_auth)):
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             # Fetch remote index
-            r = await client.get(f"{REPO_BASE}/index.json")
+            r = await client.get(f"{WORKFLOWS_REPO_BASE}/index.json")
             r.raise_for_status()
             remote_index = r.json().get("workflows", [])
 
@@ -743,12 +1016,12 @@ async def sync_workflows(_=Depends(require_auth)):
                     wf_dir.mkdir(parents=True, exist_ok=True)
 
                     # Download manifest.yaml
-                    mr = await client.get(f"{REPO_BASE}/{wf_id}/manifest.yaml")
+                    mr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/manifest.yaml")
                     mr.raise_for_status()
                     (wf_dir / "manifest.yaml").write_text(mr.text)
 
                     # Download workflow.json
-                    wr = await client.get(f"{REPO_BASE}/{wf_id}/workflow.json")
+                    wr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/workflow.json")
                     if wr.status_code == 200:
                         (wf_dir / "workflow.json").write_text(wr.text)
 
@@ -757,7 +1030,7 @@ async def sync_workflows(_=Depends(require_auth)):
             # Update local index
             if updated:
                 WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
-                idx_r = await client.get(f"{REPO_BASE}/index.json")
+                idx_r = await client.get(f"{WORKFLOWS_REPO_BASE}/index.json")
                 if idx_r.status_code == 200:
                     (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
 
@@ -770,7 +1043,7 @@ async def sync_workflows(_=Depends(require_auth)):
 
 
 @app.get("/api/admin/nodes")
-async def list_nodes(_=Depends(require_auth)):
+async def list_nodes():
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(f"{COMFY_URL}/object_info")
@@ -813,7 +1086,7 @@ async def list_nodes(_=Depends(require_auth)):
 
 
 @app.post("/api/admin/nodes/install")
-async def install_node(body: dict, _=Depends(require_auth)):
+async def install_node(body: dict):
     repo_url = body.get("repo_url", "").strip()
     if not repo_url or not repo_url.startswith("https://"):
         raise HTTPException(400, "Invalid repo URL")
@@ -870,7 +1143,7 @@ async def install_node(body: dict, _=Depends(require_auth)):
 
 
 @app.get("/api/run/{workflow_id}")
-async def get_runner_manifest(workflow_id: str, _=Depends(require_auth)):
+async def get_runner_manifest(workflow_id: str):
     index = _load_workflows_index()
     entry = next((e for e in index if e["id"] == workflow_id), None)
     if not entry:
@@ -884,7 +1157,6 @@ async def get_runner_manifest(workflow_id: str, _=Depends(require_auth)):
 @app.post("/api/run/{workflow_id}/execute")
 async def execute_workflow(
     workflow_id: str,
-    _=Depends(require_auth),
     input_image: Optional[UploadFile] = File(None),
     params: str = Form("{}"),
 ):
@@ -975,7 +1247,7 @@ async def execute_workflow(
 
 
 @app.get("/api/run/status/{prompt_id}")
-async def run_status(prompt_id: str, _=Depends(require_auth)):
+async def run_status(prompt_id: str):
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
         r.raise_for_status()
@@ -1039,7 +1311,7 @@ async def run_status(prompt_id: str, _=Depends(require_auth)):
 
 
 @app.get("/api/run/result/{prompt_id}")
-async def run_result(prompt_id: str, output_type: str = "video", _=Depends(require_auth)):
+async def run_result(prompt_id: str, output_type: str = "video"):
     # Get status to find the output file
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
@@ -1093,41 +1365,3 @@ async def run_result(prompt_id: str, output_type: str = "video", _=Depends(requi
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{fname}"'},
     )
-
-
-# ── HTML pages ───────────────────────────────────────────────────────────────
-
-@app.get("/admin/workflows", response_class=HTMLResponse)
-async def serve_workflows(_=Depends(require_auth)):
-    return HTMLResponse(_www("workflows.html").read_text())
-
-
-@app.get("/admin/nodes", response_class=HTMLResponse)
-async def serve_nodes(_=Depends(require_auth)):
-    return HTMLResponse(_www("nodes.html").read_text())
-
-
-@app.get("/run/{workflow_id}", response_class=HTMLResponse)
-async def serve_runner(workflow_id: str, _=Depends(require_auth)):
-    return HTMLResponse(_www("runner.html").read_text())
-
-
-@app.get("/static/{filename}")
-async def serve_static(filename: str):
-    """Serve static assets (CSS, JS) from www directory — no auth required."""
-    p = _www(filename)
-    if not p.exists():
-        raise HTTPException(404)
-    content = p.read_text()
-    media = "text/css" if filename.endswith(".css") else "application/javascript"
-    return HTMLResponse(content, media_type=media)
-
-
-@app.get("/admin/models", response_class=HTMLResponse)
-async def serve_admin_models(_: HTTPBasicCredentials = Depends(require_auth)):
-    return HTMLResponse(_www("index.html").read_text())
-
-
-@app.get("/admin", response_class=HTMLResponse)
-async def serve_admin(_: HTTPBasicCredentials = Depends(require_auth)):
-    return HTMLResponse(_www("index.html").read_text())
