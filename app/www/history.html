@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — History</title>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 32px 16px;
+  }
+  .logo { font-family: var(--display); font-size: 22px; font-weight: 800; }
+  .logo span { color: var(--accent); }
+
+  main { padding: 0 32px 32px; }
+
+  .history-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .job-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    transition: border-color 0.15s;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text);
+  }
+  .job-card:hover { border-color: var(--accent); }
+
+  .job-thumb {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--bg);
+  }
+  .job-thumb-placeholder {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 20px;
+  }
+
+  .job-info { min-width: 0; }
+  .job-title {
+    font-family: var(--display);
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .job-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .job-meta span { white-space: nowrap; }
+
+  .job-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+  }
+  .job-status.completed { color: var(--success); border-color: var(--success); }
+  .job-status.error { color: var(--error); border-color: var(--error); }
+  .job-status.running { color: var(--accent); border-color: var(--accent); }
+
+  .job-prompt {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 500px;
+  }
+
+  .job-detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.9);
+    z-index: 10000;
+    overflow-y: auto;
+    padding: 40px;
+  }
+  .job-detail-overlay.visible { display: block; }
+  .job-detail-box {
+    max-width: 700px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 32px;
+  }
+  .job-detail-box h2 {
+    font-family: var(--display);
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .job-detail-box .close-btn {
+    float: right;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 24px;
+    line-height: 1;
+    border: none;
+    background: none;
+  }
+  .job-detail-box .close-btn:hover { color: var(--text); }
+  .detail-table {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+  }
+  .detail-table td {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .detail-table td:first-child {
+    color: var(--muted);
+    width: 120px;
+    white-space: nowrap;
+  }
+  .detail-table td:last-child {
+    word-break: break-all;
+  }
+  .detail-output video, .detail-output img {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/history" class="nav-link active">History</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Job History</small></div>
+</header>
+
+<!-- Main content -->
+<main>
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading history...
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>No jobs found. Run a workflow to see history here.</p>
+  </div>
+
+  <div class="history-list" id="historyList"></div>
+</main>
+
+<!-- Detail Overlay -->
+<div class="job-detail-overlay" id="detailOverlay">
+  <div class="job-detail-box" id="detailBox"></div>
+</div>
+
+<script>
+(function() {
+  const API_KEY = localStorage.getItem('api_key') || '';
+
+  async function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (API_KEY) opts.headers['Authorization'] = 'Bearer ' + API_KEY;
+    const resp = await fetch(url, opts);
+    if (resp.status === 401 || resp.status === 403) {
+      window.location = '/login';
+      throw new Error('auth');
+    }
+    return resp;
+  }
+
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return '--';
+    return ts.replace('T', ' ').substring(0, 19);
+  }
+
+  const $loading = document.getElementById('loadingState');
+  const $empty = document.getElementById('emptyState');
+  const $list = document.getElementById('historyList');
+  const $overlay = document.getElementById('detailOverlay');
+  const $detailBox = document.getElementById('detailBox');
+
+  async function loadHistory() {
+    try {
+      const resp = await apiFetch('/api/admin/history');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const jobs = await resp.json();
+
+      $loading.style.display = 'none';
+
+      if (!jobs.length) {
+        $empty.style.display = '';
+        return;
+      }
+
+      $list.innerHTML = '';
+      jobs.forEach(function(job) {
+        var card = document.createElement('div');
+        card.className = 'job-card';
+        card.onclick = function() { showDetail(job); };
+
+        var statusCls = job.status === 'completed' ? 'completed' : (job.status === 'error' ? 'error' : 'running');
+
+        var thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+
+        var prompt = job.params && job.params.positive_prompt ? job.params.positive_prompt : '';
+        if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
+
+        card.innerHTML =
+          thumbHtml +
+          '<div class="job-info">' +
+            '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
+            '<div class="job-meta">' +
+              '<span>' + fmtDate(job.started_at) + '</span>' +
+              (job.duration ? '<span>' + job.duration + 's</span>' : '') +
+              '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+            '</div>' +
+            (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
+          '</div>' +
+          '<div class="job-status ' + statusCls + '">' + escHtml(job.status) + '</div>';
+
+        $list.appendChild(card);
+      });
+
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $loading.style.display = 'none';
+        $empty.style.display = '';
+        $empty.querySelector('p').textContent = 'Error loading history: ' + e.message;
+      }
+    }
+  }
+
+  function showDetail(job) {
+    var rows = '';
+    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
+    rows += '<tr><td>Status</td><td>' + escHtml(job.status) + '</td></tr>';
+    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
+    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
+    if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
+
+    // Params
+    if (job.params) {
+      for (var key in job.params) {
+        if (key === 'positive_prompt' || key === 'negative_prompt') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;">' + escHtml(String(job.params[key])) + '</td></tr>';
+        } else {
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(String(job.params[key])) + '</td></tr>';
+        }
+      }
+    }
+
+    // Seeds
+    if (job.seeds) {
+      for (var sid in job.seeds) {
+        rows += '<tr><td>seed (' + escHtml(sid) + ')</td><td>' + job.seeds[sid] + '</td></tr>';
+      }
+    }
+
+    if (job.error) rows += '<tr><td>Error</td><td style="color:var(--error);">' + escHtml(job.error) + '</td></tr>';
+
+    // Output
+    var outputHtml = '';
+    if (job.output && job.output.filename) {
+      var url = '/api/run/result/' + encodeURIComponent(job.prompt_id);
+      if (job.output.type === 'video' || job.output.filename.match(/\.(mp4|webm)$/i)) {
+        outputHtml = '<div class="detail-output"><video controls autoplay loop src="' + url + '"></video></div>';
+      } else {
+        outputHtml = '<div class="detail-output"><img src="' + url + '" alt="Output"></div>';
+      }
+    }
+
+    $detailBox.innerHTML =
+      '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
+      '<h2>Job Details</h2>' +
+      '<table class="detail-table">' + rows + '</table>' +
+      outputHtml;
+
+    $overlay.classList.add('visible');
+  }
+
+  $overlay.addEventListener('click', function(e) {
+    if (e.target === $overlay) $overlay.classList.remove('visible');
+  });
+
+  loadHistory();
+})();
+</script>
+</body>
+</html>

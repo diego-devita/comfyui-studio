@@ -62,6 +62,7 @@ VERSION_JSON_DEFAULT = Path("/app/version.json")  # baked fallback
 # Paths for workflows
 WORKFLOWS_DIR = Path("/workspace/workflows")
 WORKFLOWS_DIR_DEFAULT = Path("/app/workflows")
+JOBS_DIR = Path("/workspace/jobs")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -170,7 +171,7 @@ _download_state: dict = {}
 _exec_progress: dict = {}
 
 
-def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
+def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_record: dict = None):
     """Background thread: listen to ComfyUI WebSocket for progress updates."""
     # Build node_id -> title map from workflow
     node_titles = {}
@@ -225,6 +226,37 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
                     state["status"] = "completed"
                     state["percent"] = 100
                     _exec_progress[prompt_id] = state
+                    # Update job record
+                    if job_record:
+                        from datetime import datetime, timezone, timedelta
+                        now = datetime.now(timezone(timedelta(hours=1)))
+                        job_record["status"] = "completed"
+                        job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+                        if job_record.get("started_at"):
+                            try:
+                                start = datetime.strptime(job_record["started_at"], "%Y-%m-%dT%H:%M:%S")
+                                job_record["duration"] = round((now.replace(tzinfo=None) - start).total_seconds())
+                            except Exception:
+                                pass
+                        # Try to get output info from ComfyUI history
+                        try:
+                            import httpx as _hx
+                            r = _hx.get(f"{COMFY_URL}/history/{prompt_id}", timeout=5)
+                            if r.status_code == 200:
+                                hist = r.json().get(prompt_id, {}).get("outputs", {})
+                                for _nid, _nout in hist.items():
+                                    for _k in ("gifs", "videos"):
+                                        if _k in _nout and _nout[_k]:
+                                            job_record["output"] = _nout[_k][0]
+                                            break
+                                    if job_record["output"]:
+                                        break
+                                    if "images" in _nout and _nout["images"]:
+                                        job_record["output"] = _nout["images"][0]
+                                        break
+                        except Exception:
+                            pass
+                        _save_job(job_record)
                     break
                 nodes_done += 1
                 state["node_title"] = node_titles.get(node, node)
@@ -248,8 +280,16 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
 
             elif msg_type == "execution_error":
                 state["status"] = "error"
-                state["error"] = str(data.get("exception_message", ""))
+                err_msg = str(data.get("exception_message", ""))
+                state["error"] = err_msg
                 _exec_progress[prompt_id] = state
+                if job_record:
+                    from datetime import datetime, timezone, timedelta
+                    now = datetime.now(timezone(timedelta(hours=1)))
+                    job_record["status"] = "error"
+                    job_record["error"] = err_msg
+                    job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+                    _save_job(job_record)
                 break
 
             _exec_progress[prompt_id] = state
@@ -558,6 +598,11 @@ async def serve_workflows_page():
 @app.get("/admin/nodes", response_class=HTMLResponse)
 async def serve_nodes_page():
     return HTMLResponse(_www("nodes.html").read_text())
+
+
+@app.get("/admin/history", response_class=HTMLResponse)
+async def serve_history_page():
+    return HTMLResponse(_www("history.html").read_text())
 
 
 @app.get("/run/{workflow_id}", response_class=HTMLResponse)
@@ -968,6 +1013,7 @@ async def system_update():
                             "workflows.html",
                             "nodes.html",
                             "runner.html",
+                            "history.html",
                         ]:
                             fu = f"{REPO_BASE}/app/www/{fname}"
                             fres = await dl_client.get(fu)
@@ -1409,6 +1455,32 @@ async def telemetry():
     return result
 
 
+# ── Job History endpoints ────────────────────────────────────────────────────
+
+
+def _save_job(job_data: dict):
+    """Save a job record to /workspace/jobs/<timestamp>_<prompt_id>.json"""
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = job_data.get("started_at", "").replace(":", "").replace("-", "").replace("T", "_").replace(" ", "_")
+    prompt_id = job_data.get("prompt_id", "unknown")
+    fname = f"{ts}_{prompt_id}.json"
+    (JOBS_DIR / fname).write_text(json.dumps(job_data, indent=2, ensure_ascii=False))
+
+
+@app.get("/api/admin/history")
+async def list_history():
+    """List all job records, newest first."""
+    if not JOBS_DIR.exists():
+        return []
+    jobs = []
+    for f in sorted(JOBS_DIR.glob("*.json"), reverse=True):
+        try:
+            jobs.append(json.loads(f.read_text()))
+        except Exception:
+            pass
+    return jobs
+
+
 # ── Workflow Runner endpoints ────────────────────────────────────────────────
 
 
@@ -1535,9 +1607,28 @@ async def execute_workflow(
 
     # Start WebSocket listener for progress tracking
     prompt_id = data["prompt_id"]
+
+    # Save job record
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=1)))  # Europe/Rome approx
+    job_record = {
+        "prompt_id": prompt_id,
+        "workflow_id": workflow_id,
+        "workflow_name": manifest.get("name", workflow_id),
+        "status": "running",
+        "started_at": now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "finished_at": None,
+        "duration": None,
+        "params": form_params,
+        "seeds": used_seeds,
+        "output": None,
+        "error": None,
+    }
+    _save_job(job_record)
+
     threading.Thread(
         target=_start_ws_listener,
-        args=(client_id, prompt_id, workflow),
+        args=(client_id, prompt_id, workflow, job_record),
         daemon=True,
     ).start()
 
