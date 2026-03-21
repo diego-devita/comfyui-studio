@@ -323,11 +323,12 @@
       const row = document.createElement('tr');
       const displayName = labelMap[c.name] || c.name || '--';
       const displayStatus = c.status_text || statusMap[c.status] || c.status || '--';
-      const displayDate = c.date ? c.date.substring(0, 10) : (typeof date === 'string' ? date.substring(0, 10) : '--');
+      const displayDate = c.date || (typeof date === 'string' ? date : '--');
       const color = statusDotColor(c.status || 'ok');
+      const displayVersion = typeof c.version === 'number' ? '#' + c.version : (c.version || '--');
       row.innerHTML =
         '<td>' + escHtml(displayName) + '</td>' +
-        '<td>' + escHtml(c.version || '--') + '</td>' +
+        '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
         '<td>' + dotHtml(color, displayStatus) + '</td>';
       $compBody.appendChild(row);

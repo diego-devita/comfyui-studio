@@ -1,7 +1,7 @@
 id: wan22-i2v-kijai
 name: "WAN 2.2 Image to Video (Kijai Wrapper)"
-version: "1.0.0"
-date: "2026-03-21"
+version: 1
+date: "2026-03-21 19:30"
 description: "Image to video using Kijai's WanVideoWrapper nodes with FP8 models, SageAttention, torch compile, block swap for VRAM management, LightX2V LoRA, dual-pass sampling, CFG scheduling."
 author: "comfyui-studio (based on Kijai's example workflow)"
 

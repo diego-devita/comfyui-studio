@@ -352,7 +352,7 @@ def _load_workflows_index_raw() -> dict:
     """Load the full workflows index.json including version/date."""
     p = _workflows_path("index.json")
     if not p.exists():
-        return {"version": "0.0.0", "date": "", "workflows": []}
+        return {"version": 0, "date": "", "workflows": []}
     return json.loads(p.read_text())
 
 
@@ -574,7 +574,7 @@ async def models_list():
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
     return JSONResponse({
-        "version": _models_data.get("version", "0.0.0"),
+        "version": _models_data.get("version", 0),
         "date": _models_data.get("date", ""),
         "stats": {
             "queued_count": queued_count,
@@ -702,8 +702,8 @@ async def sync_models():
             r.raise_for_status()
             remote = r.json()
 
-        remote_version = remote.get("version", "0.0.0")
-        local_version = _models_data.get("version", "0.0.0")
+        remote_version = remote.get("version", 0)
+        local_version = _models_data.get("version", 0)
 
         if remote_version > local_version:
             # Write to /workspace so it persists and overrides the baked-in version
@@ -777,12 +777,14 @@ async def system_status():
                 "status": "loaded",
             },
             "models": {
-                "version": ver.get("components", {}).get("models", {}).get("version", "0.0.0"),
+                "version": ver.get("components", {}).get("models", {}).get("version", 0),
+                "date": ver.get("components", {}).get("models", {}).get("date", ""),
                 "count": total_models,
                 "present": present_models,
             },
             "workflows": {
-                "version": ver.get("components", {}).get("workflows", {}).get("version", "0.0.0"),
+                "version": ver.get("components", {}).get("workflows", {}).get("version", 0),
+                "date": ver.get("components", {}).get("workflows", {}).get("date", ""),
                 "count": total_workflows,
             },
         },
@@ -806,8 +808,9 @@ async def system_update():
 
         for comp_name, comp_info in remote_ver.get("components", {}).items():
             local_comp = local_ver.get("components", {}).get(comp_name, {})
-            remote_v = comp_info.get("version", "0.0.0")
-            local_v = local_comp.get("version", "0.0.0")
+            default_v = 0 if isinstance(comp_info.get("version"), int) else "0.0.0"
+            remote_v = comp_info.get("version", default_v)
+            local_v = local_comp.get("version", default_v)
 
             if remote_v <= local_v:
                 continue
@@ -906,7 +909,7 @@ async def list_workflows():
         result.append({
             "id": manifest["id"],
             "name": manifest["name"],
-            "version": manifest.get("version", "0.0.0"),
+            "version": manifest.get("version", 0),
             "date": manifest.get("date", ""),
             "description": manifest.get("description", ""),
             "author": manifest.get("author", ""),
@@ -928,7 +931,7 @@ async def list_workflows():
         })
 
     return {
-        "version": index_raw.get("version", "0.0.0"),
+        "version": index_raw.get("version", 0),
         "date": index_raw.get("date", ""),
         "workflows": result,
     }
