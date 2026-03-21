@@ -746,12 +746,30 @@ async def system_status():
     wf_index = _load_workflows_index()
     total_workflows = len(wf_index)
 
-    # ComfyUI status
+    # ComfyUI status + node package count
     comfyui_status = "unknown"
+    total_packages = 0
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             r = await client.get(f"{COMFY_URL}/system_stats")
             comfyui_status = "running" if r.status_code == 200 else "error"
+            if comfyui_status == "running":
+                try:
+                    r2 = await client.get(f"{COMFY_URL}/object_info")
+                    if r2.status_code == 200:
+                        obj = r2.json()
+                        pkgs = set()
+                        for ni in obj.values():
+                            if isinstance(ni, dict):
+                                mod = ni.get("python_module", "")
+                                if "custom_nodes" in mod:
+                                    parts = mod.split(".")
+                                    idx = parts.index("custom_nodes") if "custom_nodes" in parts else -1
+                                    if idx >= 0 and idx + 1 < len(parts):
+                                        pkgs.add(parts[idx + 1])
+                        total_packages = len(pkgs)
+                except Exception:
+                    pass
     except Exception:
         comfyui_status = "unreachable"
 
@@ -779,16 +797,19 @@ async def system_status():
             "models": {
                 "version": ver.get("components", {}).get("models", {}).get("version", 0),
                 "date": ver.get("components", {}).get("models", {}).get("date", ""),
+                "status": f"{total_models} models",
                 "count": total_models,
                 "present": present_models,
             },
             "workflows": {
                 "version": ver.get("components", {}).get("workflows", {}).get("version", 0),
                 "date": ver.get("components", {}).get("workflows", {}).get("date", ""),
+                "status": f"{total_workflows} workflows",
                 "count": total_workflows,
             },
         },
         "comfyui": {"status": comfyui_status},
+        "nodes": {"total_packages": total_packages},
         "disk": {"models_bytes": models_bytes, "free_bytes": free_bytes},
     }
 

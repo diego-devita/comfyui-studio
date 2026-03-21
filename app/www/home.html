@@ -344,8 +344,8 @@
     $workflowsSub.textContent = (workflows.ready || workflows.count || 0) + ' ready';
 
     const nodes = data.nodes || {};
-    $nodesCount.textContent = nodes.total || 0;
-    $nodesSub.textContent = 'packages';
+    $nodesCount.textContent = nodes.total_packages || 0;
+    $nodesSub.textContent = 'custom node packages';
 
     // ComfyUI status
     const comfy = data.comfyui || {};
