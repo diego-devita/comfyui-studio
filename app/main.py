@@ -163,6 +163,88 @@ def _www(filename: str) -> Path:
 
 _download_state: dict = {}
 
+# ── Execution progress tracking (via ComfyUI WebSocket) ──────────────────
+# prompt_id -> {"status": "running"|"completed"|"error",
+#               "node": str, "node_title": str,
+#               "step": int, "total_steps": int}
+_exec_progress: dict = {}
+
+
+def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
+    """Background thread: listen to ComfyUI WebSocket for progress updates."""
+    # Build node_id -> title map from workflow
+    node_titles = {}
+    for nid, ndata in workflow.items():
+        meta = ndata.get("_meta", {})
+        node_titles[nid] = meta.get("title", ndata.get("class_type", nid))
+
+    _exec_progress[prompt_id] = {
+        "status": "queued", "node": "", "node_title": "",
+        "step": 0, "total_steps": 0,
+    }
+
+    comfy_ws = COMFY_URL.replace("http://", "ws://").replace("https://", "wss://")
+    ws_url = f"{comfy_ws}/ws?clientId={client_id}"
+
+    try:
+        from websockets.sync.client import connect as ws_connect
+        ws = ws_connect(ws_url)
+    except ImportError:
+        # Fallback: poll-only mode, no live progress
+        return
+    except Exception:
+        return
+
+    try:
+        for raw in ws:
+            if isinstance(raw, bytes):
+                continue
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                continue
+
+            msg_type = msg.get("type")
+            data = msg.get("data", {})
+
+            if data.get("prompt_id") != prompt_id:
+                continue
+
+            state = _exec_progress.get(prompt_id, {})
+
+            if msg_type == "execution_start":
+                state["status"] = "running"
+
+            elif msg_type == "executing":
+                node = data.get("node")
+                if node is None:
+                    state["status"] = "completed"
+                    _exec_progress[prompt_id] = state
+                    break
+                state["node"] = node
+                state["node_title"] = node_titles.get(node, node)
+                state["status"] = "running"
+
+            elif msg_type == "progress":
+                state["step"] = data.get("value", 0)
+                state["total_steps"] = data.get("max", 0)
+
+            elif msg_type == "execution_error":
+                state["status"] = "error"
+                state["error"] = str(data.get("exception_message", ""))
+                _exec_progress[prompt_id] = state
+                break
+
+            _exec_progress[prompt_id] = state
+    except Exception:
+        pass
+    finally:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+
 _max_concurrent = int(os.environ.get("MAX_CONCURRENT_DOWNLOADS", "3"))
 _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="dl")
 _pending_queue: list[dict] = []  # ordered list of model dicts waiting to download
@@ -1303,7 +1385,15 @@ async def execute_workflow(
     if "error" in data:
         raise HTTPException(400, str(data["error"]))
 
-    return {"prompt_id": data["prompt_id"], "client_id": client_id}
+    # Start WebSocket listener for progress tracking
+    prompt_id = data["prompt_id"]
+    threading.Thread(
+        target=_start_ws_listener,
+        args=(client_id, prompt_id, workflow),
+        daemon=True,
+    ).start()
+
+    return {"prompt_id": prompt_id, "client_id": client_id}
 
 
 @app.get("/api/run/status/{prompt_id}")
@@ -1314,7 +1404,18 @@ async def run_status(prompt_id: str):
         history = r.json()
 
     if prompt_id not in history:
-        # Check if in queue
+        # Check WebSocket progress first
+        ws_state = _exec_progress.get(prompt_id)
+        if ws_state:
+            return {
+                "status": ws_state.get("status", "running"),
+                "node": ws_state.get("node", ""),
+                "node_title": ws_state.get("node_title", ""),
+                "step": ws_state.get("step", 0),
+                "total_steps": ws_state.get("total_steps", 0),
+            }
+
+        # Fallback: check ComfyUI queue
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 qr = await client.get(f"{COMFY_URL}/queue")
@@ -1325,13 +1426,13 @@ async def run_status(prompt_id: str):
 
                 for item in running:
                     if len(item) > 1 and item[1] == prompt_id:
-                        return {"status": "running", "progress": None}
+                        return {"status": "running", "step": 0, "total_steps": 0}
                 for item in pending:
                     if len(item) > 1 and item[1] == prompt_id:
-                        return {"status": "pending", "progress": None}
+                        return {"status": "pending", "step": 0, "total_steps": 0}
         except Exception:
             pass
-        return {"status": "pending", "progress": None}
+        return {"status": "pending", "step": 0, "total_steps": 0}
 
     job = history[prompt_id]
     status_str = job.get("status", {}).get("status_str", "")
