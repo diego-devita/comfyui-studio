@@ -223,7 +223,7 @@ Set these at runtime (in the RunPod template or `docker run -e`).
 
 ## Custom Nodes
 
-26 custom nodes are pre-installed in the Docker image, organized in three groups. The full list with descriptions is in [`nodes.txt`](nodes.txt).
+28 custom nodes are pre-installed in the Docker image, organized in four groups. The full list with descriptions is in [`nodes.txt`](nodes.txt).
 
 ### Fundamentals / QoL (9 nodes)
 
@@ -236,6 +236,10 @@ ComfyUI-Advanced-ControlNet, ComfyUI_IPAdapter_plus, ComfyUI_InstantID, ComfyUI-
 ### Video Generation (5 nodes)
 
 ComfyUI-VideoHelperSuite, ComfyUI-Frame-Interpolation, ComfyUI-AnimateDiff-Evolved, ComfyUI-WanVideoWrapper, ComfyUI-HunyuanVideoWrapper.
+
+### CivitAI Integration (2 nodes)
+
+civitai_comfy_nodes (official), ComfyUI-EasyCivitai-XTNodes.
 
 ### Installing additional nodes
 

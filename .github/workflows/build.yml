@@ -51,6 +51,6 @@ jobs:
             PYTORCH_INDEX=${{ vars.PYTORCH_INDEX || 'cu128' }}
             PYTHON_VERSION=${{ vars.PYTHON_VERSION || '3.12' }}
             ENABLE_SAGE_ATTENTION=${{ vars.ENABLE_SAGE_ATTENTION || 'true' }}
-            ENABLE_FLASH_ATTENTION=${{ vars.ENABLE_FLASH_ATTENTION || 'true' }}
+            ENABLE_FLASH_ATTENTION=${{ vars.ENABLE_FLASH_ATTENTION || 'false' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
