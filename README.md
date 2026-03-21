@@ -4,7 +4,7 @@ A complete platform for AI image and video generation built on ComfyUI. Runs as 
 
 The system is split into two independent layers:
 
-1. **The Docker image** — ComfyUI + 28 custom nodes + performance optimizations, configured for a specific GPU. Rebuilt only when infrastructure changes.
+1. **The Docker image** — ComfyUI + 29 custom nodes + performance optimizations, configured for a specific GPU. Rebuilt only when infrastructure changes.
 2. **The web application** — homepage, model manager, workflow manager, node manager, and workflow runner. Updated live from the Git repository without rebuilding the image.
 
 Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 to B200 via build arguments.
@@ -43,7 +43,7 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 ┌─────────────────────────────────────────────────────────────┐
 │                     DOCKER IMAGE (build time)                │
 │                                                              │
-│   /comfyui        ComfyUI + 28 custom nodes                 │
+│   /comfyui        ComfyUI + 29 custom nodes                 │
 │   /app            Web app baseline (fallback)                │
 │   /start.sh       Boot script                                │
 │                                                              │
@@ -120,7 +120,7 @@ After the pod starts, open `https://<PODID>-8000.proxy.runpod.net` — you'll se
 
 ## Part 1: Docker Image
 
-The Docker image contains everything needed to run ComfyUI: Python, PyTorch, CUDA libraries, ComfyUI itself, 28 custom nodes, and performance optimizations. It does **not** contain models, workflows, or the live application code — those are loaded dynamically at runtime from the Git repository.
+The Docker image contains everything needed to run ComfyUI: Python, PyTorch, CUDA libraries, ComfyUI itself, 29 custom nodes, and performance optimizations. It does **not** contain models, workflows, or the live application code — those are loaded dynamically at runtime from the Git repository.
 
 The image is rebuilt only when infrastructure changes (Dockerfile, custom nodes, system libraries). All application logic and data updates happen live.
 
@@ -229,7 +229,7 @@ docker build -t comfyui-studio \
 
 ### Custom Nodes
 
-28 custom nodes are pre-installed in the Docker image, organized in four groups. The full list with descriptions is in [`nodes.txt`](nodes.txt).
+29 custom nodes are pre-installed in the Docker image, organized in four groups. The full list with descriptions is in [`nodes.txt`](nodes.txt).
 
 **Fundamentals / QoL (9)** — ComfyUI-Manager, ComfyUI_essentials, rgthree-comfy, cg-use-everywhere, ComfyLiterals, ComfyUI-Custom-Scripts, ComfyUI-KJNodes, was-node-suite-comfyui, ComfyUI-Easy-Use.
 
@@ -237,7 +237,7 @@ docker build -t comfyui-studio \
 
 **Video Generation (5)** — ComfyUI-VideoHelperSuite, ComfyUI-Frame-Interpolation, ComfyUI-AnimateDiff-Evolved, ComfyUI-WanVideoWrapper, ComfyUI-HunyuanVideoWrapper.
 
-**CivitAI Integration (2)** — civitai_comfy_nodes (official), ComfyUI-EasyCivitai-XTNodes.
+**CivitAI Integration (3)** — civitai_comfy_nodes (official), ComfyUI-EasyCivitai-XTNodes, ComfyUI-Civitai-Toolkit (browser/search/recipes).
 
 Additional nodes can be installed at runtime through the Node Manager or ComfyUI-Manager. Runtime-installed nodes persist across pod restarts. To permanently add a node to the Docker image, add its URL to `nodes.txt` and rebuild.
 
