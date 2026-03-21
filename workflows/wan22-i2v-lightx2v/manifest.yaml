@@ -1,0 +1,113 @@
+id: wan22-i2v-lightx2v
+name: "WAN 2.2 Image to Video (LightX2V)"
+version: 1
+date: "2026-03-21 21:41"
+description: "Image to video with WAN 2.2 14B LightX2V models, dual-pass sampling (high+low noise), 20 steps, Lanczos upscale 1.5x, RIFE 4x frame interpolation to 60fps. Proven workflow from wan22-b200."
+author: "comfyui-studio"
+
+workflow_file: "workflow.json"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    node_id: "218"
+    field: "image"
+    required: true
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    node_id: "243"
+    field: "text"
+    required: true
+    default: ""
+    placeholder: "Describe what happens in the video..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    node_id: "244"
+    field: "text"
+    required: false
+    default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+
+  - id: duration
+    name: "Duration"
+    type: select
+    node_id: "319"
+    field: "value"
+    options:
+      - label: "5 seconds"
+        value: 81
+      - label: "10 seconds"
+        value: 161
+      - label: "15 seconds"
+        value: 241
+      - label: "20 seconds"
+        value: 321
+    default: 81
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    node_id: "304"
+    field: "cfg"
+    min: 1.0
+    max: 10.0
+    step: 0.5
+    default: 3.5
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    node_id: "304"
+    field: "noise_seed"
+    default: -1
+
+  - id: upscale
+    name: "Upscale Factor"
+    type: float
+    node_id: "305"
+    field: "Number"
+    min: 1.0
+    max: 2.5
+    step: 0.5
+    default: 1.5
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+    node_id: "94"
+
+required_models:
+  - "wan2.2_i2v_A14b_high_noise_lightx2v.safetensors"
+  - "wan2.2_i2v_A14b_low_noise_lightx2v.safetensors"
+  - "wan21UMT5XxlFP32_fp32.safetensors"
+  - "Wan2_1_VAE_fp32.safetensors"
+  - "4x_foolhardy_Remacri.pth"
+  - "rife49.pth"
+
+required_nodes:
+  - "LoadImage"
+  - "CLIPTextEncode"
+  - "CLIPLoader"
+  - "UNETLoader"
+  - "ModelSamplingSD3"
+  - "VAELoader"
+  - "VAEDecode"
+  - "WanImageToVideo"
+  - "KSamplerAdvanced"
+  - "ImageScale"
+  - "RIFE VFI"
+  - "VHS_VideoCombine"
+  - "SimpleMath+"
+  - "GetImageSize+"
+  - "ImageFromBatch+"
+  - "ImageListToImageBatch"
+  - "Float"
+  - "PrimitiveInt"
+  - "UpscaleModelLoader"
+  - "Anything Everywhere"
+  - "Prompts Everywhere"
