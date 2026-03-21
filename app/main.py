@@ -886,6 +886,10 @@ async def system_update():
             "updated": updated,
             "restart_needed": restart_needed,
             "message": f"Updated: {', '.join(updated)}" if updated else "Everything up to date",
+            "debug": {
+                "local_version_json": local_ver,
+                "remote_version_json": remote_ver,
+            },
         }
 
         if restart_needed:
