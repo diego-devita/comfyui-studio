@@ -23,7 +23,7 @@
   },
   "22": {
     "inputs": {
-      "model": "WanVideo\\2_2\\Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
+      "model": "WanVideo/2_2/Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
       "base_precision": "fp16_fast",
       "quantization": "fp8_e4m3fn_scaled",
       "load_device": "offload_device",
@@ -87,7 +87,7 @@
   },
   "38": {
     "inputs": {
-      "model_name": "wanvideo\\Wan2_1_VAE_bf16.safetensors",
+      "model_name": "wanvideo/Wan2_1_VAE_bf16.safetensors",
       "precision": "bf16",
       "use_cpu_cache": false,
       "verbose": false
@@ -110,7 +110,7 @@
   },
   "56": {
     "inputs": {
-      "lora": "WanVideo\\Lightx2v\\lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "lora": "WanVideo/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
       "strength": 3,
       "low_mem_load": false,
       "merge_loras": false
@@ -166,7 +166,7 @@
   },
   "71": {
     "inputs": {
-      "model": "WanVideo\\2_2\\Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors",
+      "model": "WanVideo/2_2/Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors",
       "base_precision": "fp16_fast",
       "quantization": "fp8_e4m3fn_scaled",
       "load_device": "offload_device",
@@ -278,7 +278,7 @@
   },
   "97": {
     "inputs": {
-      "lora": "WanVideo\\Lightx2v\\lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "lora": "WanVideo/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
       "strength": 1,
       "low_mem_load": false,
       "merge_loras": false
