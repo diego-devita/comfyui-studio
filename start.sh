@@ -6,12 +6,27 @@ echo "=== ComfyUI Studio — starting ==="
 COMFYUI_IMAGE="/comfyui"
 COMFYUI_VOLUME="/workspace/ComfyUI"
 WORKFLOWS_REPO="${WORKFLOWS_REPO:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows}"
+MODELS_REPO="${MODELS_REPO:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/app/models.json}"
 
-# ── STEP 0: Fetch workflows from repo ────────────────────────────
+# ── STEP 0a: Fetch models catalog from repo ──────────────────────
+# The models.json catalog is NOT baked into the Docker image.
+# It is fetched from the configured repo and stored in /workspace.
+if [ ! -f "/workspace/models.json" ]; then
+    echo "[0a] First boot — fetching models catalog from repo..."
+    if curl -sf "${MODELS_REPO}" -o /workspace/models.json; then
+        echo "      OK — models catalog fetched"
+    else
+        echo "      WARNING: Could not fetch models catalog. Using baked-in default."
+    fi
+else
+    echo "[0a] Models catalog already present — skipping fetch"
+fi
+
+# ── STEP 0b: Fetch workflows from repo ───────────────────────────
 # Workflows are NOT baked into the Docker image. They are fetched
 # from the configured repo on first boot and updated via Sync.
 if [ ! -f "/workspace/workflows/index.json" ]; then
-    echo "[0/3] First boot — fetching workflows from repo..."
+    echo "[0b] First boot — fetching workflows from repo..."
     mkdir -p /workspace/workflows
     if curl -sf "${WORKFLOWS_REPO}/index.json" -o /workspace/workflows/index.json; then
         # Parse index and download each workflow
@@ -26,7 +41,7 @@ if [ ! -f "/workspace/workflows/index.json" ]; then
         echo "      WARNING: Could not fetch workflows from repo. Use Sync in the UI later."
     fi
 else
-    echo "[0/3] Workflows already present — skipping fetch"
+    echo "[0b] Workflows already present — skipping fetch"
 fi
 
 # ── STEP 1: First boot — copy ComfyUI from image to volume ──────

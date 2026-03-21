@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths-ignore:
       - 'workflows/**'
+      - 'app/models.json'
       - '*.md'
   workflow_dispatch:
 

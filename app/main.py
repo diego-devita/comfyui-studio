@@ -48,6 +48,11 @@ WWW_DEFAULT = Path("/app/www")
 
 COMFY_URL = "http://127.0.0.1:8188"
 
+MODELS_REPO = os.environ.get(
+    "MODELS_REPO",
+    "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/app/models.json",
+)
+
 # Paths for workflows
 WORKFLOWS_DIR = Path("/workspace/workflows")
 WORKFLOWS_DIR_DEFAULT = Path("/app/workflows")
@@ -366,6 +371,8 @@ async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
     return JSONResponse({
+        "version": _models_data.get("version", "0.0.0"),
+        "date": _models_data.get("date", ""),
         "stats": {
             "queued_count": queued_count,
             "downloading_count": downloading_count,
@@ -492,6 +499,39 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
     return {"max_concurrent": _max_concurrent}
 
 
+# Sync models catalog from remote repo
+@app.post("/api/admin/models/sync")
+async def sync_models(_=Depends(require_auth)):
+    """Fetch the latest models.json from the configured MODELS_REPO."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(MODELS_REPO)
+            r.raise_for_status()
+            remote = r.json()
+
+        remote_version = remote.get("version", "0.0.0")
+        local_version = _models_data.get("version", "0.0.0")
+
+        if remote_version > local_version:
+            # Write to /workspace so it persists and overrides the baked-in version
+            MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
+            MODELS_JSON.write_text(json.dumps(remote, indent=2, ensure_ascii=False))
+            _reload_models()
+            return {
+                "status": "updated",
+                "old_version": local_version,
+                "new_version": remote_version,
+                "new_date": remote.get("date", ""),
+            }
+        else:
+            return {
+                "status": "up_to_date",
+                "version": local_version,
+            }
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
 # ── Workflow helpers ──────────────────────────────────────────────────────────
 
 
@@ -520,12 +560,17 @@ def _load_workflow_json(workflow_id: str) -> dict:
     return json.loads(p.read_text())
 
 
-def _load_workflows_index() -> list:
-    """Load the workflows index.json."""
+def _load_workflows_index_raw() -> dict:
+    """Load the full workflows index.json including version/date."""
     p = _workflows_path("index.json")
     if not p.exists():
-        return []
-    return json.loads(p.read_text()).get("workflows", [])
+        return {"version": "0.0.0", "date": "", "workflows": []}
+    return json.loads(p.read_text())
+
+
+def _load_workflows_index() -> list:
+    """Load just the workflows list from index.json."""
+    return _load_workflows_index_raw().get("workflows", [])
 
 
 async def _get_installed_nodes() -> set:
@@ -560,7 +605,8 @@ def _check_model_exists(filename: str) -> bool:
 
 @app.get("/api/admin/workflows")
 async def list_workflows(_=Depends(require_auth)):
-    index = _load_workflows_index()
+    index_raw = _load_workflows_index_raw()
+    index = index_raw.get("workflows", [])
     installed_nodes = await _get_installed_nodes()
 
     result = []
@@ -601,7 +647,11 @@ async def list_workflows(_=Depends(require_auth)):
             "ready": ready,
         })
 
-    return {"workflows": result}
+    return {
+        "version": index_raw.get("version", "0.0.0"),
+        "date": index_raw.get("date", ""),
+        "workflows": result,
+    }
 
 
 @app.get("/api/admin/workflows/{workflow_id}")
