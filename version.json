@@ -2,7 +2,7 @@
   "app_version": "3.4.0",
   "date": "2026-03-21 21:58",
   "components": {
-    "backend": {"version": "3.4.0", "date": "2026-03-21 21:58", "file": "app/main.py"},
+    "backend": {"version": "3.4.1", "date": "2026-03-21 21:58", "file": "app/main.py"},
     "frontend": {"version": "3.4.1", "date": "2026-03-21 21:58", "dir": "app/www/"},
     "models": {"version": 1, "date": "2026-03-21 21:41", "file": "app/models.json"},
     "workflows": {"version": 2, "date": "2026-03-21 21:41", "dir": "workflows/"}

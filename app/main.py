@@ -562,7 +562,8 @@ async def models_list():
 
     # Disk usage
     try:
-        usage = shutil.disk_usage(str(MODELS_BASE))
+        disk_path = str(MODELS_BASE) if Path(MODELS_BASE).exists() else "/workspace"
+        usage = shutil.disk_usage(disk_path)
         models_bytes = sum(f.stat().st_size for f in Path(MODELS_BASE).rglob("*") if f.is_file())
         free_bytes = usage.free
     except Exception:
@@ -775,7 +776,8 @@ async def system_status():
 
     # Disk
     try:
-        usage = shutil.disk_usage(str(MODELS_BASE))
+        disk_path = str(MODELS_BASE) if Path(MODELS_BASE).exists() else "/workspace"
+        usage = shutil.disk_usage(disk_path)
         models_bytes = sum(f.stat().st_size for f in Path(MODELS_BASE).rglob("*") if f.is_file())
         free_bytes = usage.free
     except Exception:
