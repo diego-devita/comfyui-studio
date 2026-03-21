@@ -392,18 +392,42 @@
         const err = await resp.json().catch(() => ({}));
         $updateResult.textContent = 'Error: ' + (err.detail || err.error || resp.status);
         $updateResult.style.color = 'var(--error)';
-      } else {
-        const data = await resp.json();
-        if (data.updated && data.updated.length > 0) {
-          $updateResult.textContent = 'Updated: ' + data.updated.join(', ') + (data.restart_needed ? ' (restart needed)' : '');
+        $updateBtn.disabled = false;
+        $updateBtn.textContent = 'Check for Updates';
+        return;
+      }
+
+      const data = await resp.json();
+      if (data.updated && data.updated.length > 0) {
+        if (data.restart_needed) {
+          $updateResult.textContent = 'Updated: ' + data.updated.join(', ') + ' — restarting...';
           $updateResult.style.color = 'var(--success)';
-        } else if (data.message) {
-          $updateResult.textContent = data.message;
-          $updateResult.style.color = 'var(--muted)';
-        } else {
-          $updateResult.textContent = 'Everything is up to date.';
-          $updateResult.style.color = 'var(--muted)';
+          $updateBtn.innerHTML = '<span class="spinner"></span> Restarting...';
+          // Poll until backend is back, then reload
+          const poll = async () => {
+            for (let i = 0; i < 30; i++) {
+              await new Promise(r => setTimeout(r, 2000));
+              try {
+                const check = await apiFetch('/api/admin/system/status');
+                if (check.ok) { location.reload(); return; }
+              } catch (_) {}
+            }
+            $updateResult.textContent = 'Backend did not come back. Try refreshing manually.';
+            $updateResult.style.color = 'var(--error)';
+            $updateBtn.disabled = false;
+            $updateBtn.textContent = 'Check for Updates';
+          };
+          poll();
+          return;
         }
+        $updateResult.textContent = 'Updated: ' + data.updated.join(', ');
+        $updateResult.style.color = 'var(--success)';
+      } else if (data.message) {
+        $updateResult.textContent = data.message;
+        $updateResult.style.color = 'var(--muted)';
+      } else {
+        $updateResult.textContent = 'Everything is up to date.';
+        $updateResult.style.color = 'var(--muted)';
       }
     } catch (e) {
       if (e.message !== 'auth') {

@@ -3,7 +3,7 @@
   "date": "2026-03-21",
   "components": {
     "backend": {"version": "3.1.3", "file": "app/main.py"},
-    "frontend": {"version": "3.1.2", "dir": "app/www/"},
+    "frontend": {"version": "3.1.3", "dir": "app/www/"},
     "models": {"version": "1.1.1", "file": "app/models.json"},
     "workflows": {"version": "1.1.1", "dir": "workflows/"}
   }
