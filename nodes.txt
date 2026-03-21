@@ -1,0 +1,107 @@
+# ============================================================
+# ComfyUI Studio — Custom Nodes
+# ============================================================
+# Format: repo_url [requirements_file] [post_install_command]
+#
+# - If requirements_file is omitted, the installer will look
+#   for requirements.txt in the cloned repo automatically.
+# - If post_install_command is specified, it runs after pip
+#   install (e.g. "python install.py").
+# - Lines starting with # are comments.
+# ============================================================
+
+# ── Fundamentals / QoL ──────────────────────────────────────
+
+# Node/model manager — install/update nodes and models from UI
+https://github.com/ltdrdata/ComfyUI-Manager.git
+
+# Math, resize, batch, image info — universal utilities
+https://github.com/cubiq/ComfyUI_essentials.git
+
+# Seed control, mute/bypass, reroute, context switching
+https://github.com/rgthree/rgthree-comfy.git
+
+# Implicit link routing (Anything Everywhere, Prompts Everywhere)
+https://github.com/chrisgoringe/cg-use-everywhere.git
+
+# Constant nodes (Float, Int, String)
+https://github.com/M1kep/ComfyLiterals.git
+
+# Auto-arrange, enhanced preview, colored notes
+https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
+
+# Mega-utility by Kijai — conditions, merge, batch, widely used in CivitAI workflows
+https://github.com/kijai/ComfyUI-KJNodes.git
+
+# Another mega-suite — text ops, image ops, file ops
+https://github.com/WASasquatch/was-node-suite-comfyui.git
+
+# Simplified all-in-one nodes for quick workflows
+https://github.com/yolain/ComfyUI-Easy-Use.git
+
+# ── Image Generation ────────────────────────────────────────
+
+# ControlNet with scheduling, multi-apply, weight types
+https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet.git
+
+# IP-Adapter — style/face/composition reference from images
+https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+
+# InstantID — face transfer from a single reference
+https://github.com/cubiq/ComfyUI_InstantID.git
+
+# ReActor — face swap (InsightFace) — widely used for face workflows
+https://github.com/Gourieff/ComfyUI-ReActor.git
+
+# Face analysis, landmarks, embeddings — complements ReActor/InstantID
+https://github.com/cubiq/ComfyUI_FaceAnalysis.git
+
+# Detailer (face/hand fix), SAM segmentation, batch ops
+# Requires post-install script
+https://github.com/ltdrdata/ComfyUI-Impact-Pack.git requirements.txt python install.py
+
+# Regional prompting, wildcards, lora stacking — companion to Impact-Pack
+https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
+
+# Tiled upscale — essential for high-resolution output
+https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git
+
+# ControlNet preprocessors (OpenPose, Canny, Depth, etc.)
+https://github.com/Fannovel16/comfyui_controlnet_aux.git
+
+# Transparent background / layer composition
+https://github.com/huchenlei/ComfyUI-layerdiffuse.git
+
+# Background removal (BRIA RMBG-2.0)
+https://github.com/ZHO-ZHO-ZHO/ComfyUI-BRIA_AI-RMBG.git
+
+# ── Video Generation ────────────────────────────────────────
+
+# Load/save video, VHS_VideoCombine — required for any video workflow
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+
+# RIFE frame interpolation — smooth video from low-fps to high-fps
+# Uses requirements-no-cupy.txt (no standard requirements.txt)
+https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git requirements-no-cupy.txt
+
+# AnimateDiff for SD1.5/SDXL video generation
+https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git
+
+# WAN 2.1/2.2 video wrapper — most popular WAN node on CivitAI
+https://github.com/kijai/ComfyUI-WanVideoWrapper.git
+
+# HunyuanVideo wrapper — another major video model
+https://github.com/kijai/ComfyUI-HunyuanVideoWrapper.git
+
+# ── CivitAI Integration ───────────────────────────────────
+
+# Official CivitAI nodes — load models by CivitAI ID directly in workflows,
+# auto-detect resources on image upload. Uses CIVITAI_API_KEY env var.
+https://github.com/civitai/civitai_comfy_nodes.git
+
+# Load models from CivitAI URL with image preview, supports checkpoint/LoRA/stack
+https://github.com/X-T-E-R/ComfyUI-EasyCivitai-XTNodes.git
+
+# Full CivitAI browser inside ComfyUI — search models, view trends, apply recipes
+# Uncomment if you want it baked in; otherwise install via ComfyUI-Manager at runtime
+# https://github.com/BAIKEMARK/ComfyUI-Civitai-Toolkit.git

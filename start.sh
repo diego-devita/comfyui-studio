@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -e
+
+echo "=== ComfyUI Studio — starting ==="
+
+COMFYUI_IMAGE="/comfyui"
+COMFYUI_VOLUME="/workspace/ComfyUI"
+
+# ── STEP 1: First boot — copy ComfyUI from image to volume ──────
+# /workspace is the RunPod persistent Network Volume.
+# On first boot /workspace/ComfyUI does not exist yet.
+if [ ! -d "${COMFYUI_VOLUME}" ]; then
+    echo "[1/3] First boot — copying ComfyUI to /workspace..."
+    cp -r "${COMFYUI_IMAGE}" "${COMFYUI_VOLUME}"
+    echo "      OK — ComfyUI copied to ${COMFYUI_VOLUME}"
+else
+    echo "[1/3] ComfyUI already present in ${COMFYUI_VOLUME} — skipping"
+fi
+
+# ── STEP 2: Start ComfyUI ────────────────────────────────────────
+# Environment variables:
+#   COMFYUI_FLAGS      — vram management (default: --highvram)
+#                        Use --lowvram or --normalvram for smaller GPUs
+#   COMFYUI_EXTRA_ARGS — any additional flags to pass to ComfyUI
+echo "[2/3] Starting ComfyUI on port 8188..."
+cd "${COMFYUI_VOLUME}"
+python main.py \
+    --listen 0.0.0.0 \
+    --port 8188 \
+    --disable-auto-launch \
+    ${COMFYUI_FLAGS:---highvram} \
+    ${COMFYUI_EXTRA_ARGS:-} \
+    > /var/log/comfyui.log 2>&1 &
+
+COMFY_PID=$!
+echo "      ComfyUI PID: ${COMFY_PID}"
+
+# Wait for ComfyUI to be ready (max 120 seconds)
+echo "      Waiting for ComfyUI..."
+for i in $(seq 1 60); do
+    if curl -s http://127.0.0.1:8188/system_stats > /dev/null 2>&1; then
+        echo "      ComfyUI ready after $((i * 2)) seconds."
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        echo "      WARNING: ComfyUI did not respond within 120 seconds."
+        echo "      Check /var/log/comfyui.log for errors."
+    fi
+    sleep 2
+done
+
+# ── STEP 3: Start model management backoffice ─────────────────────
+# Environment variables:
+#   API_KEY        — password for HTTP Basic Auth (default: changeme)
+#   CIVITAI_API_KEY — CivitAI API token for model downloads
+#   HF_TOKEN       — HuggingFace token for model downloads
+echo "[3/3] Starting model manager on port 8000..."
+cd /app
+uvicorn main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    > /var/log/admin.log 2>&1 &
+
+ADMIN_PID=$!
+echo "      Model manager PID: ${ADMIN_PID}"
+
+echo "=== Services started ==="
+echo "    ComfyUI:       https://PODID-8188.proxy.runpod.net"
+echo "    Model Manager: https://PODID-8000.proxy.runpod.net/admin/models"
+
+# Keep the container alive — exit if ComfyUI dies
+wait ${COMFY_PID}

@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Model Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #141420;
+    --border: #2a2a3a;
+    --accent: #e8ff47;
+    --text: #e0e0e8;
+    --muted: #8888a0;
+    --success: #44ff88;
+    --error: #ff4466;
+    --queued: #ffaa44;
+    --mono: 'Space Mono', monospace;
+    --display: 'Syne', sans-serif;
+    --body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --radius-card: 8px;
+    --radius-sm: 4px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 14px;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.35;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 28px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .header-actions { display: flex; gap: 12px; align-items: center; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: var(--accent); color: #0a0a0f; }
+  .btn:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn--danger { border-color: var(--border); color: var(--muted); }
+  .btn--danger:hover:not(:disabled) { border-color: var(--error); background: var(--error); color: #fff; }
+  .btn--sm { padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }
+
+  /* ── Toolbar (tabs + search) ── */
+  .toolbar {
+    padding: 0 40px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-row::-webkit-scrollbar { height: 3px; }
+  .tab-row::-webkit-scrollbar-track { background: transparent; }
+  .tab-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .tab {
+    padding: 14px 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .tab-count { opacity: 0.6; }
+  .tab .tab-missing { color: var(--error); opacity: 0.8; font-size: 10px; }
+
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 40px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-input {
+    flex: 1;
+    max-width: 480px;
+    padding: 10px 16px 10px 38px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 480px;
+  }
+  .search-wrap::before {
+    content: '\1F50D';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .filter-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+  .filter-stats {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ── Main content ── */
+  main { padding: 32px 40px 64px; }
+
+  .category-section { display: none; }
+  .category-section.active { display: block; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .section-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  /* ── Card grid ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+  }
+
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .model-card.status-downloading {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(232, 255, 71, 0.06);
+  }
+  .model-card.status-error {
+    border-color: var(--error);
+    box-shadow: 0 0 20px rgba(255, 68, 102, 0.06);
+  }
+  .model-card.hidden { display: none; }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .card-info { flex: 1; min-width: 0; }
+
+  .card-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 6px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .source-badge.civitai { background: #2a1f3a; color: #c0a0ff; }
+  .source-badge.huggingface { background: #1f2a1f; color: #a0d0a0; }
+  .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
+
+  /* ── Tags ── */
+  .card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    padding: 2px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: 12px;
+    background: #1e1e2e;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Status badge ── */
+  .status-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: flex-start;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-badge.present     { color: var(--success); border-color: var(--success); }
+  .status-badge.missing     { color: var(--muted);   border-color: var(--border);  }
+  .status-badge.queued      { color: var(--queued);  border-color: var(--queued);  animation: pulse 2s ease-in-out infinite; }
+  .status-badge.downloading { color: var(--accent);  border-color: var(--accent);  }
+  .status-badge.error       { color: var(--error);   border-color: var(--error);   }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .progress-wrap.visible { display: flex; }
+
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 2px;
+    transition: width 0.8s linear;
+  }
+  .progress-fill.indeterminate {
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── Error message ── */
+  .card-error {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--error);
+    padding: 8px 12px;
+    background: rgba(255, 68, 102, 0.08);
+    border-radius: var(--radius-sm);
+    word-break: break-word;
+    display: none;
+  }
+  .card-error.visible { display: block; }
+
+  /* ── Card actions ── */
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: auto;
+  }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .spinner.sm { width: 8px; height: 8px; border-width: 1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Login overlay ── */
+  .login-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.95);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-overlay.hidden { display: none; }
+
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 40px;
+    width: 360px;
+    max-width: 90vw;
+  }
+  .login-box h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .login-box p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .login-box label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .login-box input[type="text"],
+  .login-box input[type="password"] {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-bottom: 16px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .login-box input:focus { border-color: var(--accent); }
+  .login-error {
+    color: var(--error);
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--muted);
+  }
+  .empty-state p { font-size: 14px; margin-top: 8px; }
+
+  /* ── Loading state ── */
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 24px;
+    gap: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .loading-state .spinner { border-color: var(--muted); border-top-color: transparent; width: 16px; height: 16px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    header { padding: 20px 20px; }
+    .toolbar { padding: 0 20px; }
+    .filter-row { padding: 12px 20px; flex-wrap: wrap; }
+    main { padding: 20px 20px 48px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .logo { font-size: 18px; }
+    .section-header { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Authentication</h2>
+    <p>Enter credentials to access the model manager.</p>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div>
+    <div class="logo">ComfyUI <span>Studio</span></div>
+    <div class="logo-sub">Model Manager</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn" id="globalDownloadAll">Download All Missing</button>
+  </div>
+</header>
+
+<!-- Tab bar -->
+<nav class="toolbar">
+  <div class="tab-row" id="tabRow"></div>
+</nav>
+
+<!-- Filter / search row -->
+<div class="filter-row">
+  <div class="search-wrap">
+    <input class="search-input" type="text" id="searchInput" placeholder="Filter by name, filename, or tag...">
+  </div>
+  <div class="filter-right">
+    <span class="filter-stats" id="filterStats"></span>
+    <button class="btn btn--sm" id="tabDownloadMissing">Download Missing</button>
+  </div>
+</div>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading models...
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let authHeader = null;
+  let categories = [];
+  let activeTab = null;
+  let pollTimer = null;
+  const cardMap = {};       // filename -> {el, refs}
+  const sectionMap = {};    // categoryId -> section DOM
+
+  // ── DOM refs ──
+  const $loginOverlay = document.getElementById('loginOverlay');
+  const $loginUser    = document.getElementById('loginUser');
+  const $loginPass    = document.getElementById('loginPass');
+  const $loginBtn     = document.getElementById('loginBtn');
+  const $loginError   = document.getElementById('loginError');
+  const $tabRow       = document.getElementById('tabRow');
+  const $searchInput  = document.getElementById('searchInput');
+  const $filterStats  = document.getElementById('filterStats');
+  const $main         = document.getElementById('mainContent');
+  const $loading      = document.getElementById('loadingState');
+  const $globalDlAll  = document.getElementById('globalDownloadAll');
+  const $tabDlMissing = document.getElementById('tabDownloadMissing');
+
+  // ── Utilities ──
+  function fmtBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024)        return bytes + ' B';
+    if (bytes < 1024 ** 2)   return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 ** 3)   return (bytes / 1024 ** 2).toFixed(1) + ' MB';
+    return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+  }
+
+  function fmtSize(gb) {
+    if (!gb) return '—';
+    if (gb < 0.01) return (gb * 1024).toFixed(0) + ' MB';
+    return gb + ' GB';
+  }
+
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function makeAuthHeader(user, pass) {
+    return 'Basic ' + btoa(user + ':' + pass);
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (authHeader) headers['Authorization'] = authHeader;
+    if (opts.body && typeof opts.body === 'object') {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const resp = await fetch(url, { ...opts, headers });
+    if (resp.status === 401) {
+      showLogin();
+      throw new Error('Unauthorized');
+    }
+    return resp;
+  }
+
+  // ── Auth ──
+  function showLogin() {
+    $loginOverlay.classList.remove('hidden');
+    $loginUser.focus();
+    stopPolling();
+  }
+
+  function hideLogin() {
+    $loginOverlay.classList.add('hidden');
+    $loginError.style.display = 'none';
+  }
+
+  async function attemptLogin() {
+    const user = $loginUser.value.trim();
+    const pass = $loginPass.value;
+    if (!user) { $loginUser.focus(); return; }
+
+    $loginBtn.disabled = true;
+    $loginBtn.textContent = 'Signing in...';
+
+    const candidate = makeAuthHeader(user, pass);
+    try {
+      const resp = await fetch('/api/admin/models', {
+        headers: { 'Authorization': candidate }
+      });
+      if (resp.status === 401) {
+        $loginError.style.display = 'block';
+        $loginBtn.disabled = false;
+        $loginBtn.textContent = 'Sign In';
+        $loginPass.focus();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = candidate;
+      hideLogin();
+      const data = await resp.json();
+      handleModelData(data);
+      $loading.style.display = 'none';
+      startPolling();
+    } catch (e) {
+      $loginError.style.display = 'block';
+      $loginError.textContent = 'Connection error: ' + e.message;
+      $loginBtn.disabled = false;
+      $loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  $loginBtn.addEventListener('click', attemptLogin);
+  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await fetch('/api/admin/models');
+      if (resp.status === 401) {
+        showLogin();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      // No auth needed or browser cached it
+      authHeader = null; // rely on browser session
+      hideLogin();
+      const data = await resp.json();
+      handleModelData(data);
+      $loading.style.display = 'none';
+      startPolling();
+    } catch (e) {
+      // Network error or auth required
+      showLogin();
+    }
+  }
+
+  // ── Data handling ──
+  function handleModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+    buildTabs(cats);
+    cats.forEach(buildSection);
+    cats.forEach(cat => {
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+    if (!activeTab && cats.length > 0) {
+      switchTab(cats[0].id);
+    } else if (activeTab) {
+      switchTab(activeTab);
+    }
+    updateFilterStats();
+  }
+
+  function mergeModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+    updateTabCounts(cats);
+    cats.forEach(cat => {
+      // Ensure section exists
+      if (!sectionMap[cat.id]) buildSection(cat);
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+    applyFilter();
+    updateFilterStats();
+  }
+
+  // ── Tabs ──
+  function buildTabs(cats) {
+    $tabRow.innerHTML = '';
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'tab';
+      btn.dataset.tab = cat.id;
+      btn.addEventListener('click', () => switchTab(cat.id));
+      $tabRow.appendChild(btn);
+      updateTabLabel(btn, cat);
+    });
+  }
+
+  function updateTabLabel(btn, cat) {
+    const total = cat.models.length;
+    const missing = cat.models.filter(m => m.status === 'missing').length;
+    let label = escHtml(cat.name) + ' <span class="tab-count">(' + total + ')</span>';
+    if (missing > 0) {
+      label += ' <span class="tab-missing">\u00b7 ' + missing + ' missing</span>';
+    }
+    btn.innerHTML = label;
+  }
+
+  function updateTabCounts(cats) {
+    cats.forEach(cat => {
+      const btn = $tabRow.querySelector(`[data-tab="${cat.id}"]`);
+      if (btn) updateTabLabel(btn, cat);
+    });
+  }
+
+  function switchTab(id) {
+    activeTab = id;
+
+    // Update tab buttons
+    $tabRow.querySelectorAll('.tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === id);
+    });
+
+    // Show/hide sections
+    Object.keys(sectionMap).forEach(sid => {
+      sectionMap[sid].classList.toggle('active', sid === id);
+    });
+
+    applyFilter();
+    updateFilterStats();
+  }
+
+  // ── Sections ──
+  function buildSection(cat) {
+    if (sectionMap[cat.id]) return;
+
+    const section = document.createElement('div');
+    section.className = 'category-section';
+    section.dataset.category = cat.id;
+
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `<h2 class="section-title">${escHtml(cat.name)}</h2>`;
+    section.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+    grid.dataset.grid = cat.id;
+    section.appendChild(grid);
+
+    $main.appendChild(section);
+    sectionMap[cat.id] = section;
+  }
+
+  // ── Cards ──
+  function createCard(catId, m) {
+    const card = document.createElement('div');
+    card.className = 'model-card';
+    card.dataset.file = m.file;
+    card.dataset.category = catId;
+
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name" data-ref="name"></div>
+          <div class="card-meta" data-ref="meta"></div>
+        </div>
+        <div class="status-badge missing" data-ref="badge">MISSING</div>
+      </div>
+      <div class="card-tags" data-ref="tags"></div>
+      <div class="progress-wrap" data-ref="progress">
+        <div class="progress-bar"><div class="progress-fill" data-ref="fill"></div></div>
+        <div class="progress-meta">
+          <span data-ref="pct">&mdash;</span>
+          <span data-ref="pbytes">&mdash;</span>
+        </div>
+      </div>
+      <div class="card-error" data-ref="error"></div>
+      <div class="card-actions">
+        <button class="btn btn--sm" data-ref="actionBtn"></button>
+      </div>
+    `;
+
+    // Cache refs
+    const refs = {};
+    card.querySelectorAll('[data-ref]').forEach(el => {
+      refs[el.dataset.ref] = el;
+    });
+
+    // Set static content
+    refs.name.textContent = m.name;
+
+    const sizeStr = fmtSize(m.size_gb);
+    const sourceClass = (m.source || '').toLowerCase();
+    const sourceName = escHtml(m.source || 'unknown');
+    const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
+    refs.meta.innerHTML = `<span>${escHtml(sizeStr)}</span><span class="source-badge ${badgeClass}">${sourceName}</span>`;
+
+    if (m.tags && m.tags.length > 0) {
+      refs.tags.innerHTML = m.tags.map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('');
+    }
+
+    refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+
+    const grid = document.querySelector(`[data-grid="${catId}"]`);
+    if (grid) grid.appendChild(card);
+
+    const entry = { el: card, refs, model: m, searchText: '' };
+    entry.searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+    cardMap[m.file] = entry;
+    return entry;
+  }
+
+  function updateCard(catId, m) {
+    let entry = cardMap[m.file];
+    if (!entry) {
+      entry = createCard(catId, m);
+    }
+
+    const prev = entry.model;
+    entry.model = m;
+    entry.searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+
+    const { el, refs } = entry;
+    const badge = refs.badge;
+    const progress = refs.progress;
+    const fill = refs.fill;
+    const pct = refs.pct;
+    const pbytes = refs.pbytes;
+    const btn = refs.actionBtn;
+    const errorEl = refs.error;
+
+    // Remove old status class
+    el.className = 'model-card';
+    if (el.classList.contains('hidden')) el.classList.add('hidden');
+
+    badge.className = 'status-badge ' + m.status;
+    el.classList.add('status-' + m.status);
+
+    switch (m.status) {
+      case 'present':
+        badge.textContent = '\u2713 PRESENT';
+        btn.className = 'btn btn--sm btn--danger';
+        btn.disabled = false;
+        btn.innerHTML = '\uD83D\uDDD1 Delete';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'missing':
+        badge.textContent = 'MISSING';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u2193 Download';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'queued':
+        badge.textContent = 'QUEUED';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Queued...';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'downloading':
+        badge.innerHTML = '<span class="spinner sm"></span>DOWNLOADING';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Downloading...';
+        progress.classList.add('visible');
+        errorEl.classList.remove('visible');
+
+        if (m.expected_bytes && m.expected_bytes > 0 && m.progress != null) {
+          fill.classList.remove('indeterminate');
+          fill.style.width = m.progress.toFixed(1) + '%';
+          pct.textContent = m.progress.toFixed(1) + '%';
+        } else {
+          fill.classList.add('indeterminate');
+          fill.style.width = '';
+          pct.textContent = '...';
+        }
+
+        const dlBytes = m.on_disk_bytes || 0;
+        if (m.expected_bytes && m.expected_bytes > 0) {
+          pbytes.textContent = fmtBytes(dlBytes) + ' / ' + fmtBytes(m.expected_bytes);
+        } else {
+          pbytes.textContent = fmtBytes(dlBytes);
+        }
+        break;
+
+      case 'error':
+        badge.textContent = 'ERROR';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u21BB Retry';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        if (m.error) {
+          errorEl.textContent = m.error;
+          errorEl.classList.add('visible');
+        } else {
+          errorEl.classList.remove('visible');
+        }
+        break;
+    }
+  }
+
+  // ── Card actions ──
+  async function handleCardAction(filename) {
+    const entry = cardMap[filename];
+    if (!entry) return;
+    const m = entry.model;
+    const btn = entry.refs.actionBtn;
+
+    if (m.status === 'missing' || m.status === 'error') {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner sm"></span> Starting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Download error: ' + (err.detail || err.error || resp.status));
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        }
+      } catch (e) {
+        if (e.message !== 'Unauthorized') {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        }
+      }
+    } else if (m.status === 'present') {
+      if (!confirm('Delete ' + m.name + ' (' + m.file + ')?')) return;
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(filename), { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Delete error: ' + (err.detail || err.error || resp.status));
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      } catch (e) {
+        if (e.message !== 'Unauthorized') {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      }
+    }
+  }
+
+  // ── Batch downloads ──
+  async function downloadMissing(filenames) {
+    if (!filenames.length) return;
+    try {
+      const resp = await apiFetch('/api/admin/models/download-batch', {
+        method: 'POST',
+        body: { filenames }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert('Batch download error: ' + (err.detail || err.error || resp.status));
+      }
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        alert('Error: ' + e.message);
+      }
+    }
+  }
+
+  $globalDlAll.addEventListener('click', async () => {
+    const filenames = [];
+    categories.forEach(cat => {
+      cat.models.forEach(m => {
+        if (m.status === 'missing') filenames.push(m.file);
+      });
+    });
+    if (!filenames.length) { alert('No missing models to download.'); return; }
+    $globalDlAll.disabled = true;
+    $globalDlAll.textContent = 'Queuing ' + filenames.length + ' downloads...';
+    await downloadMissing(filenames);
+    $globalDlAll.disabled = false;
+    $globalDlAll.textContent = 'Download All Missing';
+  });
+
+  $tabDlMissing.addEventListener('click', async () => {
+    if (!activeTab) return;
+    const cat = categories.find(c => c.id === activeTab);
+    if (!cat) return;
+    const filenames = cat.models.filter(m => m.status === 'missing').map(m => m.file);
+    if (!filenames.length) { alert('No missing models in this category.'); return; }
+    $tabDlMissing.disabled = true;
+    $tabDlMissing.textContent = 'Queuing ' + filenames.length + '...';
+    await downloadMissing(filenames);
+    $tabDlMissing.disabled = false;
+    $tabDlMissing.textContent = 'Download Missing';
+  });
+
+  // ── Search/filter ──
+  $searchInput.addEventListener('input', () => {
+    applyFilter();
+    updateFilterStats();
+  });
+
+  function applyFilter() {
+    const query = $searchInput.value.trim().toLowerCase();
+    Object.values(cardMap).forEach(entry => {
+      const inActiveTab = entry.el.dataset.category === activeTab;
+      const matchesSearch = !query || entry.searchText.includes(query);
+      if (inActiveTab && matchesSearch) {
+        entry.el.classList.remove('hidden');
+      } else if (inActiveTab) {
+        entry.el.classList.add('hidden');
+      }
+    });
+  }
+
+  function updateFilterStats() {
+    if (!activeTab) { $filterStats.textContent = ''; return; }
+    const cat = categories.find(c => c.id === activeTab);
+    if (!cat) return;
+
+    const query = $searchInput.value.trim().toLowerCase();
+    let visible = 0;
+    cat.models.forEach(m => {
+      const entry = cardMap[m.file];
+      if (entry && !entry.el.classList.contains('hidden')) visible++;
+    });
+
+    if (query) {
+      $filterStats.textContent = visible + ' / ' + cat.models.length + ' shown';
+    } else {
+      const present = cat.models.filter(m => m.status === 'present').length;
+      const missing = cat.models.filter(m => m.status === 'missing').length;
+      $filterStats.textContent = present + ' present \u00b7 ' + missing + ' missing';
+    }
+  }
+
+  // ── Polling ──
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollModels, 3000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollModels() {
+    try {
+      const resp = await apiFetch('/api/admin/models');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      mergeModelData(data);
+    } catch (e) {
+      // Auth error already handled by apiFetch
+      if (e.message !== 'Unauthorized') {
+        console.error('Poll error:', e);
+      }
+    }
+  }
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>
