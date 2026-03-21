@@ -59,7 +59,6 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 │  /workspace/workflows/      ← fetched from repo            │
 │  /workspace/version.json    ← tracks component versions    │
 └────────────────────────────────────────────────────────────┘
-└─────────────────────────────────────────────────────────────┘
 ```
 
 **Port 8188** — ComfyUI (direct access to the graph editor, for advanced use)
