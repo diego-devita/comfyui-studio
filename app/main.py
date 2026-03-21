@@ -843,11 +843,15 @@ async def system_update():
 
             if "file" in comp_info:
                 # Single file component (backend, models)
-                file_url = f"{REPO_BASE}/{comp_info['file']}"
+                repo_path = comp_info["file"]
+                file_url = f"{REPO_BASE}/{repo_path}"
+                # Map repo paths to workspace paths where they differ
+                dest_map = {"app/models.json": "models.json"}
+                dest_rel = dest_map.get(repo_path, repo_path)
                 async with httpx.AsyncClient(timeout=30) as dl_client:
                     fr = await dl_client.get(file_url)
                 if fr.status_code == 200:
-                    dest = Path("/workspace") / comp_info["file"]
+                    dest = Path("/workspace") / dest_rel
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(fr.text)
                     updated.append(comp_name)
