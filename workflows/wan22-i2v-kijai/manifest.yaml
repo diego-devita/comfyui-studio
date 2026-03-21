@@ -50,6 +50,7 @@ required_models:
   - "Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors"
   - "Wan2_1_VAE_bf16.safetensors"
   - "umt5-xxl-enc-bf16.safetensors"
+  - "umt5_xxl_fp16.safetensors"
   - "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
 
 required_nodes:
@@ -58,6 +59,7 @@ required_nodes:
   - "WanVideoDecode"
   - "WanVideoVAELoader"
   - "WanVideoTextEncode"
+  - "WanVideoTextEmbedBridge"
   - "WanVideoImageToVideoEncode"
   - "WanVideoSetBlockSwap"
   - "WanVideoBlockSwap"
@@ -67,6 +69,10 @@ required_nodes:
   - "LoadWanVideoT5TextEncoder"
   - "LoadImage"
   - "ImageResizeKJv2"
+  - "GetImageSizeAndCount"
   - "VHS_VideoCombine"
   - "INTConstant"
   - "CreateCFGScheduleFloatList"
+  - "CLIPLoader"
+  - "CLIPTextEncode"
+  - "Note"
