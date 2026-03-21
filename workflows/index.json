@@ -2,7 +2,7 @@
   "version": 2,
   "date": "2026-03-21 21:41",
   "workflows": [
-    {"id": "wan22-i2v-lightx2v", "version": 1, "date": "2026-03-21 21:41"},
+    {"id": "wan22-i2v-lightx2v", "version": 2, "date": "2026-03-21 22:04"},
     {"id": "wan22-i2v-fp8", "version": 1, "date": "2026-03-21 21:41"},
     {"id": "wan22-i2v-kijai", "version": 1, "date": "2026-03-21 21:41"}
   ]
