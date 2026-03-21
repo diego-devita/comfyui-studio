@@ -222,7 +222,6 @@
 <header>
   <div class="logo">ComfyUI <span>Studio</span> <small>Workflow Manager</small></div>
   <div class="header-actions">
-    <button class="btn" id="syncBtn">Sync Workflows</button>
   </div>
 </header>
 
@@ -251,7 +250,6 @@
   const $loading      = document.getElementById('loadingState');
   const $cardGrid     = document.getElementById('cardGrid');
   const $emptyState   = document.getElementById('emptyState');
-  const $syncBtn      = document.getElementById('syncBtn');
 
   // ── Utilities ──
   function escHtml(str) {
@@ -477,27 +475,6 @@
     }
   }
 
-  $syncBtn.addEventListener('click', async () => {
-    $syncBtn.disabled = true;
-    $syncBtn.innerHTML = '<span class="spinner sm"></span> Syncing...';
-    try {
-      const resp = await apiFetch('/api/admin/workflows/sync', { method: 'POST' });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        alert('Sync error: ' + (err.detail || err.error || resp.status));
-      } else {
-        // Refresh data after sync
-        await pollWorkflows();
-      }
-    } catch (e) {
-      if (e.message !== 'auth') {
-        alert('Error: ' + e.message);
-      }
-    } finally {
-      $syncBtn.disabled = false;
-      $syncBtn.textContent = 'Sync Workflows';
-    }
-  });
 
   // ── Polling ──
   function startPolling() {

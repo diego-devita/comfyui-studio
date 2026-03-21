@@ -876,7 +876,28 @@ async def system_update():
                                 (dest / fname).write_text(fres.text)
                     updated.append("frontend")
                 elif comp_name == "workflows":
-                    # Reuse existing workflow sync logic
+                    # Full workflow sync: fetch remote index + download each workflow
+                    wf_base = f"{REPO_BASE}/workflows"
+                    async with httpx.AsyncClient(timeout=30) as dl_client:
+                        idx_r = await dl_client.get(f"{wf_base}/index.json")
+                        if idx_r.status_code == 200:
+                            remote_index = idx_r.json().get("workflows", [])
+                            local_wf_index = {e["id"]: e for e in _load_workflows_index()}
+                            for rwf in remote_index:
+                                wf_id = rwf["id"]
+                                lwf = local_wf_index.get(wf_id)
+                                rwf_v = rwf.get("version", 0)
+                                lwf_v = lwf.get("version", 0) if lwf else None
+                                if not lwf or type(rwf_v) != type(lwf_v) or rwf_v > lwf_v:
+                                    wf_dir = WORKFLOWS_DIR / wf_id
+                                    wf_dir.mkdir(parents=True, exist_ok=True)
+                                    for fname in ["manifest.yaml", "workflow.json"]:
+                                        fr = await dl_client.get(f"{wf_base}/{wf_id}/{fname}")
+                                        if fr.status_code == 200:
+                                            (wf_dir / fname).write_text(fr.text)
+                            # Save remote index locally
+                            WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+                            (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
                     updated.append("workflows")
 
         # Save updated version.json
