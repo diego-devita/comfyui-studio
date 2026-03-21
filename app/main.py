@@ -634,6 +634,8 @@ async def list_workflows(_=Depends(require_auth)):
             "author": manifest.get("author", ""),
             "inputs": manifest.get("inputs", []),
             "outputs": manifest.get("outputs", []),
+            "required_models": required_models,
+            "required_nodes": required_nodes,
             "models_status": {
                 "total": len(required_models),
                 "present": len(required_models) - len(missing_models),

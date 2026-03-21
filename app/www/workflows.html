@@ -397,12 +397,32 @@
     const card = document.createElement('div');
     card.className = 'wf-card';
 
-    const models = wf.models || [];
-    const nodes = wf.nodes || [];
-    const modelsPresent = models.filter(m => m.status === 'present').length;
-    const modelsTotal = models.length;
-    const nodesPresent = nodes.filter(n => n.status === 'present' || n.installed).length;
-    const nodesTotal = nodes.length;
+    // Build model/node arrays from the API's status structure
+    const ms = wf.models_status || {};
+    const ns = wf.nodes_status || {};
+    const modelsPresent = ms.present || 0;
+    const modelsTotal = ms.total || 0;
+    const nodesPresent = ns.installed || 0;
+    const nodesTotal = ns.total || 0;
+
+    // Build detail arrays: all required models with present/missing status
+    const missingModels = new Set(ms.missing || []);
+    const allRequiredModels = (wf.required_models || []).length > 0
+      ? wf.required_models
+      : [...(ms.missing || [])];
+    const models = allRequiredModels.map(f => ({
+      name: f,
+      status: missingModels.has(f) ? 'missing' : 'present'
+    }));
+
+    const missingNodes = new Set(ns.missing || []);
+    const allRequiredNodes = (wf.required_nodes || []).length > 0
+      ? wf.required_nodes
+      : [...(ns.missing || [])];
+    const nodes = allRequiredNodes.map(n => ({
+      name: n,
+      installed: !missingNodes.has(n)
+    }));
 
     const allModelsOk = modelsPresent === modelsTotal;
     const allNodesOk = nodesPresent === nodesTotal;
