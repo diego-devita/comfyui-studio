@@ -10,6 +10,12 @@ START="$1"
 END="$2"
 PYTORCH_INDEX="${3:-cu128}"
 
+# Kill any broken cmake pip wrapper that shadows /usr/bin/cmake.
+# pip packages (e.g. was-node-suite) install a cmake Python wrapper
+# in /opt/venv/bin/cmake that often breaks. dlib and others need
+# the real system cmake at /usr/bin/cmake.
+rm -f /opt/venv/bin/cmake /opt/venv/bin/cmake3 2>/dev/null || true
+
 IN_SECTION=false
 
 while IFS= read -r line; do
