@@ -808,11 +808,12 @@ async def system_update():
 
         for comp_name, comp_info in remote_ver.get("components", {}).items():
             local_comp = local_ver.get("components", {}).get(comp_name, {})
-            default_v = 0 if isinstance(comp_info.get("version"), int) else "0.0.0"
-            remote_v = comp_info.get("version", default_v)
-            local_v = local_comp.get("version", default_v)
-
-            if remote_v <= local_v:
+            remote_v = comp_info.get("version", 0)
+            local_v = local_comp.get("version", 0)
+            # Normalize: if types differ (schema migration), force update
+            if type(remote_v) != type(local_v):
+                pass  # proceed to update
+            elif remote_v <= local_v:
                 continue
 
             if "file" in comp_info:
