@@ -401,6 +401,11 @@
         <div class="progress-pct" id="progressPct"></div>
         <div class="progress-pct" id="progressElapsed" style="color:var(--muted);"></div>
       </div>
+      <div id="progressJobId" style="display:none;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted);display:none;">
+        <span style="opacity:0.6;">Job:</span>
+        <code id="jobIdText" style="user-select:all;margin:0 6px;"></code>
+        <span id="jobIdCopy" style="cursor:pointer;opacity:0.5;transition:opacity 0.15s;" title="Copy">&#128203;</span>
+      </div>
     </div>
 
     <!-- Result -->
@@ -837,8 +842,9 @@
         }
       }
 
-      $progressStep.textContent = 'Queued \u00b7 ' + currentPromptId.slice(0, 12) + '...';
+      $progressStep.textContent = 'Queued...';
       $progressFill.classList.add('indeterminate');
+      showJobId(currentPromptId);
       startStatusPolling();
 
     } catch (e) {
@@ -883,8 +889,7 @@
         if (totalSteps > 0) {
           label = node + ' \u00b7 step ' + step + '/' + totalSteps;
         }
-        var jobHint = currentPromptId ? ' \u00b7 ' + currentPromptId.slice(0, 8) : '';
-        $progressStep.textContent = label + jobHint;
+        $progressStep.textContent = label;
 
         // Always use the overall percent from backend
         $progressFill.classList.remove('indeterminate');
@@ -1000,7 +1005,7 @@
     if (data.totalTime) {
       const timeInfo = document.createElement('div');
       timeInfo.style.cssText = 'color:var(--muted);font-size:13px;margin-top:8px;';
-      timeInfo.textContent = 'Completed in ' + data.totalTime;
+      timeInfo.textContent = 'Completed in ' + data.totalTime + (currentPromptId ? ' \u00b7 ' + currentPromptId : '');
       $resultPanel.appendChild(timeInfo);
     }
 
@@ -1016,6 +1021,21 @@
   function showExecError(msg) {
     $execError.textContent = msg;
     $execError.classList.add('visible');
+  }
+
+  function showJobId(id) {
+    var el = document.getElementById('progressJobId');
+    var txt = document.getElementById('jobIdText');
+    var btn = document.getElementById('jobIdCopy');
+    if (!el || !id) return;
+    txt.textContent = id;
+    el.style.display = '';
+    btn.onclick = function() {
+      navigator.clipboard.writeText(id).then(function() {
+        btn.style.opacity = '1';
+        setTimeout(function() { btn.style.opacity = '0.5'; }, 1000);
+      });
+    };
   }
 
   // ── Telemetry ──
