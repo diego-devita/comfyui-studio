@@ -30,9 +30,17 @@ while IFS= read -r line; do
   echo "$trimmed" | grep -q "^#" && continue
 
   # Parse: repo [req_file] [post_cmd]
+  # Count fields to avoid cut returning the whole line when <3 fields
+  num_fields=$(echo "$trimmed" | awk '{print NF}')
   repo=$(echo "$trimmed" | awk '{print $1}')
-  req_file=$(echo "$trimmed" | awk '{print $2}')
-  post_cmd=$(echo "$trimmed" | cut -d' ' -f3-)
+  req_file=""
+  post_cmd=""
+  if [ "$num_fields" -ge 2 ]; then
+    req_file=$(echo "$trimmed" | awk '{print $2}')
+  fi
+  if [ "$num_fields" -ge 3 ]; then
+    post_cmd=$(echo "$trimmed" | cut -d' ' -f3-)
+  fi
   name=$(basename "$repo" .git)
 
   echo ""
