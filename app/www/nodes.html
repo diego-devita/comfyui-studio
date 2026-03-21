@@ -393,7 +393,7 @@
     for (const pkg of packages) {
       const nodes = pkg.nodes || [];
       const matchingNodes = nodes.filter(n => {
-        const name = (n.name || n.class_name || '').toLowerCase();
+        const name = (typeof n === 'string' ? n : (n.name || n.class_name || '')).toLowerCase();
         return name.includes(searchQuery);
       });
       const pkgNameMatch = (pkg.name || '').toLowerCase().includes(searchQuery);
@@ -448,9 +448,9 @@
   }
 
   function buildNodePills(nodes, matchingNodes) {
-    const matchSet = matchingNodes ? new Set(matchingNodes.map(n => n.name || n.class_name)) : null;
+    const matchSet = matchingNodes ? new Set(matchingNodes.map(n => typeof n === 'string' ? n : (n.name || n.class_name))) : null;
     return nodes.map(n => {
-      const name = n.name || n.class_name || 'unknown';
+      const name = typeof n === 'string' ? n : (n.name || n.class_name || 'unknown');
       const isMatch = matchSet && matchSet.has(name);
       const cls = isMatch ? 'node-pill search-match' : 'node-pill';
       return '<span class="' + cls + '">' + escHtml(name) + '</span>';
