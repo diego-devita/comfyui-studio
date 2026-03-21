@@ -788,10 +788,12 @@ async def system_status():
         "components": {
             "backend": {
                 "version": ver.get("components", {}).get("backend", {}).get("version", "0.0.0"),
+                "date": ver.get("components", {}).get("backend", {}).get("date", ""),
                 "status": "running",
             },
             "frontend": {
                 "version": ver.get("components", {}).get("frontend", {}).get("version", "0.0.0"),
+                "date": ver.get("components", {}).get("frontend", {}).get("date", ""),
                 "status": "loaded",
             },
             "models": {
