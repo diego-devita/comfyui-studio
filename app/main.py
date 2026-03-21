@@ -178,9 +178,14 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
         meta = ndata.get("_meta", {})
         node_titles[nid] = meta.get("title", ndata.get("class_type", nid))
 
+    total_nodes = len(workflow)
+    nodes_done = 0
+
     _exec_progress[prompt_id] = {
-        "status": "queued", "node": "", "node_title": "",
+        "status": "queued", "node_title": "",
         "step": 0, "total_steps": 0,
+        "nodes_done": 0, "total_nodes": total_nodes,
+        "percent": 0,
     }
 
     comfy_ws = COMFY_URL.replace("http://", "ws://").replace("https://", "wss://")
@@ -190,7 +195,6 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
         from websockets.sync.client import connect as ws_connect
         ws = ws_connect(ws_url)
     except ImportError:
-        # Fallback: poll-only mode, no live progress
         return
     except Exception:
         return
@@ -219,15 +223,28 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict):
                 node = data.get("node")
                 if node is None:
                     state["status"] = "completed"
+                    state["percent"] = 100
                     _exec_progress[prompt_id] = state
                     break
-                state["node"] = node
+                nodes_done += 1
                 state["node_title"] = node_titles.get(node, node)
+                state["nodes_done"] = nodes_done
                 state["status"] = "running"
+                # Reset sub-step progress for new node
+                state["step"] = 0
+                state["total_steps"] = 0
+                # Base percent from nodes done (nodes_done-1 because current is in progress)
+                state["percent"] = round((nodes_done - 1) / total_nodes * 100)
 
             elif msg_type == "progress":
-                state["step"] = data.get("value", 0)
-                state["total_steps"] = data.get("max", 0)
+                step = data.get("value", 0)
+                total = data.get("max", 0)
+                state["step"] = step
+                state["total_steps"] = total
+                # Percent = completed nodes + fraction of current node
+                base = (nodes_done - 1) / total_nodes * 100
+                node_fraction = (step / total * (100 / total_nodes)) if total > 0 else 0
+                state["percent"] = round(base + node_fraction)
 
             elif msg_type == "execution_error":
                 state["status"] = "error"
@@ -1409,10 +1426,12 @@ async def run_status(prompt_id: str):
         if ws_state:
             return {
                 "status": ws_state.get("status", "running"),
-                "node": ws_state.get("node", ""),
                 "node_title": ws_state.get("node_title", ""),
                 "step": ws_state.get("step", 0),
                 "total_steps": ws_state.get("total_steps", 0),
+                "percent": ws_state.get("percent", 0),
+                "nodes_done": ws_state.get("nodes_done", 0),
+                "total_nodes": ws_state.get("total_nodes", 0),
             }
 
         # Fallback: check ComfyUI queue

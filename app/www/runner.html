@@ -853,21 +853,22 @@
       const status = data.status || 'unknown';
 
       if (status === 'running' || status === 'executing') {
-        const node = data.node_title || data.current_node || data.node || '';
-        const step = data.step || data.current_step || 0;
-        const totalSteps = data.total_steps || data.max_steps || 0;
-        const pct = totalSteps > 0 ? Math.round((step / totalSteps) * 100) : 0;
+        const node = data.node_title || '';
+        const pct = data.percent || 0;
+        const step = data.step || 0;
+        const totalSteps = data.total_steps || 0;
 
+        // Build status text
+        var label = node || 'Processing...';
         if (totalSteps > 0) {
-          $progressStep.textContent = 'Step ' + step + '/' + totalSteps + (node ? ' \u00b7 ' + node : '');
-          $progressFill.classList.remove('indeterminate');
-          $progressFill.style.width = pct + '%';
-          $progressPct.textContent = pct + '%';
-        } else if (node) {
-          $progressStep.textContent = 'Processing \u00b7 ' + node;
-          $progressFill.classList.add('indeterminate');
-          $progressPct.textContent = '';
+          label = node + ' \u00b7 step ' + step + '/' + totalSteps;
         }
+        $progressStep.textContent = label;
+
+        // Always use the overall percent from backend
+        $progressFill.classList.remove('indeterminate');
+        $progressFill.style.width = pct + '%';
+        $progressPct.textContent = pct + '%';
 
       } else if (status === 'completed' || status === 'done' || status === 'success') {
         stopPolling();
