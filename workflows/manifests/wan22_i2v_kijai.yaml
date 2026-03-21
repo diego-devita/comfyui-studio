@@ -1,0 +1,72 @@
+id: wan22-i2v-kijai
+name: "WAN 2.2 Image to Video (Kijai Wrapper)"
+version: "1.0.0"
+date: "2026-03-21"
+description: "Image to video using Kijai's WanVideoWrapper nodes with FP8 models, SageAttention, torch compile, block swap for VRAM management, LightX2V LoRA, dual-pass sampling, CFG scheduling."
+author: "comfyui-studio (based on Kijai's example workflow)"
+
+workflow_file: "wan22_i2v_kijai.json"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    node_id: "67"
+    field: "image"
+    required: true
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    node_id: "16"
+    field: "positive_prompt"
+    required: true
+    default: ""
+    placeholder: "Describe what happens in the video..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    node_id: "16"
+    field: "negative_prompt"
+    required: false
+    default: ""
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    node_id: "27"
+    field: "seed"
+    default: -1
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+    node_id: "60"
+
+required_models:
+  - "Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors"
+  - "Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors"
+  - "Wan2_1_VAE_bf16.safetensors"
+  - "umt5-xxl-enc-bf16.safetensors"
+  - "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
+
+required_nodes:
+  - "WanVideoModelLoader"
+  - "WanVideoSampler"
+  - "WanVideoDecode"
+  - "WanVideoVAELoader"
+  - "WanVideoTextEncode"
+  - "WanVideoImageToVideoEncode"
+  - "WanVideoSetBlockSwap"
+  - "WanVideoBlockSwap"
+  - "WanVideoSetLoRAs"
+  - "WanVideoLoraSelect"
+  - "WanVideoTorchCompileSettings"
+  - "LoadWanVideoT5TextEncoder"
+  - "LoadImage"
+  - "ImageResizeKJv2"
+  - "VHS_VideoCombine"
+  - "INTConstant"
+  - "CreateCFGScheduleFloatList"

@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Run Workflow</title>
+<link rel="stylesheet" href="/static/shared.css">
+<style>
+  /* ── Layout ── */
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 40px 64px;
+  }
+
+  /* ── Back link ── */
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    margin-bottom: 24px;
+    transition: color 0.15s;
+  }
+  .back-link:hover { color: var(--text); }
+
+  /* ── Workflow header ── */
+  .wf-header {
+    margin-bottom: 28px;
+  }
+  .wf-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .wf-title {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 24px;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+  .wf-version {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+  .wf-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── Form Panel ── */
+  .form-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .form-label .form-hint {
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #6666780;
+    margin-left: 8px;
+  }
+
+  .form-input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--muted); }
+
+  textarea.form-input {
+    resize: vertical;
+    min-height: 72px;
+    line-height: 1.5;
+  }
+
+  select.form-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  select.form-input option {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  /* ── Range Slider ── */
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .range-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  .range-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .range-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .range-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    min-width: 48px;
+    text-align: right;
+  }
+
+  /* ── Seed Row ── */
+  .seed-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .seed-row .form-input { flex: 1; }
+
+  /* ── Dropzone ── */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-card);
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .dropzone:hover,
+  .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(232, 255, 71, 0.03);
+  }
+  .dropzone-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .dropzone-preview {
+    display: none;
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: var(--radius-sm);
+    margin-top: 12px;
+  }
+  .dropzone-preview.visible { display: block; margin: 12px auto 0; }
+  .dropzone-filename {
+    display: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 8px;
+  }
+  .dropzone-filename.visible { display: block; }
+
+  /* ── Generate Button ── */
+  .generate-row {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .btn-generate {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 36px;
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+  }
+  .btn-generate:hover:not(:disabled) { background: var(--accent); color: #0a0a0f; }
+  .btn-generate:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  /* ── Progress Panel ── */
+  .progress-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .progress-panel.visible { display: block; }
+
+  .progress-step {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .progress-bar-wrap {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .progress-bar-fill.indeterminate {
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .progress-pct {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── Result Panel ── */
+  .result-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .result-panel.visible { display: block; }
+
+  .result-media {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+  }
+  video.result-media {
+    width: 100%;
+    max-height: 480px;
+    background: #000;
+  }
+  img.result-media {
+    max-height: 480px;
+  }
+
+  .result-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+  .result-actions a.btn {
+    text-decoration: none;
+  }
+
+  /* ── Error display ── */
+  .exec-error {
+    display: none;
+    background: rgba(255, 68, 102, 0.08);
+    border: 1px solid var(--error);
+    border-radius: var(--radius-card);
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--error);
+    word-break: break-word;
+  }
+  .exec-error.visible { display: block; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    main { padding: 20px 20px 48px; }
+    .form-panel { padding: 20px; }
+    .wf-title { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Authentication</h2>
+    <p>Enter credentials to run this workflow.</p>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/" class="nav-link">Models</a>
+  <a href="/workflows" class="nav-link">Workflows</a>
+  <a href="/nodes" class="nav-link">Nodes</a>
+</nav>
+
+<!-- Main content -->
+<main id="mainContent">
+  <a href="/workflows" class="back-link">&#9664; Back to Workflows</a>
+
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading workflow...
+  </div>
+
+  <div id="runnerContent" style="display:none;">
+    <!-- Workflow header -->
+    <div class="wf-header">
+      <div class="wf-title-row">
+        <h1 class="wf-title" id="wfTitle"></h1>
+        <span class="wf-version" id="wfVersion" style="display:none;"></span>
+      </div>
+      <p class="wf-desc" id="wfDesc"></p>
+    </div>
+
+    <!-- Dynamic form -->
+    <div class="form-panel" id="formPanel"></div>
+
+    <!-- Generate -->
+    <div class="generate-row">
+      <button class="btn-generate" id="generateBtn" disabled>&#9654; Generate</button>
+    </div>
+
+    <!-- Execution error -->
+    <div class="exec-error" id="execError"></div>
+
+    <!-- Progress -->
+    <div class="progress-panel" id="progressPanel">
+      <div class="progress-step" id="progressStep">Preparing...</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-pct" id="progressPct"></div>
+    </div>
+
+    <!-- Result -->
+    <div class="result-panel" id="resultPanel"></div>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Extract workflow ID from URL ──
+  // Expected URL pattern: /run/{id}
+  const pathParts = window.location.pathname.split('/');
+  const runIdx = pathParts.indexOf('run');
+  const workflowId = runIdx >= 0 && pathParts.length > runIdx + 1
+    ? decodeURIComponent(pathParts[runIdx + 1])
+    : null;
+
+  if (!workflowId) {
+    document.getElementById('loadingState').innerHTML =
+      '<span style="color:var(--error)">Invalid URL: no workflow ID found.</span>';
+    return;
+  }
+
+  // ── State ──
+  let authHeader = null;
+  let manifest = null;
+  let pollTimer = null;
+  let currentPromptId = null;
+  const inputFiles = {};
+
+  // ── DOM refs ──
+  const $loginOverlay = document.getElementById('loginOverlay');
+  const $loginUser    = document.getElementById('loginUser');
+  const $loginPass    = document.getElementById('loginPass');
+  const $loginBtn     = document.getElementById('loginBtn');
+  const $loginError   = document.getElementById('loginError');
+  const $loading      = document.getElementById('loadingState');
+  const $content      = document.getElementById('runnerContent');
+  const $wfTitle      = document.getElementById('wfTitle');
+  const $wfVersion    = document.getElementById('wfVersion');
+  const $wfDesc       = document.getElementById('wfDesc');
+  const $formPanel    = document.getElementById('formPanel');
+  const $generateBtn  = document.getElementById('generateBtn');
+  const $execError    = document.getElementById('execError');
+  const $progressPanel = document.getElementById('progressPanel');
+  const $progressStep = document.getElementById('progressStep');
+  const $progressFill = document.getElementById('progressFill');
+  const $progressPct  = document.getElementById('progressPct');
+  const $resultPanel  = document.getElementById('resultPanel');
+
+  // ── Utilities ──
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function makeAuthHeader(user, pass) {
+    return 'Basic ' + btoa(user + ':' + pass);
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (authHeader) headers['Authorization'] = authHeader;
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const resp = await fetch(url, { ...opts, headers });
+    if (resp.status === 401) {
+      showLogin();
+      throw new Error('Unauthorized');
+    }
+    return resp;
+  }
+
+  // ── Auth ──
+  function showLogin() {
+    $loginOverlay.classList.remove('hidden');
+    $loginUser.focus();
+    stopPolling();
+  }
+
+  function hideLogin() {
+    $loginOverlay.classList.add('hidden');
+    $loginError.style.display = 'none';
+  }
+
+  async function attemptLogin() {
+    const user = $loginUser.value.trim();
+    const pass = $loginPass.value;
+    if (!user) { $loginUser.focus(); return; }
+
+    $loginBtn.disabled = true;
+    $loginBtn.textContent = 'Signing in...';
+
+    const candidate = makeAuthHeader(user, pass);
+    try {
+      const resp = await fetch('/api/run/' + encodeURIComponent(workflowId), {
+        headers: { 'Authorization': candidate }
+      });
+      if (resp.status === 401) {
+        $loginError.style.display = 'block';
+        $loginBtn.disabled = false;
+        $loginBtn.textContent = 'Sign In';
+        $loginPass.focus();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = candidate;
+      hideLogin();
+      const data = await resp.json();
+      handleManifest(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      $loginError.style.display = 'block';
+      $loginError.textContent = 'Connection error: ' + e.message;
+      $loginBtn.disabled = false;
+      $loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  $loginBtn.addEventListener('click', attemptLogin);
+  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await fetch('/api/run/' + encodeURIComponent(workflowId));
+      if (resp.status === 401) {
+        showLogin();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = null;
+      hideLogin();
+      const data = await resp.json();
+      handleManifest(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      showLogin();
+    }
+  }
+
+  // ── Manifest / Form building ──
+  function handleManifest(data) {
+    manifest = data;
+    document.title = 'ComfyUI Studio \u2014 ' + (manifest.name || workflowId);
+
+    $wfTitle.textContent = manifest.name || workflowId;
+    if (manifest.version) {
+      $wfVersion.textContent = manifest.version;
+      $wfVersion.style.display = '';
+    }
+    $wfDesc.textContent = manifest.description || '';
+
+    buildForm(manifest.inputs || []);
+    $content.style.display = '';
+    $generateBtn.disabled = false;
+  }
+
+  function buildForm(inputs) {
+    $formPanel.innerHTML = '';
+
+    if (inputs.length === 0) {
+      $formPanel.innerHTML = '<p style="color:var(--muted);font-size:13px;">This workflow has no configurable inputs.</p>';
+      return;
+    }
+
+    inputs.forEach(input => {
+      const group = document.createElement('div');
+      group.className = 'form-group';
+
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.textContent = input.label || input.name || input.id;
+      if (input.description) {
+        const hint = document.createElement('span');
+        hint.className = 'form-hint';
+        hint.textContent = input.description;
+        label.appendChild(hint);
+      }
+      group.appendChild(label);
+
+      const type = (input.type || 'text').toLowerCase();
+      const inputId = input.id || input.name || ('input_' + Math.random().toString(36).slice(2, 8));
+
+      switch (type) {
+        case 'image':
+        case 'video':
+        case 'file':
+          group.appendChild(buildDropzone(inputId, type));
+          break;
+
+        case 'text':
+        case 'string':
+          group.appendChild(buildTextarea(inputId, input));
+          break;
+
+        case 'float':
+        case 'number':
+          group.appendChild(buildRangeSlider(inputId, input));
+          break;
+
+        case 'int':
+        case 'integer':
+          group.appendChild(buildNumberInput(inputId, input));
+          break;
+
+        case 'select':
+        case 'dropdown':
+        case 'enum':
+          group.appendChild(buildSelect(inputId, input));
+          break;
+
+        case 'seed':
+          group.appendChild(buildSeedInput(inputId, input));
+          break;
+
+        case 'boolean':
+        case 'bool':
+          group.appendChild(buildSelect(inputId, {
+            ...input,
+            options: [{ value: 'true', label: 'True' }, { value: 'false', label: 'False' }]
+          }));
+          break;
+
+        default:
+          group.appendChild(buildTextInput(inputId, input));
+      }
+
+      $formPanel.appendChild(group);
+    });
+  }
+
+  function buildDropzone(inputId, acceptType) {
+    const zone = document.createElement('div');
+    zone.className = 'dropzone';
+    zone.innerHTML =
+      '<div class="dropzone-text">Drop ' + acceptType + ' here or click to browse</div>' +
+      '<button class="btn btn--sm" style="pointer-events:none;">Browse</button>' +
+      '<input type="file" data-input-id="' + escHtml(inputId) + '" accept="' + getAccept(acceptType) + '">' +
+      '<img class="dropzone-preview" alt="Preview">' +
+      '<div class="dropzone-filename"></div>';
+
+    const fileInput = zone.querySelector('input[type="file"]');
+    const preview = zone.querySelector('.dropzone-preview');
+    const filenameEl = zone.querySelector('.dropzone-filename');
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        handleFile(fileInput.files[0], inputId, preview, filenameEl, zone);
+      }
+    });
+
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('dragover');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0], inputId, preview, filenameEl, zone);
+        fileInput.files = e.dataTransfer.files;
+      }
+    });
+
+    return zone;
+  }
+
+  function handleFile(file, inputId, preview, filenameEl, zone) {
+    inputFiles[inputId] = file;
+    filenameEl.textContent = file.name;
+    filenameEl.classList.add('visible');
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.classList.add('visible');
+      };
+      reader.readAsDataURL(file);
+    } else {
+      preview.classList.remove('visible');
+    }
+  }
+
+  function getAccept(type) {
+    if (type === 'image') return 'image/*';
+    if (type === 'video') return 'video/*';
+    return '*/*';
+  }
+
+  function buildTextarea(inputId, input) {
+    const el = document.createElement('textarea');
+    el.className = 'form-input';
+    el.dataset.inputId = inputId;
+    el.rows = 3;
+    el.placeholder = input.placeholder || '';
+    if (input.default != null) el.value = String(input.default);
+    return el;
+  }
+
+  function buildTextInput(inputId, input) {
+    const el = document.createElement('input');
+    el.type = 'text';
+    el.className = 'form-input';
+    el.dataset.inputId = inputId;
+    el.placeholder = input.placeholder || '';
+    if (input.default != null) el.value = String(input.default);
+    return el;
+  }
+
+  function buildRangeSlider(inputId, input) {
+    const wrap = document.createElement('div');
+    wrap.className = 'range-row';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.dataset.inputId = inputId;
+    slider.min = input.min != null ? input.min : 0;
+    slider.max = input.max != null ? input.max : 10;
+    slider.step = input.step != null ? input.step : 0.1;
+    slider.value = input.default != null ? input.default : ((parseFloat(slider.min) + parseFloat(slider.max)) / 2);
+
+    const display = document.createElement('span');
+    display.className = 'range-value';
+    display.textContent = slider.value;
+
+    slider.addEventListener('input', () => {
+      display.textContent = parseFloat(slider.value).toFixed(
+        String(slider.step).includes('.') ? String(slider.step).split('.')[1].length : 0
+      );
+    });
+
+    wrap.appendChild(slider);
+    wrap.appendChild(display);
+    return wrap;
+  }
+
+  function buildNumberInput(inputId, input) {
+    const el = document.createElement('input');
+    el.type = 'number';
+    el.className = 'form-input';
+    el.dataset.inputId = inputId;
+    if (input.min != null) el.min = input.min;
+    if (input.max != null) el.max = input.max;
+    if (input.step != null) el.step = input.step;
+    if (input.default != null) el.value = input.default;
+    return el;
+  }
+
+  function buildSelect(inputId, input) {
+    const el = document.createElement('select');
+    el.className = 'form-input';
+    el.dataset.inputId = inputId;
+
+    const options = input.options || [];
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      if (typeof opt === 'object') {
+        o.value = opt.value != null ? opt.value : opt.label;
+        o.textContent = opt.label || opt.value;
+      } else {
+        o.value = opt;
+        o.textContent = opt;
+      }
+      if (input.default != null && String(o.value) === String(input.default)) o.selected = true;
+      el.appendChild(o);
+    });
+
+    return el;
+  }
+
+  function buildSeedInput(inputId, input) {
+    const row = document.createElement('div');
+    row.className = 'seed-row';
+
+    const el = document.createElement('input');
+    el.type = 'number';
+    el.className = 'form-input';
+    el.dataset.inputId = inputId;
+    el.min = 0;
+    el.max = Number.MAX_SAFE_INTEGER;
+    el.value = input.default != null ? input.default : Math.floor(Math.random() * 2147483647);
+
+    const randBtn = document.createElement('button');
+    randBtn.className = 'btn btn--sm';
+    randBtn.type = 'button';
+    randBtn.textContent = 'Random';
+    randBtn.addEventListener('click', () => {
+      el.value = Math.floor(Math.random() * 2147483647);
+    });
+
+    row.appendChild(el);
+    row.appendChild(randBtn);
+    return row;
+  }
+
+  // ── Generate ──
+  $generateBtn.addEventListener('click', executeWorkflow);
+
+  async function executeWorkflow() {
+    $generateBtn.disabled = true;
+    $generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
+    $execError.classList.remove('visible');
+    $resultPanel.classList.remove('visible');
+    $progressPanel.classList.add('visible');
+    $progressStep.textContent = 'Submitting...';
+    $progressFill.style.width = '0%';
+    $progressFill.classList.remove('indeterminate');
+    $progressPct.textContent = '';
+
+    try {
+      const formData = new FormData();
+
+      // Gather all non-file inputs into a params object
+      const params = {};
+      $formPanel.querySelectorAll('[data-input-id]').forEach(el => {
+        const id = el.dataset.inputId;
+        if (el.type === 'file') return; // handled separately
+        if (el.type === 'range') {
+          params[id] = parseFloat(el.value);
+        } else if (el.type === 'number') {
+          params[id] = el.value ? Number(el.value) : null;
+        } else {
+          params[id] = el.value;
+        }
+      });
+
+      formData.append('params', JSON.stringify(params));
+
+      // Append file inputs
+      for (const [id, file] of Object.entries(inputFiles)) {
+        formData.append(id, file);
+      }
+
+      const resp = await apiFetch('/api/run/' + encodeURIComponent(workflowId) + '/execute', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || 'Execution failed (HTTP ' + resp.status + ')');
+      }
+
+      const result = await resp.json();
+      currentPromptId = result.prompt_id || result.id;
+
+      if (!currentPromptId) {
+        throw new Error('No prompt_id returned from server.');
+      }
+
+      $progressStep.textContent = 'Queued...';
+      $progressFill.classList.add('indeterminate');
+      startStatusPolling();
+
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        showExecError(e.message);
+      }
+      $progressPanel.classList.remove('visible');
+      $generateBtn.disabled = false;
+      $generateBtn.innerHTML = '&#9654; Generate';
+    }
+  }
+
+  // ── Status Polling ──
+  function startStatusPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollStatus, 2000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollStatus() {
+    if (!currentPromptId) { stopPolling(); return; }
+
+    try {
+      const resp = await apiFetch('/api/run/status/' + encodeURIComponent(currentPromptId));
+      if (!resp.ok) return;
+
+      const data = await resp.json();
+      const status = data.status || 'unknown';
+
+      if (status === 'running' || status === 'executing') {
+        const node = data.current_node || data.node || '';
+        const step = data.step || data.current_step || 0;
+        const totalSteps = data.total_steps || data.max_steps || 0;
+        const pct = totalSteps > 0 ? Math.round((step / totalSteps) * 100) : 0;
+
+        if (totalSteps > 0) {
+          $progressStep.textContent = 'Step ' + step + '/' + totalSteps + (node ? ' \u00b7 ' + node : '');
+          $progressFill.classList.remove('indeterminate');
+          $progressFill.style.width = pct + '%';
+          $progressPct.textContent = pct + '%';
+        } else if (node) {
+          $progressStep.textContent = 'Processing \u00b7 ' + node;
+          $progressFill.classList.add('indeterminate');
+          $progressPct.textContent = '';
+        }
+
+      } else if (status === 'completed' || status === 'done' || status === 'success') {
+        stopPolling();
+        $progressPanel.classList.remove('visible');
+        await fetchResult();
+        $generateBtn.disabled = false;
+        $generateBtn.innerHTML = '&#9654; Generate';
+
+      } else if (status === 'error' || status === 'failed') {
+        stopPolling();
+        $progressPanel.classList.remove('visible');
+        showExecError(data.error || data.message || 'Execution failed.');
+        $generateBtn.disabled = false;
+        $generateBtn.innerHTML = '&#9654; Generate';
+
+      } else if (status === 'queued') {
+        $progressStep.textContent = 'Queued \u2014 waiting for execution slot...';
+        $progressFill.classList.add('indeterminate');
+        $progressPct.textContent = '';
+      }
+
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        console.error('Status poll error:', e);
+      }
+    }
+  }
+
+  // ── Fetch Result ──
+  async function fetchResult() {
+    try {
+      const resp = await apiFetch('/api/run/result/' + encodeURIComponent(currentPromptId));
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        showExecError('Failed to fetch result: ' + (err.detail || err.error || resp.status));
+        return;
+      }
+
+      const data = await resp.json();
+      displayResult(data);
+
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        showExecError('Error fetching result: ' + e.message);
+      }
+    }
+  }
+
+  function displayResult(data) {
+    $resultPanel.innerHTML = '';
+
+    const outputs = data.outputs || data.images || data.files || [];
+    const items = Array.isArray(outputs) ? outputs : [outputs];
+
+    if (items.length === 0 && data.url) {
+      items.push(data);
+    }
+
+    if (items.length === 0) {
+      $resultPanel.innerHTML = '<p style="color:var(--muted);font-size:13px;">No output files returned.</p>';
+      $resultPanel.classList.add('visible');
+      return;
+    }
+
+    items.forEach(item => {
+      const url = item.url || item.filename || '';
+      const type = item.type || detectMediaType(url);
+
+      if (type === 'video' || url.match(/\.(mp4|webm|mov|avi)$/i)) {
+        const video = document.createElement('video');
+        video.className = 'result-media';
+        video.controls = true;
+        video.autoplay = true;
+        video.loop = true;
+        video.src = url;
+        $resultPanel.appendChild(video);
+      } else {
+        const img = document.createElement('img');
+        img.className = 'result-media';
+        img.src = url;
+        img.alt = 'Generated output';
+        $resultPanel.appendChild(img);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'result-actions';
+      const dlLink = document.createElement('a');
+      dlLink.className = 'btn btn--sm';
+      dlLink.href = url;
+      dlLink.download = '';
+      dlLink.textContent = 'Download';
+      actions.appendChild(dlLink);
+      $resultPanel.appendChild(actions);
+    });
+
+    $resultPanel.classList.add('visible');
+  }
+
+  function detectMediaType(url) {
+    if (!url) return 'image';
+    if (url.match(/\.(mp4|webm|mov|avi)$/i)) return 'video';
+    return 'image';
+  }
+
+  function showExecError(msg) {
+    $execError.textContent = msg;
+    $execError.classList.add('visible');
+  }
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

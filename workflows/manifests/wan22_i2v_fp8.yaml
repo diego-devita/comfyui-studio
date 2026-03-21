@@ -1,0 +1,107 @@
+id: wan22-i2v-fp8
+name: "WAN 2.2 Image to Video (FP8 Fast)"
+version: "1.0.0"
+date: "2026-03-21"
+description: "Image to video with WAN 2.2 14B FP8 models, dual-pass sampling (high+low noise), 4-step LightX2V LoRA acceleration, auto aspect ratio from input image, Lanczos upscale, RIFE 4x frame interpolation to 60fps."
+author: "comfyui-studio"
+
+workflow_file: "wan22_i2v_fp8.json"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    node_id: "1"
+    field: "image"
+    required: true
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    node_id: "2"
+    field: "text"
+    required: true
+    default: ""
+    placeholder: "Describe what happens in the video..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    node_id: "3"
+    field: "text"
+    required: false
+    default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+
+  - id: duration
+    name: "Duration"
+    type: select
+    node_id: "4"
+    field: "value"
+    options:
+      - label: "5 seconds"
+        value: 81
+      - label: "10 seconds"
+        value: 161
+      - label: "15 seconds"
+        value: 241
+      - label: "20 seconds"
+        value: 321
+    default: 81
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    node_id: "5"
+    field: "Number"
+    min: 1.0
+    max: 5.0
+    step: 0.1
+    default: 1.5
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    node_id: "21"
+    field: "noise_seed"
+    default: -1
+
+  - id: upscale
+    name: "Upscale Factor"
+    type: float
+    node_id: "6"
+    field: "Number"
+    min: 1.0
+    max: 2.5
+    step: 0.5
+    default: 1.5
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+    node_id: "28"
+
+required_models:
+  - "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+  - "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+  - "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - "wan_2.1_vae.safetensors"
+  - "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
+  - "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
+
+required_nodes:
+  - "LoadImage"
+  - "CLIPTextEncode"
+  - "UNETLoader"
+  - "LoraLoaderModelOnly"
+  - "ModelSamplingSD3"
+  - "CLIPLoader"
+  - "VAELoader"
+  - "WanImageToVideo"
+  - "KSamplerAdvanced"
+  - "VAEDecode"
+  - "ImageScale"
+  - "RIFE VFI"
+  - "VHS_VideoCombine"
+  - "SimpleMath+"
+  - "GetImageSize+"

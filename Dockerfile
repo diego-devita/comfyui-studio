@@ -249,7 +249,8 @@ RUN pip install \
     python-multipart \
     huggingface_hub \
     aiofiles \
-    requests
+    requests \
+    pyyaml
 
 # ── App files ─────────────────────────────────────────────
 COPY app/ /app/

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Workflow Manager</title>
+<link rel="stylesheet" href="/static/shared.css">
+<style>
+  /* ── Header ── */
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
+  .header-actions { display: flex; gap: 12px; align-items: center; }
+
+  /* ── Main ── */
+  main { padding: 32px 40px 64px; }
+
+  /* ── Workflow Card Grid ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 16px;
+  }
+
+  .wf-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+  }
+  .wf-card.ready {
+    border-color: var(--success);
+    box-shadow: 0 0 16px rgba(68, 255, 136, 0.06);
+  }
+  .wf-card.models-missing {
+    border-color: var(--queued);
+    box-shadow: 0 0 16px rgba(255, 170, 68, 0.06);
+  }
+  .wf-card.nodes-missing {
+    border-color: var(--error);
+    box-shadow: 0 0 16px rgba(255, 68, 102, 0.06);
+  }
+
+  .wf-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .wf-card-info { flex: 1; min-width: 0; }
+
+  .wf-card-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 4px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .wf-card-version {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    align-self: flex-start;
+  }
+
+  .wf-card-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .wf-card-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── Dependency Bars ── */
+  .wf-deps { display: flex; flex-direction: column; gap: 8px; }
+
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .dep-label {
+    color: var(--muted);
+    min-width: 52px;
+    flex-shrink: 0;
+  }
+  .dep-dots {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .dep-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+  .dep-dot.filled { background: var(--success); }
+  .dep-dot.missing-dot { background: var(--border); }
+
+  .dep-count {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .dep-count.all-good { color: var(--success); }
+  .dep-count.has-missing { color: var(--queued); }
+
+  .dep-action { margin-left: auto; flex-shrink: 0; }
+
+  /* ── Card Actions ── */
+  .wf-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+
+  /* ── Details Expand ── */
+  .wf-details {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .wf-details.visible { display: flex; }
+
+  .detail-section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .detail-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .detail-item {
+    padding: 3px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .detail-item.present { border-color: var(--success); color: var(--success); }
+  .detail-item.missing { border-color: var(--border); color: var(--muted); }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    header { padding: 20px 20px; }
+    main { padding: 20px 20px 48px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .logo { font-size: 18px; }
+    .logo small { display: block; margin-left: 0; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Authentication</h2>
+    <p>Enter credentials to access the workflow manager.</p>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/" class="nav-link">Models</a>
+  <a href="/workflows" class="nav-link active">Workflows</a>
+  <a href="/nodes" class="nav-link">Nodes</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Workflow Manager</small></div>
+  <div class="header-actions">
+    <button class="btn" id="syncBtn">Sync Workflows</button>
+  </div>
+</header>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading workflows...
+  </div>
+  <div class="card-grid" id="cardGrid" style="display:none;"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>No workflows found. Click Sync to scan for workflow manifests.</p>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let authHeader = null;
+  let workflows = [];
+  let pollTimer = null;
+
+  // ── DOM refs ──
+  const $loginOverlay = document.getElementById('loginOverlay');
+  const $loginUser    = document.getElementById('loginUser');
+  const $loginPass    = document.getElementById('loginPass');
+  const $loginBtn     = document.getElementById('loginBtn');
+  const $loginError   = document.getElementById('loginError');
+  const $main         = document.getElementById('mainContent');
+  const $loading      = document.getElementById('loadingState');
+  const $cardGrid     = document.getElementById('cardGrid');
+  const $emptyState   = document.getElementById('emptyState');
+  const $syncBtn      = document.getElementById('syncBtn');
+
+  // ── Utilities ──
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function makeAuthHeader(user, pass) {
+    return 'Basic ' + btoa(user + ':' + pass);
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (authHeader) headers['Authorization'] = authHeader;
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const resp = await fetch(url, { ...opts, headers });
+    if (resp.status === 401) {
+      showLogin();
+      throw new Error('Unauthorized');
+    }
+    return resp;
+  }
+
+  // ── Auth ──
+  function showLogin() {
+    $loginOverlay.classList.remove('hidden');
+    $loginUser.focus();
+    stopPolling();
+  }
+
+  function hideLogin() {
+    $loginOverlay.classList.add('hidden');
+    $loginError.style.display = 'none';
+  }
+
+  async function attemptLogin() {
+    const user = $loginUser.value.trim();
+    const pass = $loginPass.value;
+    if (!user) { $loginUser.focus(); return; }
+
+    $loginBtn.disabled = true;
+    $loginBtn.textContent = 'Signing in...';
+
+    const candidate = makeAuthHeader(user, pass);
+    try {
+      const resp = await fetch('/api/admin/workflows', {
+        headers: { 'Authorization': candidate }
+      });
+      if (resp.status === 401) {
+        $loginError.style.display = 'block';
+        $loginBtn.disabled = false;
+        $loginBtn.textContent = 'Sign In';
+        $loginPass.focus();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = candidate;
+      hideLogin();
+      const data = await resp.json();
+      handleWorkflowData(data);
+      $loading.style.display = 'none';
+      startPolling();
+    } catch (e) {
+      $loginError.style.display = 'block';
+      $loginError.textContent = 'Connection error: ' + e.message;
+      $loginBtn.disabled = false;
+      $loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  $loginBtn.addEventListener('click', attemptLogin);
+  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await fetch('/api/admin/workflows');
+      if (resp.status === 401) {
+        showLogin();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = null;
+      hideLogin();
+      const data = await resp.json();
+      handleWorkflowData(data);
+      $loading.style.display = 'none';
+      startPolling();
+    } catch (e) {
+      showLogin();
+    }
+  }
+
+  // ── Data handling ──
+  function handleWorkflowData(data) {
+    workflows = Array.isArray(data) ? data : (data.workflows || []);
+    renderCards();
+  }
+
+  function renderCards() {
+    $cardGrid.innerHTML = '';
+
+    if (workflows.length === 0) {
+      $cardGrid.style.display = 'none';
+      $emptyState.style.display = '';
+      return;
+    }
+
+    $emptyState.style.display = 'none';
+    $cardGrid.style.display = '';
+
+    workflows.forEach(wf => {
+      $cardGrid.appendChild(createWorkflowCard(wf));
+    });
+  }
+
+  function createWorkflowCard(wf) {
+    const card = document.createElement('div');
+    card.className = 'wf-card';
+
+    const models = wf.models || [];
+    const nodes = wf.nodes || [];
+    const modelsPresent = models.filter(m => m.status === 'present').length;
+    const modelsTotal = models.length;
+    const nodesPresent = nodes.filter(n => n.status === 'present' || n.installed).length;
+    const nodesTotal = nodes.length;
+
+    const allModelsOk = modelsPresent === modelsTotal;
+    const allNodesOk = nodesPresent === nodesTotal;
+
+    if (!allNodesOk) {
+      card.classList.add('nodes-missing');
+    } else if (!allModelsOk) {
+      card.classList.add('models-missing');
+    } else {
+      card.classList.add('ready');
+    }
+
+    const version = wf.version || '';
+    const date = wf.updated_at || wf.created_at || '';
+    const author = wf.author || 'comfyui-studio';
+    const dateStr = date ? date.substring(0, 10) : '';
+    const metaParts = [dateStr, 'by ' + author].filter(Boolean).join(' \u00b7 ');
+    const desc = wf.description || '';
+
+    // Model dots (max 12 displayed)
+    const modelDotsMax = Math.min(modelsTotal, 12);
+    let modelDotsHtml = '';
+    for (let i = 0; i < modelDotsMax; i++) {
+      const filled = i < modelsPresent;
+      modelDotsHtml += '<span class="dep-dot ' + (filled ? 'filled' : 'missing-dot') + '"></span>';
+    }
+    if (modelsTotal > 12) modelDotsHtml += '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px;">...</span>';
+
+    // Node dots (max 12 displayed)
+    const nodeDotsMax = Math.min(nodesTotal, 12);
+    let nodeDotsHtml = '';
+    for (let i = 0; i < nodeDotsMax; i++) {
+      const filled = i < nodesPresent;
+      nodeDotsHtml += '<span class="dep-dot ' + (filled ? 'filled' : 'missing-dot') + '"></span>';
+    }
+    if (nodesTotal > 12) nodeDotsHtml += '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px;">...</span>';
+
+    const modelCountClass = allModelsOk ? 'all-good' : 'has-missing';
+    const nodeCountClass = allNodesOk ? 'all-good' : 'has-missing';
+
+    const installBtn = !allModelsOk
+      ? '<button class="btn btn--sm dep-action" data-install="' + escHtml(wf.id) + '">Install Missing</button>'
+      : '';
+
+    card.innerHTML =
+      '<div class="wf-card-top">' +
+        '<div class="wf-card-info">' +
+          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + '</div>' +
+          '<div class="wf-card-meta">' + escHtml(metaParts) + '</div>' +
+        '</div>' +
+        (version ? '<span class="wf-card-version">' + escHtml(version) + '</span>' : '') +
+      '</div>' +
+      (desc ? '<div class="wf-card-desc">' + escHtml(desc) + '</div>' : '') +
+      '<div class="wf-deps">' +
+        '<div class="dep-row">' +
+          '<span class="dep-label">Models</span>' +
+          '<span class="dep-dots">' + modelDotsHtml + '</span>' +
+          '<span class="dep-count ' + modelCountClass + '">' + modelsPresent + '/' + modelsTotal + '</span>' +
+          installBtn +
+        '</div>' +
+        '<div class="dep-row">' +
+          '<span class="dep-label">Nodes</span>' +
+          '<span class="dep-dots">' + nodeDotsHtml + '</span>' +
+          '<span class="dep-count ' + nodeCountClass + '">' + nodesPresent + '/' + nodesTotal + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="wf-card-actions">' +
+        '<button class="btn btn--sm" data-run="' + escHtml(wf.id) + '"' + ((!allModelsOk || !allNodesOk) ? ' disabled title="All dependencies must be installed"' : '') + '">&#9654; Run</button>' +
+        '<button class="btn btn--sm" data-details="' + escHtml(wf.id) + '" style="border-color:var(--border);color:var(--muted);">Details</button>' +
+      '</div>' +
+      '<div class="wf-details" data-details-panel="' + escHtml(wf.id) + '">' +
+        buildDetailSection('Models', models) +
+        buildDetailSection('Nodes', nodes) +
+      '</div>';
+
+    // Event: Install Missing
+    const installBtnEl = card.querySelector('[data-install]');
+    if (installBtnEl) {
+      installBtnEl.addEventListener('click', () => installMissingModels(wf.id, installBtnEl));
+    }
+
+    // Event: Run
+    const runBtnEl = card.querySelector('[data-run]');
+    runBtnEl.addEventListener('click', () => {
+      window.location.href = '/run/' + encodeURIComponent(wf.id);
+    });
+
+    // Event: Details toggle
+    const detailsBtnEl = card.querySelector('[data-details]');
+    const detailsPanel = card.querySelector('[data-details-panel]');
+    detailsBtnEl.addEventListener('click', () => {
+      const isVisible = detailsPanel.classList.contains('visible');
+      detailsPanel.classList.toggle('visible');
+      detailsBtnEl.textContent = isVisible ? 'Details' : 'Hide';
+    });
+
+    return card;
+  }
+
+  function buildDetailSection(title, items) {
+    if (!items || items.length === 0) return '';
+    const itemsHtml = items.map(item => {
+      const name = item.name || item.file || item.class_name || item.id || 'unknown';
+      const isPresent = item.status === 'present' || item.installed;
+      return '<span class="detail-item ' + (isPresent ? 'present' : 'missing') + '">' + escHtml(name) + '</span>';
+    }).join('');
+    return '<div>' +
+      '<div class="detail-section-title">' + escHtml(title) + '</div>' +
+      '<div class="detail-list">' + itemsHtml + '</div>' +
+    '</div>';
+  }
+
+  // ── Actions ──
+  async function installMissingModels(workflowId, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner sm"></span> Installing...';
+    try {
+      const resp = await apiFetch('/api/admin/workflows/' + encodeURIComponent(workflowId) + '/install-models', {
+        method: 'POST'
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert('Install error: ' + (err.detail || err.error || resp.status));
+        btn.disabled = false;
+        btn.textContent = 'Install Missing';
+      } else {
+        btn.textContent = 'Queued';
+      }
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = 'Install Missing';
+      }
+    }
+  }
+
+  $syncBtn.addEventListener('click', async () => {
+    $syncBtn.disabled = true;
+    $syncBtn.innerHTML = '<span class="spinner sm"></span> Syncing...';
+    try {
+      const resp = await apiFetch('/api/admin/workflows/sync', { method: 'POST' });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert('Sync error: ' + (err.detail || err.error || resp.status));
+      } else {
+        // Refresh data after sync
+        await pollWorkflows();
+      }
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        alert('Error: ' + e.message);
+      }
+    } finally {
+      $syncBtn.disabled = false;
+      $syncBtn.textContent = 'Sync Workflows';
+    }
+  });
+
+  // ── Polling ──
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollWorkflows, 10000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollWorkflows() {
+    try {
+      const resp = await apiFetch('/api/admin/workflows');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      handleWorkflowData(data);
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        console.error('Poll error:', e);
+      }
+    }
+  }
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

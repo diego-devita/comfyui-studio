@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Node Manager</title>
+<link rel="stylesheet" href="/static/shared.css">
+<style>
+  /* ── Header ── */
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
+  .header-actions { display: flex; gap: 12px; align-items: center; }
+
+  /* ── Main ── */
+  main { padding: 32px 40px 64px; }
+
+  /* ── Search Bar ── */
+  .search-bar {
+    margin-bottom: 24px;
+  }
+  .search-bar .search-input {
+    width: 100%;
+  }
+
+  /* ── Package Card ── */
+  .pkg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pkg-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    transition: border-color 0.25s ease;
+  }
+  .pkg-card:hover {
+    border-color: #3a3a4a;
+  }
+
+  .pkg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .pkg-header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pkg-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .pkg-name.core { color: var(--accent); }
+
+  .pkg-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .pkg-url:hover { color: var(--text); }
+
+  .pkg-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .pkg-chevron {
+    font-size: 12px;
+    color: var(--muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .pkg-chevron.open { transform: rotate(90deg); }
+
+  /* ── Node List ── */
+  .pkg-nodes {
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .pkg-nodes.visible { display: flex; }
+
+  .node-pill {
+    padding: 3px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    border-radius: 12px;
+    background: #1e1e2e;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .node-pill.highlight {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .node-pill.search-match {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(232, 255, 71, 0.08);
+  }
+
+  /* ── Install Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.9);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.hidden { display: none; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 32px;
+    width: 480px;
+    max-width: 90vw;
+  }
+  .modal-box h3 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  .modal-box p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .modal-box label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .modal-input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-bottom: 20px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-input::placeholder { color: var(--muted); }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal-error {
+    color: var(--error);
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  /* ── Restart Banner ── */
+  .restart-banner {
+    display: none;
+    background: rgba(232, 255, 71, 0.08);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-card);
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    align-items: center;
+    gap: 10px;
+  }
+  .restart-banner.visible { display: flex; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    header { padding: 20px 20px; }
+    main { padding: 20px 20px 48px; }
+    .logo { font-size: 18px; }
+    .logo small { display: block; margin-left: 0; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Authentication</h2>
+    <p>Enter credentials to access the node manager.</p>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+    <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
+  </div>
+</div>
+
+<!-- Install Custom Node Modal -->
+<div class="modal-overlay hidden" id="installModal">
+  <div class="modal-box">
+    <h3>Install Custom Node</h3>
+    <p>Enter the Git repository URL for the custom node package.</p>
+    <label for="repoUrl">Repository URL</label>
+    <input type="text" class="modal-input" id="repoUrl" placeholder="https://github.com/user/ComfyUI-CustomNode">
+    <div class="modal-error" id="installError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelInstallBtn" style="border-color:var(--border);color:var(--muted);">Cancel</button>
+      <button class="btn" id="confirmInstallBtn">Install</button>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/" class="nav-link">Models</a>
+  <a href="/workflows" class="nav-link">Workflows</a>
+  <a href="/nodes" class="nav-link active">Nodes</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Node Manager</small></div>
+  <div class="header-actions">
+    <button class="btn" id="installNodeBtn">Install Custom Node</button>
+  </div>
+</header>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="restart-banner" id="restartBanner">
+    A restart of ComfyUI is required for newly installed nodes to take effect.
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search nodes...">
+  </div>
+
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading nodes...
+  </div>
+
+  <div class="pkg-list" id="pkgList" style="display:none;"></div>
+
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>No node packages found.</p>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let authHeader = null;
+  let packages = [];
+  let searchQuery = '';
+
+  // ── DOM refs ──
+  const $loginOverlay = document.getElementById('loginOverlay');
+  const $loginUser    = document.getElementById('loginUser');
+  const $loginPass    = document.getElementById('loginPass');
+  const $loginBtn     = document.getElementById('loginBtn');
+  const $loginError   = document.getElementById('loginError');
+  const $loading      = document.getElementById('loadingState');
+  const $pkgList      = document.getElementById('pkgList');
+  const $emptyState   = document.getElementById('emptyState');
+  const $searchInput  = document.getElementById('searchInput');
+  const $installNodeBtn = document.getElementById('installNodeBtn');
+  const $installModal = document.getElementById('installModal');
+  const $repoUrl      = document.getElementById('repoUrl');
+  const $installError = document.getElementById('installError');
+  const $cancelInstallBtn = document.getElementById('cancelInstallBtn');
+  const $confirmInstallBtn = document.getElementById('confirmInstallBtn');
+  const $restartBanner = document.getElementById('restartBanner');
+
+  // ── Utilities ──
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function makeAuthHeader(user, pass) {
+    return 'Basic ' + btoa(user + ':' + pass);
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (authHeader) headers['Authorization'] = authHeader;
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const resp = await fetch(url, { ...opts, headers });
+    if (resp.status === 401) {
+      showLogin();
+      throw new Error('Unauthorized');
+    }
+    return resp;
+  }
+
+  // ── Auth ──
+  function showLogin() {
+    $loginOverlay.classList.remove('hidden');
+    $loginUser.focus();
+  }
+
+  function hideLogin() {
+    $loginOverlay.classList.add('hidden');
+    $loginError.style.display = 'none';
+  }
+
+  async function attemptLogin() {
+    const user = $loginUser.value.trim();
+    const pass = $loginPass.value;
+    if (!user) { $loginUser.focus(); return; }
+
+    $loginBtn.disabled = true;
+    $loginBtn.textContent = 'Signing in...';
+
+    const candidate = makeAuthHeader(user, pass);
+    try {
+      const resp = await fetch('/api/admin/nodes', {
+        headers: { 'Authorization': candidate }
+      });
+      if (resp.status === 401) {
+        $loginError.style.display = 'block';
+        $loginBtn.disabled = false;
+        $loginBtn.textContent = 'Sign In';
+        $loginPass.focus();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = candidate;
+      hideLogin();
+      const data = await resp.json();
+      handleNodeData(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      $loginError.style.display = 'block';
+      $loginError.textContent = 'Connection error: ' + e.message;
+      $loginBtn.disabled = false;
+      $loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  $loginBtn.addEventListener('click', attemptLogin);
+  $loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+  $loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') $loginPass.focus(); });
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await fetch('/api/admin/nodes');
+      if (resp.status === 401) {
+        showLogin();
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      authHeader = null;
+      hideLogin();
+      const data = await resp.json();
+      handleNodeData(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      showLogin();
+    }
+  }
+
+  // ── Data handling ──
+  function handleNodeData(data) {
+    packages = Array.isArray(data) ? data : (data.packages || []);
+    // Sort: core first, then alphabetical
+    packages.sort((a, b) => {
+      const aCore = (a.name || '').toLowerCase().includes('comfyui core') || a.is_core;
+      const bCore = (b.name || '').toLowerCase().includes('comfyui core') || b.is_core;
+      if (aCore && !bCore) return -1;
+      if (!aCore && bCore) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    renderPackages();
+  }
+
+  function renderPackages() {
+    $pkgList.innerHTML = '';
+
+    const filteredPackages = getFilteredPackages();
+
+    if (filteredPackages.length === 0) {
+      $pkgList.style.display = 'none';
+      $emptyState.style.display = '';
+      $emptyState.querySelector('p').textContent = searchQuery
+        ? 'No nodes matching "' + searchQuery + '".'
+        : 'No node packages found.';
+      return;
+    }
+
+    $emptyState.style.display = 'none';
+    $pkgList.style.display = '';
+
+    filteredPackages.forEach(entry => {
+      $pkgList.appendChild(createPackageCard(entry.pkg, entry.matchingNodes));
+    });
+  }
+
+  function getFilteredPackages() {
+    if (!searchQuery) {
+      return packages.map(pkg => ({ pkg, matchingNodes: null }));
+    }
+    const results = [];
+    for (const pkg of packages) {
+      const nodes = pkg.nodes || [];
+      const matchingNodes = nodes.filter(n => {
+        const name = (n.name || n.class_name || '').toLowerCase();
+        return name.includes(searchQuery);
+      });
+      const pkgNameMatch = (pkg.name || '').toLowerCase().includes(searchQuery);
+      if (matchingNodes.length > 0 || pkgNameMatch) {
+        results.push({ pkg, matchingNodes: matchingNodes.length > 0 ? matchingNodes : null });
+      }
+    }
+    return results;
+  }
+
+  function createPackageCard(pkg, matchingNodes) {
+    const card = document.createElement('div');
+    card.className = 'pkg-card';
+
+    const nodes = pkg.nodes || [];
+    const nodeCount = nodes.length;
+    const isCore = (pkg.name || '').toLowerCase().includes('comfyui core') || pkg.is_core;
+    const repoUrl = pkg.url || pkg.repo_url || '';
+
+    const nameClass = isCore ? 'pkg-name core' : 'pkg-name';
+
+    card.innerHTML =
+      '<div class="pkg-header">' +
+        '<div class="pkg-header-left">' +
+          '<div class="' + nameClass + '">' + escHtml(pkg.name || pkg.id || 'Unknown Package') + '</div>' +
+          (repoUrl ? '<a class="pkg-url" href="' + escHtml(repoUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();">' + escHtml(repoUrl) + '</a>' : '') +
+        '</div>' +
+        '<span class="pkg-count">' + nodeCount + ' node' + (nodeCount !== 1 ? 's' : '') + '</span>' +
+        '<span class="pkg-chevron">&#9654;</span>' +
+      '</div>' +
+      '<div class="pkg-nodes">' +
+        buildNodePills(nodes, matchingNodes) +
+      '</div>';
+
+    const header = card.querySelector('.pkg-header');
+    const nodesPanel = card.querySelector('.pkg-nodes');
+    const chevron = card.querySelector('.pkg-chevron');
+
+    // Auto-expand if there are search matches
+    if (matchingNodes && matchingNodes.length > 0) {
+      nodesPanel.classList.add('visible');
+      chevron.classList.add('open');
+    }
+
+    header.addEventListener('click', () => {
+      const isVisible = nodesPanel.classList.contains('visible');
+      nodesPanel.classList.toggle('visible');
+      chevron.classList.toggle('open');
+    });
+
+    return card;
+  }
+
+  function buildNodePills(nodes, matchingNodes) {
+    const matchSet = matchingNodes ? new Set(matchingNodes.map(n => n.name || n.class_name)) : null;
+    return nodes.map(n => {
+      const name = n.name || n.class_name || 'unknown';
+      const isMatch = matchSet && matchSet.has(name);
+      const cls = isMatch ? 'node-pill search-match' : 'node-pill';
+      return '<span class="' + cls + '">' + escHtml(name) + '</span>';
+    }).join('');
+  }
+
+  // ── Search ──
+  $searchInput.addEventListener('input', () => {
+    searchQuery = $searchInput.value.trim().toLowerCase();
+    renderPackages();
+  });
+
+  // ── Install Custom Node ──
+  $installNodeBtn.addEventListener('click', () => {
+    $installModal.classList.remove('hidden');
+    $repoUrl.value = '';
+    $installError.style.display = 'none';
+    $repoUrl.focus();
+  });
+
+  $cancelInstallBtn.addEventListener('click', () => {
+    $installModal.classList.add('hidden');
+  });
+
+  $installModal.addEventListener('click', (e) => {
+    if (e.target === $installModal) {
+      $installModal.classList.add('hidden');
+    }
+  });
+
+  $repoUrl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doInstall();
+  });
+
+  $confirmInstallBtn.addEventListener('click', doInstall);
+
+  async function doInstall() {
+    const url = $repoUrl.value.trim();
+    if (!url) {
+      $installError.textContent = 'Please enter a repository URL.';
+      $installError.style.display = 'block';
+      return;
+    }
+
+    $confirmInstallBtn.disabled = true;
+    $confirmInstallBtn.innerHTML = '<span class="spinner sm"></span> Installing...';
+    $installError.style.display = 'none';
+
+    try {
+      const resp = await apiFetch('/api/admin/nodes/install', {
+        method: 'POST',
+        body: { url: url }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        $installError.textContent = err.detail || err.error || 'Install failed (HTTP ' + resp.status + ')';
+        $installError.style.display = 'block';
+        $confirmInstallBtn.disabled = false;
+        $confirmInstallBtn.textContent = 'Install';
+        return;
+      }
+
+      $installModal.classList.add('hidden');
+      $confirmInstallBtn.disabled = false;
+      $confirmInstallBtn.textContent = 'Install';
+
+      // Show restart banner
+      $restartBanner.classList.add('visible');
+
+      // Refresh node list
+      try {
+        const nodesResp = await apiFetch('/api/admin/nodes');
+        if (nodesResp.ok) {
+          const data = await nodesResp.json();
+          handleNodeData(data);
+        }
+      } catch (_) { /* ignore refresh error */ }
+
+    } catch (e) {
+      if (e.message !== 'Unauthorized') {
+        $installError.textContent = 'Error: ' + e.message;
+        $installError.style.display = 'block';
+      }
+      $confirmInstallBtn.disabled = false;
+      $confirmInstallBtn.textContent = 'Install';
+    }
+  }
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

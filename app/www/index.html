@@ -711,6 +711,31 @@
     .logo small { display: block; margin-left: 0; margin-top: 4px; }
     .filter-label { min-width: 60px; }
   }
+
+  /* Navigation bar */
+  .main-nav {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+  .nav-link {
+    padding: 12px 24px;
+    color: var(--muted);
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .nav-link:hover { color: var(--text); }
+  .nav-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -728,6 +753,13 @@
     <button class="btn" id="loginBtn" style="width:100%;justify-content:center;">Sign In</button>
   </div>
 </div>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/admin/models" class="nav-link active">Models</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+</nav>
 
 <!-- Header -->
 <header>

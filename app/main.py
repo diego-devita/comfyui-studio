@@ -5,17 +5,24 @@ pool, per-download speed tracking, SSE progress streaming, and HTTP Basic Auth.
 """
 
 import asyncio
+import glob
 import json
 import os
+import random
 import secrets
 import shutil
+import subprocess
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional
 
+import httpx
 import requests
-from fastapi import Depends, FastAPI, HTTPException
+import yaml  # requires: pyyaml
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
@@ -38,6 +45,12 @@ MODELS_JSON_DEFAULT = Path("/app/models.json")
 
 WWW_ROOT = Path("/workspace/www")
 WWW_DEFAULT = Path("/app/www")
+
+COMFY_URL = "http://127.0.0.1:8188"
+
+# Paths for workflows
+WORKFLOWS_DIR = Path("/workspace/workflows")
+WORKFLOWS_DIR_DEFAULT = Path("/app/workflows")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 # All endpoints except /api/health require HTTP Basic Auth.
@@ -479,7 +492,580 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
     return {"max_concurrent": _max_concurrent}
 
 
+# ── Workflow helpers ──────────────────────────────────────────────────────────
+
+
+def _workflows_path(subpath: str) -> Path:
+    p = WORKFLOWS_DIR / subpath
+    if p.exists():
+        return p
+    return WORKFLOWS_DIR_DEFAULT / subpath
+
+
+def _load_manifest(manifest_file: str) -> dict:
+    """Load a YAML manifest file."""
+    p = _workflows_path(f"manifests/{manifest_file}")
+    if not p.exists():
+        return None
+    with open(p) as f:
+        return yaml.safe_load(f)
+
+
+def _load_workflows_index() -> list:
+    """Load the workflows index.json."""
+    p = _workflows_path("manifests/index.json")
+    if not p.exists():
+        return []
+    return json.loads(p.read_text()).get("workflows", [])
+
+
+async def _get_installed_nodes() -> set:
+    """Query ComfyUI /object_info to get all installed node class_types."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{COMFY_URL}/object_info")
+            r.raise_for_status()
+            return set(r.json().keys())
+    except Exception:
+        return set()
+
+
+def _check_model_exists(filename: str) -> bool:
+    """Check if a model file exists anywhere under MODELS_BASE."""
+    # First try to find dest from models.json
+    _reload_models()
+    for cat in _models_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m["file"] == filename:
+                dest_path = Path(MODELS_BASE) / m["dest"] / m["file"]
+                return dest_path.exists()
+    # Fallback: search recursively
+    for p in Path(MODELS_BASE).rglob(filename):
+        if p.is_file():
+            return True
+    return False
+
+
+# ── Workflow Manager endpoints ───────────────────────────────────────────────
+
+
+@app.get("/api/admin/workflows")
+async def list_workflows(_=Depends(require_auth)):
+    index = _load_workflows_index()
+    installed_nodes = await _get_installed_nodes()
+
+    result = []
+    for entry in index:
+        manifest = _load_manifest(entry["manifest"])
+        if not manifest:
+            continue
+
+        # Check models
+        required_models = manifest.get("required_models", [])
+        missing_models = [m for m in required_models if not _check_model_exists(m)]
+
+        # Check nodes
+        required_nodes = manifest.get("required_nodes", [])
+        missing_nodes = [n for n in required_nodes if n not in installed_nodes]
+
+        ready = len(missing_models) == 0 and len(missing_nodes) == 0
+
+        result.append({
+            "id": manifest["id"],
+            "name": manifest["name"],
+            "version": manifest.get("version", "0.0.0"),
+            "date": manifest.get("date", ""),
+            "description": manifest.get("description", ""),
+            "author": manifest.get("author", ""),
+            "inputs": manifest.get("inputs", []),
+            "outputs": manifest.get("outputs", []),
+            "models_status": {
+                "total": len(required_models),
+                "present": len(required_models) - len(missing_models),
+                "missing": missing_models,
+            },
+            "nodes_status": {
+                "total": len(required_nodes),
+                "installed": len(required_nodes) - len(missing_nodes),
+                "missing": missing_nodes,
+            },
+            "ready": ready,
+        })
+
+    return {"workflows": result}
+
+
+@app.get("/api/admin/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str, _=Depends(require_auth)):
+    index = _load_workflows_index()
+    entry = next((e for e in index if e["id"] == workflow_id), None)
+    if not entry:
+        raise HTTPException(404, f"Workflow '{workflow_id}' not found")
+
+    manifest = _load_manifest(entry["manifest"])
+    if not manifest:
+        raise HTTPException(404, f"Manifest for '{workflow_id}' not found")
+
+    installed_nodes = await _get_installed_nodes()
+    required_models = manifest.get("required_models", [])
+    missing_models = [m for m in required_models if not _check_model_exists(m)]
+    required_nodes = manifest.get("required_nodes", [])
+    missing_nodes = [n for n in required_nodes if n not in installed_nodes]
+
+    return {
+        **manifest,
+        "models_status": {
+            "total": len(required_models),
+            "present": len(required_models) - len(missing_models),
+            "missing": missing_models,
+        },
+        "nodes_status": {
+            "total": len(required_nodes),
+            "installed": len(required_nodes) - len(missing_nodes),
+            "missing": missing_nodes,
+        },
+        "ready": len(missing_models) == 0 and len(missing_nodes) == 0,
+    }
+
+
+@app.post("/api/admin/workflows/{workflow_id}/install-models")
+async def install_workflow_models(workflow_id: str, _=Depends(require_auth)):
+    index = _load_workflows_index()
+    entry = next((e for e in index if e["id"] == workflow_id), None)
+    if not entry:
+        raise HTTPException(404)
+
+    manifest = _load_manifest(entry["manifest"])
+    if not manifest:
+        raise HTTPException(404)
+
+    required_models = manifest.get("required_models", [])
+    missing = [m for m in required_models if not _check_model_exists(m)]
+
+    queued = []
+    skipped = []
+    for filename in missing:
+        model = _find_model(filename)
+        if model:
+            _enqueue_download(model)
+            queued.append(filename)
+        else:
+            skipped.append(filename)
+
+    return {"queued": queued, "skipped": skipped, "message": f"{len(queued)} models queued for download"}
+
+
+@app.post("/api/admin/workflows/sync")
+async def sync_workflows(_=Depends(require_auth)):
+    REPO_BASE = "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows"
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            # Fetch remote index
+            r = await client.get(f"{REPO_BASE}/manifests/index.json")
+            r.raise_for_status()
+            remote_index = r.json().get("workflows", [])
+
+            # Load local index
+            local_index = {e["id"]: e for e in _load_workflows_index()}
+
+            updated = []
+            for remote in remote_index:
+                local = local_index.get(remote["id"])
+                if not local or remote["version"] > local["version"]:
+                    # Download manifest
+                    mr = await client.get(f"{REPO_BASE}/manifests/{remote['manifest']}")
+                    mr.raise_for_status()
+
+                    # Ensure workspace directories exist
+                    manifests_dir = WORKFLOWS_DIR / "manifests"
+                    manifests_dir.mkdir(parents=True, exist_ok=True)
+                    (manifests_dir / remote["manifest"]).write_text(mr.text)
+
+                    # Download workflow JSON from manifest
+                    manifest_data = yaml.safe_load(mr.text)
+                    wf_file = manifest_data.get("workflow_file", "")
+                    if wf_file:
+                        wr = await client.get(f"{REPO_BASE}/api/{wf_file}")
+                        if wr.status_code == 200:
+                            api_dir = WORKFLOWS_DIR / "api"
+                            api_dir.mkdir(parents=True, exist_ok=True)
+                            (api_dir / wf_file).write_text(wr.text)
+
+                    updated.append(remote["id"])
+
+            # Update local index
+            if updated:
+                idx_dir = WORKFLOWS_DIR / "manifests"
+                idx_dir.mkdir(parents=True, exist_ok=True)
+                async with httpx.AsyncClient(timeout=10) as c2:
+                    idx_r = await c2.get(f"{REPO_BASE}/manifests/index.json")
+                    if idx_r.status_code == 200:
+                        (idx_dir / "index.json").write_text(idx_r.text)
+
+            return {"updated": updated, "checked": len(remote_index)}
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
+# ── Node Manager endpoints ───────────────────────────────────────────────────
+
+
+@app.get("/api/admin/nodes")
+async def list_nodes(_=Depends(require_auth)):
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{COMFY_URL}/object_info")
+            r.raise_for_status()
+            object_info = r.json()
+    except Exception as e:
+        raise HTTPException(503, f"ComfyUI unreachable: {str(e)}")
+
+    # Group nodes by package using cnr_id or python_module
+    packages = {}
+    for node_name, node_info in object_info.items():
+        # Try to determine package from node info
+        pkg_name = "ComfyUI Core"
+        if isinstance(node_info, dict):
+            # Modern ComfyUI includes python_module
+            module = node_info.get("python_module", "")
+            if "custom_nodes" in module:
+                parts = module.split(".")
+                idx = parts.index("custom_nodes") if "custom_nodes" in parts else -1
+                if idx >= 0 and idx + 1 < len(parts):
+                    pkg_name = parts[idx + 1]
+            elif module.startswith("nodes"):
+                pkg_name = "ComfyUI Core"
+
+        if pkg_name not in packages:
+            packages[pkg_name] = {"name": pkg_name, "nodes": [], "node_count": 0}
+        packages[pkg_name]["nodes"].append(node_name)
+        packages[pkg_name]["node_count"] += 1
+
+    # Sort packages by name, nodes within each package
+    pkg_list = sorted(packages.values(), key=lambda p: p["name"])
+    for pkg in pkg_list:
+        pkg["nodes"].sort()
+
+    return {
+        "packages": pkg_list,
+        "total_nodes": len(object_info),
+        "total_packages": len(pkg_list),
+    }
+
+
+@app.post("/api/admin/nodes/install")
+async def install_node(body: dict, _=Depends(require_auth)):
+    repo_url = body.get("repo_url", "").strip()
+    if not repo_url or not repo_url.startswith("https://"):
+        raise HTTPException(400, "Invalid repo URL")
+
+    custom_nodes_dir = Path(COMFYUI_DIR) / "custom_nodes"
+    custom_nodes_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract repo name
+    name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+    dest = custom_nodes_dir / name
+
+    if dest.exists():
+        return {"status": "already_installed", "name": name}
+
+    try:
+        # Clone
+        subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, str(dest)],
+            check=True, capture_output=True, text=True, timeout=120
+        )
+
+        # Install requirements
+        req = dest / "requirements.txt"
+        if req.exists():
+            subprocess.run(
+                ["pip", "install", "-r", str(req)],
+                check=True, capture_output=True, text=True, timeout=300
+            )
+
+        # Run install.py if exists
+        install_py = dest / "install.py"
+        if install_py.exists():
+            subprocess.run(
+                ["python", str(install_py)],
+                check=True, capture_output=True, text=True, timeout=300,
+                cwd=str(dest)
+            )
+
+        return {"status": "installed", "name": name, "restart_required": True}
+    except subprocess.CalledProcessError as e:
+        # Clean up on failure
+        if dest.exists():
+            import shutil as sh
+            sh.rmtree(dest, ignore_errors=True)
+        raise HTTPException(500, f"Installation failed: {e.stderr[:500]}")
+    except subprocess.TimeoutExpired:
+        if dest.exists():
+            import shutil as sh
+            sh.rmtree(dest, ignore_errors=True)
+        raise HTTPException(500, "Installation timed out")
+
+
+# ── Workflow Runner endpoints ────────────────────────────────────────────────
+
+
+@app.get("/api/run/{workflow_id}")
+async def get_runner_manifest(workflow_id: str, _=Depends(require_auth)):
+    index = _load_workflows_index()
+    entry = next((e for e in index if e["id"] == workflow_id), None)
+    if not entry:
+        raise HTTPException(404)
+    manifest = _load_manifest(entry["manifest"])
+    if not manifest:
+        raise HTTPException(404)
+    return manifest
+
+
+@app.post("/api/run/{workflow_id}/execute")
+async def execute_workflow(
+    workflow_id: str,
+    _=Depends(require_auth),
+    input_image: Optional[UploadFile] = File(None),
+    params: str = Form("{}"),
+):
+    # Load manifest and workflow
+    index = _load_workflows_index()
+    entry = next((e for e in index if e["id"] == workflow_id), None)
+    if not entry:
+        raise HTTPException(404)
+
+    manifest = _load_manifest(entry["manifest"])
+    if not manifest:
+        raise HTTPException(404)
+
+    wf_path = _workflows_path(f"api/{manifest['workflow_file']}")
+    if not wf_path.exists():
+        raise HTTPException(404, "Workflow JSON not found")
+
+    workflow = json.loads(wf_path.read_text())
+    form_params = json.loads(params)
+
+    # Upload image to ComfyUI if provided
+    if input_image:
+        image_bytes = await input_image.read()
+        ext = input_image.filename.rsplit(".", 1)[-1] if "." in (input_image.filename or "") else "png"
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                f"{COMFY_URL}/upload/image",
+                files={"image": (unique_name, image_bytes, input_image.content_type or "image/png")},
+                data={"overwrite": "true"},
+            )
+            r.raise_for_status()
+            uploaded_name = r.json()["name"]
+
+        # Find image input in manifest and set it
+        for inp in manifest.get("inputs", []):
+            if inp["type"] == "image":
+                node_id = str(inp["node_id"])
+                field = inp["field"]
+                if node_id in workflow:
+                    workflow[node_id]["inputs"][field] = uploaded_name
+
+    # Apply form parameters
+    for inp in manifest.get("inputs", []):
+        if inp["id"] in form_params:
+            node_id = str(inp["node_id"])
+            field = inp["field"]
+            value = form_params[inp["id"]]
+
+            if node_id in workflow:
+                # Type casting
+                if inp["type"] == "int":
+                    value = int(value)
+                elif inp["type"] == "float":
+                    value = float(value)
+                elif inp["type"] == "select":
+                    value = int(value) if isinstance(value, str) and value.isdigit() else value
+                elif inp["type"] == "seed":
+                    value = int(value)
+                    if value == -1:
+                        value = random.randint(0, 2**53)
+
+                workflow[node_id]["inputs"][field] = value
+
+    # Handle seed -1 for seed type inputs not in form_params
+    for inp in manifest.get("inputs", []):
+        if inp["type"] == "seed" and inp["id"] not in form_params:
+            node_id = str(inp["node_id"])
+            field = inp["field"]
+            if node_id in workflow:
+                current = workflow[node_id]["inputs"].get(field, -1)
+                if current == -1:
+                    workflow[node_id]["inputs"][field] = random.randint(0, 2**53)
+
+    # Send to ComfyUI
+    client_id = uuid.uuid4().hex
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"{COMFY_URL}/prompt",
+            json={"prompt": workflow, "client_id": client_id},
+        )
+        r.raise_for_status()
+        data = r.json()
+
+    if "error" in data:
+        raise HTTPException(400, str(data["error"]))
+
+    return {"prompt_id": data["prompt_id"], "client_id": client_id}
+
+
+@app.get("/api/run/status/{prompt_id}")
+async def run_status(prompt_id: str, _=Depends(require_auth)):
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
+        r.raise_for_status()
+        history = r.json()
+
+    if prompt_id not in history:
+        # Check if in queue
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                qr = await client.get(f"{COMFY_URL}/queue")
+                qr.raise_for_status()
+                queue_data = qr.json()
+                running = queue_data.get("queue_running", [])
+                pending = queue_data.get("queue_pending", [])
+
+                for item in running:
+                    if len(item) > 1 and item[1] == prompt_id:
+                        return {"status": "running", "progress": None}
+                for item in pending:
+                    if len(item) > 1 and item[1] == prompt_id:
+                        return {"status": "pending", "progress": None}
+        except Exception:
+            pass
+        return {"status": "pending", "progress": None}
+
+    job = history[prompt_id]
+    status_str = job.get("status", {}).get("status_str", "")
+
+    if status_str == "error":
+        messages = job.get("status", {}).get("messages", [])
+        return {"status": "error", "error": str(messages)}
+
+    # Find outputs
+    outputs = job.get("outputs", {})
+    result_outputs = {}
+
+    for node_id, node_out in outputs.items():
+        # Check for videos
+        for key in ("gifs", "videos"):
+            if key in node_out and node_out[key]:
+                info = node_out[key][0]
+                result_outputs["video"] = {
+                    "filename": info["filename"],
+                    "subfolder": info.get("subfolder", ""),
+                    "type": info.get("type", "output"),
+                }
+                break
+        # Check for images
+        if "images" in node_out and node_out["images"]:
+            info = node_out["images"][0]
+            result_outputs["image"] = {
+                "filename": info["filename"],
+                "subfolder": info.get("subfolder", ""),
+                "type": info.get("type", "output"),
+            }
+
+    return {
+        "status": "completed",
+        "outputs": result_outputs,
+    }
+
+
+@app.get("/api/run/result/{prompt_id}")
+async def run_result(prompt_id: str, output_type: str = "video", _=Depends(require_auth)):
+    # Get status to find the output file
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
+        r.raise_for_status()
+        history = r.json()
+
+    if prompt_id not in history:
+        raise HTTPException(404, "Result not ready")
+
+    outputs = history[prompt_id].get("outputs", {})
+    file_info = None
+
+    for node_id, node_out in outputs.items():
+        for key in ("gifs", "videos"):
+            if key in node_out and node_out[key]:
+                file_info = node_out[key][0]
+                break
+        if file_info:
+            break
+        if "images" in node_out and node_out["images"]:
+            file_info = node_out["images"][0]
+            break
+
+    if not file_info:
+        raise HTTPException(404, "No output found")
+
+    params = {"filename": file_info["filename"], "type": file_info.get("type", "output")}
+    if file_info.get("subfolder"):
+        params["subfolder"] = file_info["subfolder"]
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.get(f"{COMFY_URL}/view", params=params)
+        r.raise_for_status()
+        content = r.content
+
+    # Determine content type
+    fname = file_info["filename"]
+    if fname.endswith(".mp4"):
+        media_type = "video/mp4"
+    elif fname.endswith(".webm"):
+        media_type = "video/webm"
+    elif fname.endswith(".png"):
+        media_type = "image/png"
+    elif fname.endswith(".jpg") or fname.endswith(".jpeg"):
+        media_type = "image/jpeg"
+    else:
+        media_type = "application/octet-stream"
+
+    return StreamingResponse(
+        iter([content]),
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
+    )
+
+
 # ── HTML pages ───────────────────────────────────────────────────────────────
+
+@app.get("/admin/workflows", response_class=HTMLResponse)
+async def serve_workflows(_=Depends(require_auth)):
+    return HTMLResponse(_www("workflows.html").read_text())
+
+
+@app.get("/admin/nodes", response_class=HTMLResponse)
+async def serve_nodes(_=Depends(require_auth)):
+    return HTMLResponse(_www("nodes.html").read_text())
+
+
+@app.get("/run/{workflow_id}", response_class=HTMLResponse)
+async def serve_runner(workflow_id: str, _=Depends(require_auth)):
+    return HTMLResponse(_www("runner.html").read_text())
+
+
+@app.get("/static/{filename}")
+async def serve_static(filename: str):
+    """Serve static assets (CSS, JS) from www directory — no auth required."""
+    p = _www(filename)
+    if not p.exists():
+        raise HTTPException(404)
+    content = p.read_text()
+    media = "text/css" if filename.endswith(".css") else "application/javascript"
+    return HTMLResponse(content, media_type=media)
+
 
 @app.get("/admin/models", response_class=HTMLResponse)
 async def serve_admin_models(_: HTTPBasicCredentials = Depends(require_auth)):
