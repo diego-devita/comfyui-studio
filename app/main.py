@@ -1389,6 +1389,15 @@ async def execute_workflow(
                 if current == -1:
                     workflow[node_id]["inputs"][field] = random.randint(0, 2**53)
 
+    # Collect resolved seed values
+    used_seeds = {}
+    for inp in manifest.get("inputs", []):
+        if inp["type"] == "seed":
+            node_id = str(inp["node_id"])
+            field = inp["field"]
+            if node_id in workflow:
+                used_seeds[inp["id"]] = workflow[node_id]["inputs"].get(field)
+
     # Send to ComfyUI
     client_id = uuid.uuid4().hex
     async with httpx.AsyncClient(timeout=30) as client:
@@ -1410,7 +1419,7 @@ async def execute_workflow(
         daemon=True,
     ).start()
 
-    return {"prompt_id": prompt_id, "client_id": client_id}
+    return {"prompt_id": prompt_id, "client_id": client_id, "seeds": used_seeds}
 
 
 @app.get("/api/run/status/{prompt_id}")
