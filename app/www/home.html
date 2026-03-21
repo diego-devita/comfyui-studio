@@ -301,7 +301,7 @@
   // ── Render status ──
   function renderStatus(data) {
     // Version
-    const version = data.version || '3.0.0';
+    const version = data.app_version || data.version || '0.0.0';
     $versionTag.textContent = 'v' + version;
 
     // Date
@@ -309,63 +309,38 @@
     $lastUpdated.textContent = typeof date === 'string' ? date.substring(0, 10) : date;
 
     // Component table
-    const components = data.components || [];
+    const compObj = data.components || {};
+    // Support both array and object formats
+    const components = Array.isArray(compObj)
+      ? compObj
+      : Object.entries(compObj).map(([key, val]) => Object.assign({ name: key }, val));
     $compBody.innerHTML = '';
 
-    if (components.length > 0) {
-      components.forEach(c => {
-        const row = document.createElement('tr');
-        const color = statusDotColor(c.status);
-        row.innerHTML =
-          '<td>' + escHtml(c.name || '--') + '</td>' +
-          '<td>' + escHtml(c.version || '--') + '</td>' +
-          '<td>' + escHtml(c.date ? c.date.substring(0, 10) : '--') + '</td>' +
-          '<td>' + dotHtml(color, c.status_text || c.status || '--') + '</td>';
-        $compBody.appendChild(row);
-      });
-    } else {
-      // Build default rows from top-level data
-      const rows = [
-        { name: 'Backend', version: version, date: date, status: 'Running', color: 'green' },
-        { name: 'Frontend', version: version, date: date, status: 'Loaded', color: 'green' },
-      ];
-      if (data.models) {
-        rows.push({
-          name: 'Models Catalog',
-          version: data.models.catalog_version || '1.0.0',
-          date: date,
-          status: (data.models.total || 0) + ' models',
-          color: 'green'
-        });
-      }
-      if (data.workflows) {
-        rows.push({
-          name: 'Workflows',
-          version: data.workflows.catalog_version || '1.0.0',
-          date: date,
-          status: (data.workflows.total || 0) + ' workflows',
-          color: 'green'
-        });
-      }
-      rows.forEach(r => {
-        const row = document.createElement('tr');
-        row.innerHTML =
-          '<td>' + escHtml(r.name) + '</td>' +
-          '<td>' + escHtml(r.version) + '</td>' +
-          '<td>' + escHtml(typeof r.date === 'string' ? r.date.substring(0, 10) : String(r.date)) + '</td>' +
-          '<td>' + dotHtml(r.color, r.status) + '</td>';
-        $compBody.appendChild(row);
-      });
-    }
+    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', workflows: 'Workflows' };
+    const statusMap = { running: 'Running', loaded: 'Loaded' };
+
+    components.forEach(c => {
+      const row = document.createElement('tr');
+      const displayName = labelMap[c.name] || c.name || '--';
+      const displayStatus = c.status_text || statusMap[c.status] || c.status || '--';
+      const displayDate = c.date ? c.date.substring(0, 10) : (typeof date === 'string' ? date.substring(0, 10) : '--');
+      const color = statusDotColor(c.status || 'ok');
+      row.innerHTML =
+        '<td>' + escHtml(displayName) + '</td>' +
+        '<td>' + escHtml(c.version || '--') + '</td>' +
+        '<td>' + escHtml(displayDate) + '</td>' +
+        '<td>' + dotHtml(color, displayStatus) + '</td>';
+      $compBody.appendChild(row);
+    });
 
     // Stat cards
-    const models = data.models || {};
-    $modelsCount.textContent = models.total || 0;
+    const models = data.models || compObj.models || {};
+    $modelsCount.textContent = models.total || models.count || 0;
     $modelsSub.textContent = (models.present || 0) + ' present';
 
-    const workflows = data.workflows || {};
-    $workflowsCount.textContent = workflows.total || 0;
-    $workflowsSub.textContent = (workflows.ready || 0) + ' ready';
+    const workflows = data.workflows || compObj.workflows || {};
+    $workflowsCount.textContent = workflows.total || workflows.count || 0;
+    $workflowsSub.textContent = (workflows.ready || workflows.count || 0) + ' ready';
 
     const nodes = data.nodes || {};
     $nodesCount.textContent = nodes.total || 0;
@@ -373,12 +348,12 @@
 
     // ComfyUI status
     const comfy = data.comfyui || {};
-    const comfyRunning = comfy.running !== false;
+    const comfyRunning = comfy.status === 'running' || comfy.running === true;
     const comfyPort = comfy.port || 8188;
     if (comfyRunning) {
       $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort);
     } else {
-      $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: Not running');
+      $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: ' + (comfy.status || 'Not running'));
     }
 
     // Disk info
