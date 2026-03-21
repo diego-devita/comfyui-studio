@@ -777,14 +777,12 @@ async def system_status():
                 "status": "loaded",
             },
             "models": {
-                "version": _models_data.get("version", "0.0.0"),
-                "date": _models_data.get("date", ""),
+                "version": ver.get("components", {}).get("models", {}).get("version", "0.0.0"),
                 "count": total_models,
                 "present": present_models,
             },
             "workflows": {
-                "version": _load_workflows_index_raw().get("version", "0.0.0"),
-                "date": _load_workflows_index_raw().get("date", ""),
+                "version": ver.get("components", {}).get("workflows", {}).get("version", "0.0.0"),
                 "count": total_workflows,
             },
         },
