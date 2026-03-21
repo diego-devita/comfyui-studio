@@ -5,7 +5,7 @@ date: "2026-03-21"
 description: "Image to video with WAN 2.2 14B FP8 models, dual-pass sampling (high+low noise), 4-step LightX2V LoRA acceleration, auto aspect ratio from input image, Lanczos upscale, RIFE 4x frame interpolation to 60fps."
 author: "comfyui-studio"
 
-workflow_file: "wan22_i2v_fp8.json"
+workflow_file: "workflow.json"
 
 inputs:
   - id: input_image

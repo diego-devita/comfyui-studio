@@ -496,24 +496,33 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_auth)):
 
 
 def _workflows_path(subpath: str) -> Path:
+    """Resolve a workflow subpath: /workspace/workflows first, /app/workflows fallback."""
     p = WORKFLOWS_DIR / subpath
     if p.exists():
         return p
     return WORKFLOWS_DIR_DEFAULT / subpath
 
 
-def _load_manifest(manifest_file: str) -> dict:
-    """Load a YAML manifest file."""
-    p = _workflows_path(f"manifests/{manifest_file}")
+def _load_manifest(workflow_id: str) -> dict:
+    """Load manifest.yaml for a workflow by its ID."""
+    p = _workflows_path(f"{workflow_id}/manifest.yaml")
     if not p.exists():
         return None
     with open(p) as f:
         return yaml.safe_load(f)
 
 
+def _load_workflow_json(workflow_id: str) -> dict:
+    """Load workflow.json for a workflow by its ID."""
+    p = _workflows_path(f"{workflow_id}/workflow.json")
+    if not p.exists():
+        return None
+    return json.loads(p.read_text())
+
+
 def _load_workflows_index() -> list:
     """Load the workflows index.json."""
-    p = _workflows_path("manifests/index.json")
+    p = _workflows_path("index.json")
     if not p.exists():
         return []
     return json.loads(p.read_text()).get("workflows", [])
@@ -556,7 +565,7 @@ async def list_workflows(_=Depends(require_auth)):
 
     result = []
     for entry in index:
-        manifest = _load_manifest(entry["manifest"])
+        manifest = _load_manifest(entry["id"])
         if not manifest:
             continue
 
@@ -602,7 +611,7 @@ async def get_workflow(workflow_id: str, _=Depends(require_auth)):
     if not entry:
         raise HTTPException(404, f"Workflow '{workflow_id}' not found")
 
-    manifest = _load_manifest(entry["manifest"])
+    manifest = _load_manifest(entry["id"])
     if not manifest:
         raise HTTPException(404, f"Manifest for '{workflow_id}' not found")
 
@@ -635,7 +644,7 @@ async def install_workflow_models(workflow_id: str, _=Depends(require_auth)):
     if not entry:
         raise HTTPException(404)
 
-    manifest = _load_manifest(entry["manifest"])
+    manifest = _load_manifest(entry["id"])
     if not manifest:
         raise HTTPException(404)
 
@@ -657,12 +666,15 @@ async def install_workflow_models(workflow_id: str, _=Depends(require_auth)):
 
 @app.post("/api/admin/workflows/sync")
 async def sync_workflows(_=Depends(require_auth)):
-    REPO_BASE = "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows"
+    REPO_BASE = os.environ.get(
+        "WORKFLOWS_REPO",
+        "https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows",
+    )
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             # Fetch remote index
-            r = await client.get(f"{REPO_BASE}/manifests/index.json")
+            r = await client.get(f"{REPO_BASE}/index.json")
             r.raise_for_status()
             remote_index = r.json().get("workflows", [])
 
@@ -671,37 +683,31 @@ async def sync_workflows(_=Depends(require_auth)):
 
             updated = []
             for remote in remote_index:
-                local = local_index.get(remote["id"])
+                wf_id = remote["id"]
+                local = local_index.get(wf_id)
                 if not local or remote["version"] > local["version"]:
-                    # Download manifest
-                    mr = await client.get(f"{REPO_BASE}/manifests/{remote['manifest']}")
+                    # Ensure workspace directory for this workflow
+                    wf_dir = WORKFLOWS_DIR / wf_id
+                    wf_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Download manifest.yaml
+                    mr = await client.get(f"{REPO_BASE}/{wf_id}/manifest.yaml")
                     mr.raise_for_status()
+                    (wf_dir / "manifest.yaml").write_text(mr.text)
 
-                    # Ensure workspace directories exist
-                    manifests_dir = WORKFLOWS_DIR / "manifests"
-                    manifests_dir.mkdir(parents=True, exist_ok=True)
-                    (manifests_dir / remote["manifest"]).write_text(mr.text)
+                    # Download workflow.json
+                    wr = await client.get(f"{REPO_BASE}/{wf_id}/workflow.json")
+                    if wr.status_code == 200:
+                        (wf_dir / "workflow.json").write_text(wr.text)
 
-                    # Download workflow JSON from manifest
-                    manifest_data = yaml.safe_load(mr.text)
-                    wf_file = manifest_data.get("workflow_file", "")
-                    if wf_file:
-                        wr = await client.get(f"{REPO_BASE}/api/{wf_file}")
-                        if wr.status_code == 200:
-                            api_dir = WORKFLOWS_DIR / "api"
-                            api_dir.mkdir(parents=True, exist_ok=True)
-                            (api_dir / wf_file).write_text(wr.text)
-
-                    updated.append(remote["id"])
+                    updated.append(wf_id)
 
             # Update local index
             if updated:
-                idx_dir = WORKFLOWS_DIR / "manifests"
-                idx_dir.mkdir(parents=True, exist_ok=True)
-                async with httpx.AsyncClient(timeout=10) as c2:
-                    idx_r = await c2.get(f"{REPO_BASE}/manifests/index.json")
-                    if idx_r.status_code == 200:
-                        (idx_dir / "index.json").write_text(idx_r.text)
+                WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+                idx_r = await client.get(f"{REPO_BASE}/index.json")
+                if idx_r.status_code == 200:
+                    (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
 
             return {"updated": updated, "checked": len(remote_index)}
     except Exception as e:
@@ -817,7 +823,7 @@ async def get_runner_manifest(workflow_id: str, _=Depends(require_auth)):
     entry = next((e for e in index if e["id"] == workflow_id), None)
     if not entry:
         raise HTTPException(404)
-    manifest = _load_manifest(entry["manifest"])
+    manifest = _load_manifest(entry["id"])
     if not manifest:
         raise HTTPException(404)
     return manifest
@@ -836,15 +842,13 @@ async def execute_workflow(
     if not entry:
         raise HTTPException(404)
 
-    manifest = _load_manifest(entry["manifest"])
+    manifest = _load_manifest(entry["id"])
     if not manifest:
         raise HTTPException(404)
 
-    wf_path = _workflows_path(f"api/{manifest['workflow_file']}")
-    if not wf_path.exists():
+    workflow = _load_workflow_json(workflow_id)
+    if not workflow:
         raise HTTPException(404, "Workflow JSON not found")
-
-    workflow = json.loads(wf_path.read_text())
     form_params = json.loads(params)
 
     # Upload image to ComfyUI if provided

@@ -1,6 +1,0 @@
-{
-  "workflows": [
-    {"id": "wan22-i2v-fp8", "version": "1.0.0", "manifest": "wan22_i2v_fp8.yaml"},
-    {"id": "wan22-i2v-kijai", "version": "1.0.0", "manifest": "wan22_i2v_kijai.yaml"}
-  ]
-}

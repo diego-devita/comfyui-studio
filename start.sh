@@ -5,12 +5,36 @@ echo "=== ComfyUI Studio — starting ==="
 
 COMFYUI_IMAGE="/comfyui"
 COMFYUI_VOLUME="/workspace/ComfyUI"
+WORKFLOWS_REPO="${WORKFLOWS_REPO:-https://raw.githubusercontent.com/diego-devita/comfyui-studio/main/workflows}"
+
+# ── STEP 0: Fetch workflows from repo ────────────────────────────
+# Workflows are NOT baked into the Docker image. They are fetched
+# from the configured repo on first boot and updated via Sync.
+if [ ! -f "/workspace/workflows/index.json" ]; then
+    echo "[0/3] First boot — fetching workflows from repo..."
+    mkdir -p /workspace/workflows
+    if curl -sf "${WORKFLOWS_REPO}/index.json" -o /workspace/workflows/index.json; then
+        # Parse index and download each workflow
+        for wf_id in $(python3 -c "import json,sys; [print(w['id']) for w in json.load(open('/workspace/workflows/index.json')).get('workflows',[])]" 2>/dev/null); do
+            mkdir -p "/workspace/workflows/${wf_id}"
+            curl -sf "${WORKFLOWS_REPO}/${wf_id}/manifest.yaml" -o "/workspace/workflows/${wf_id}/manifest.yaml" || true
+            curl -sf "${WORKFLOWS_REPO}/${wf_id}/workflow.json" -o "/workspace/workflows/${wf_id}/workflow.json" || true
+            echo "      Fetched workflow: ${wf_id}"
+        done
+        echo "      OK — workflows fetched"
+    else
+        echo "      WARNING: Could not fetch workflows from repo. Use Sync in the UI later."
+    fi
+else
+    echo "[0/3] Workflows already present — skipping fetch"
+fi
 
 # ── STEP 1: First boot — copy ComfyUI from image to volume ──────
 # /workspace is the RunPod persistent Network Volume.
 # On first boot /workspace/ComfyUI does not exist yet.
 if [ ! -d "${COMFYUI_VOLUME}" ]; then
     echo "[1/3] First boot — copying ComfyUI to /workspace..."
+
     cp -r "${COMFYUI_IMAGE}" "${COMFYUI_VOLUME}"
     echo "      OK — ComfyUI copied to ${COMFYUI_VOLUME}"
 else
@@ -67,7 +91,9 @@ echo "      Model manager PID: ${ADMIN_PID}"
 
 echo "=== Services started ==="
 echo "    ComfyUI:       https://PODID-8188.proxy.runpod.net"
-echo "    Model Manager: https://PODID-8000.proxy.runpod.net/admin/models"
+echo "    Models:        https://PODID-8000.proxy.runpod.net/admin/models"
+echo "    Workflows:     https://PODID-8000.proxy.runpod.net/admin/workflows"
+echo "    Nodes:         https://PODID-8000.proxy.runpod.net/admin/nodes"
 
 # Keep the container alive — exit if ComfyUI dies
 wait ${COMFY_PID}

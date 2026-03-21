@@ -5,7 +5,7 @@ date: "2026-03-21"
 description: "Image to video using Kijai's WanVideoWrapper nodes with FP8 models, SageAttention, torch compile, block swap for VRAM management, LightX2V LoRA, dual-pass sampling, CFG scheduling."
 author: "comfyui-studio (based on Kijai's example workflow)"
 
-workflow_file: "wan22_i2v_kijai.json"
+workflow_file: "workflow.json"
 
 inputs:
   - id: input_image
