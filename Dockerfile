@@ -140,12 +140,22 @@ ENV PIP_NO_CACHE_DIR=1
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 # ── system dependencies ───────────────────────────────────
+# build-essential + cmake + gfortran + ninja: compile dlib, C++ extensions
+# libopenblas-dev + liblapack-dev: BLAS/LAPACK for dlib, scipy, numpy
+# ffmpeg: video encode/decode for VideoHelperSuite
+# libgl1 + libglib2.0-0 + libsm6 + libxext6 + libxrender1: OpenCV runtime
 RUN apt-get update && apt-get install -y \
     python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-venv \
     python${PYTHON_VERSION}-dev \
     python3-pip \
     build-essential \
+    cmake \
+    gfortran \
+    ninja-build \
+    pkg-config \
+    libopenblas-dev \
+    liblapack-dev \
     git \
     wget \
     curl \
@@ -166,7 +176,10 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # ── PyTorch (matched to CUDA via PYTORCH_INDEX) ──────────
-RUN pip install --upgrade pip setuptools wheel && \
+# cmake pip package: ensures the Python cmake wrapper works correctly.
+# Some nodes (was-node-suite) install cmake via pip which can create
+# a broken wrapper; installing it explicitly here prevents that.
+RUN pip install --upgrade pip setuptools wheel cmake && \
     pip install \
         torch \
         torchvision \
