@@ -1198,6 +1198,51 @@ async def sync_workflows():
         raise HTTPException(500, f"Sync failed: {str(e)}")
 
 
+@app.post("/api/admin/workflows/sync-reference")
+async def sync_reference_workflows():
+    """Fetch reference workflows from repo and copy to ComfyUI's studio-reference folder."""
+    try:
+        # Destination: ComfyUI user workflows
+        comfy_wf_dir = Path(COMFYUI_DIR) / "user" / "default" / "workflows" / "studio-reference"
+
+        # Wipe and recreate
+        if comfy_wf_dir.exists():
+            shutil.rmtree(comfy_wf_dir)
+        comfy_wf_dir.mkdir(parents=True, exist_ok=True)
+
+        # Fetch file list from repo (GitHub API)
+        repo_url = f"{REPO_BASE}/workflows/reference"
+        # Known reference files — listed explicitly since raw.githubusercontent doesn't support directory listing
+        ref_files = []
+        # Try local first (if available), then fall back to repo
+        local_ref = WORKFLOWS_DIR / "reference"
+        if not local_ref.exists():
+            local_ref = Path("/app/workflows/reference")
+
+        if local_ref.exists():
+            ref_files = [f.name for f in local_ref.glob("*.json")]
+            for fname in ref_files:
+                shutil.copy2(local_ref / fname, comfy_wf_dir / fname)
+        else:
+            # Fetch from repo — we need to know the filenames
+            # Use the workflows index to find reference files
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Try fetching known reference files
+                for fname in [
+                    "comfyorg_wan22_14B_i2v.json",
+                    "kijai_wan22_14B_i2v.json",
+                    "lightx2v_4step_kijai.json",
+                ]:
+                    r = await client.get(f"{REPO_BASE}/workflows/reference/{fname}")
+                    if r.status_code == 200:
+                        (comfy_wf_dir / fname).write_text(r.text)
+                        ref_files.append(fname)
+
+        return {"status": "ok", "count": len(ref_files), "files": ref_files}
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
 # ── Node Manager endpoints ───────────────────────────────────────────────────
 
 
