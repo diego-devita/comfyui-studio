@@ -103,5 +103,4 @@ https://github.com/civitai/civitai_comfy_nodes.git
 https://github.com/X-T-E-R/ComfyUI-EasyCivitai-XTNodes.git
 
 # Full CivitAI browser inside ComfyUI — search models, view trends, apply recipes
-# Uncomment if you want it baked in; otherwise install via ComfyUI-Manager at runtime
-# https://github.com/BAIKEMARK/ComfyUI-Civitai-Toolkit.git
+https://github.com/BAIKEMARK/ComfyUI-Civitai-Toolkit.git
