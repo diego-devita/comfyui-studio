@@ -859,11 +859,23 @@ async def system_update():
             if "models" in updated:
                 _reload_models()
 
-        return {
+        result = {
             "updated": updated,
             "restart_needed": restart_needed,
             "message": f"Updated: {', '.join(updated)}" if updated else "Everything up to date",
         }
+
+        if restart_needed:
+            # Schedule self-restart after returning the response
+            async def _restart():
+                await asyncio.sleep(1)
+                os.execv(
+                    shutil.which("uvicorn"),
+                    ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"],
+                )
+            asyncio.get_event_loop().create_task(_restart())
+
+        return result
     except Exception as e:
         raise HTTPException(500, f"Update failed: {str(e)}")
 
