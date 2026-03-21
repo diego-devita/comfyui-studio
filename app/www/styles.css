@@ -266,3 +266,74 @@ body::before {
   color: var(--muted);
 }
 .empty-state p { font-size: 14px; margin-top: 8px; }
+
+/* ── Telemetry Gauges ── */
+.telemetry-panel {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 0;
+}
+.gauge-card {
+  flex: 1;
+  min-width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.gauge-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+.gauge-ring svg {
+  width: 80px;
+  height: 80px;
+  transform: rotate(-90deg);
+}
+.gauge-ring circle {
+  fill: none;
+  stroke-width: 6;
+  cx: 40;
+  cy: 40;
+  r: 34;
+}
+.gauge-ring .gauge-bg { stroke: var(--border); }
+.gauge-ring .gauge-fill {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 213.6;
+  stroke-dashoffset: 213.6;
+  transition: stroke-dashoffset 0.6s ease;
+}
+.gauge-ring .gauge-fill.warn { stroke: var(--queued); }
+.gauge-ring .gauge-fill.crit { stroke: var(--error); }
+.gauge-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.gauge-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+.gauge-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}

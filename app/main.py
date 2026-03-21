@@ -1298,6 +1298,72 @@ async def install_node(body: dict):
         raise HTTPException(500, "Installation timed out")
 
 
+# ── Telemetry endpoint ───────────────────────────────────────────────────────
+
+
+@app.get("/api/admin/telemetry")
+async def telemetry():
+    result = {
+        "gpu": None,
+        "cpu_percent": None,
+        "ram_total": 0,
+        "ram_used": 0,
+        "ram_percent": 0,
+    }
+
+    # GPU info from ComfyUI system_stats
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(f"{COMFY_URL}/system_stats")
+            if r.status_code == 200:
+                stats = r.json()
+                sys_info = stats.get("system", {})
+                result["ram_total"] = sys_info.get("ram_total", 0)
+                ram_free = sys_info.get("ram_free", 0)
+                result["ram_used"] = result["ram_total"] - ram_free
+                result["ram_percent"] = round(result["ram_used"] / result["ram_total"] * 100, 1) if result["ram_total"] > 0 else 0
+
+                devices = stats.get("devices", [])
+                if devices:
+                    dev = devices[0]
+                    vram_total = dev.get("vram_total", 0)
+                    vram_free = dev.get("vram_free", 0)
+                    vram_used = vram_total - vram_free
+                    result["gpu"] = {
+                        "name": dev.get("name", "").split(" : ")[0].replace("cuda:0 ", ""),
+                        "vram_total": vram_total,
+                        "vram_used": vram_used,
+                        "vram_percent": round(vram_used / vram_total * 100, 1) if vram_total > 0 else 0,
+                    }
+    except Exception:
+        pass
+
+    # GPU utilization + temperature from nvidia-smi
+    try:
+        nvsmi = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if nvsmi.returncode == 0:
+            parts = nvsmi.stdout.strip().split(", ")
+            if len(parts) >= 2 and result["gpu"]:
+                result["gpu"]["util_percent"] = int(parts[0])
+                result["gpu"]["temp_c"] = int(parts[1])
+    except Exception:
+        pass
+
+    # CPU load
+    try:
+        with open("/proc/loadavg") as f:
+            load1 = float(f.read().split()[0])
+        cpu_count = os.cpu_count() or 1
+        result["cpu_percent"] = round(load1 / cpu_count * 100, 1)
+    except Exception:
+        pass
+
+    return result
+
+
 # ── Workflow Runner endpoints ────────────────────────────────────────────────
 
 

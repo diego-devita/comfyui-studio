@@ -231,6 +231,9 @@
       </div>
     </div>
 
+    <!-- Telemetry -->
+    <div class="telemetry-panel" id="telemetryPanel"></div>
+
     <!-- System Info -->
     <div class="sys-info" id="sysInfo">
       <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
@@ -443,8 +446,65 @@
     $updateBtn.textContent = 'Check for Updates';
   });
 
+  // ── Telemetry ──
+  const $telemetryPanel = document.getElementById('telemetryPanel');
+
+  function makeGauge(id, label) {
+    return '<div class="gauge-card" id="' + id + '">' +
+      '<div class="gauge-ring">' +
+        '<svg viewBox="0 0 80 80"><circle class="gauge-bg" /><circle class="gauge-fill" /></svg>' +
+        '<div class="gauge-value">--</div>' +
+      '</div>' +
+      '<div class="gauge-label">' + label + '</div>' +
+      '<div class="gauge-sub">&nbsp;</div>' +
+    '</div>';
+  }
+
+  function updateGauge(id, pct, sub) {
+    var card = document.getElementById(id);
+    if (!card) return;
+    var fill = card.querySelector('.gauge-fill');
+    var val = card.querySelector('.gauge-value');
+    var subEl = card.querySelector('.gauge-sub');
+    var p = Math.max(0, Math.min(100, pct || 0));
+    var offset = 213.6 - (213.6 * p / 100);
+    fill.style.strokeDashoffset = offset;
+    fill.classList.remove('warn', 'crit');
+    if (p > 85) fill.classList.add('crit');
+    else if (p > 65) fill.classList.add('warn');
+    val.textContent = Math.round(p) + '%';
+    if (sub) subEl.textContent = sub;
+  }
+
+  function fmtGB(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
+
+  async function pollTelemetry() {
+    try {
+      var resp = await apiFetch('/api/admin/telemetry');
+      if (!resp.ok) return;
+      var d = await resp.json();
+
+      if (!$telemetryPanel.innerHTML) {
+        $telemetryPanel.innerHTML =
+          makeGauge('gGpu', 'GPU Load') +
+          makeGauge('gVram', 'VRAM') +
+          makeGauge('gRam', 'System RAM') +
+          makeGauge('gCpu', 'CPU');
+      }
+
+      if (d.gpu) {
+        updateGauge('gGpu', d.gpu.util_percent, d.gpu.name + (d.gpu.temp_c ? ' \u00b7 ' + d.gpu.temp_c + '\u00b0C' : ''));
+        updateGauge('gVram', d.gpu.vram_percent, fmtGB(d.gpu.vram_used) + ' / ' + fmtGB(d.gpu.vram_total));
+      }
+      updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
+      updateGauge('gCpu', d.cpu_percent, 'load');
+    } catch (_) {}
+  }
+
   // ── Boot ──
   initialLoad();
+  pollTelemetry();
+  setInterval(pollTelemetry, 3000);
 
 })();
 </script>
