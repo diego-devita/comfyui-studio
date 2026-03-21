@@ -43,7 +43,7 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 ┌─────────────────────────────────────────────────────────────┐
 │                     DOCKER IMAGE (build time)                │
 │                                                              │
-│   /comfyui        ComfyUI + 29 custom nodes                 │
+│   /comfyui        ComfyUI + 29 custom nodes (baked in)       │
 │   /app            Web app baseline (fallback)                │
 │   /start.sh       Boot script                                │
 │                                                              │
