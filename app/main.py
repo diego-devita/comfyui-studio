@@ -1511,16 +1511,27 @@ async def execute_workflow(
 
     # Send to ComfyUI
     client_id = uuid.uuid4().hex
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(
-            f"{COMFY_URL}/prompt",
-            json={"prompt": workflow, "client_id": client_id},
-        )
-        r.raise_for_status()
-        data = r.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                f"{COMFY_URL}/prompt",
+                json={"prompt": workflow, "client_id": client_id},
+            )
+            data = r.json()
+    except Exception as e:
+        raise HTTPException(500, f"ComfyUI unreachable: {str(e)}")
 
     if "error" in data:
-        raise HTTPException(400, str(data["error"]))
+        # Include node_errors if available
+        node_errors = data.get("node_errors", {})
+        detail = str(data["error"])
+        if node_errors:
+            for nid, nerr in node_errors.items():
+                title = workflow.get(nid, {}).get("_meta", {}).get("title", nid)
+                msgs = nerr.get("errors", [])
+                for m in msgs:
+                    detail += f" | {title}: {m.get('message', str(m))}"
+        raise HTTPException(400, detail)
 
     # Start WebSocket listener for progress tracking
     prompt_id = data["prompt_id"]

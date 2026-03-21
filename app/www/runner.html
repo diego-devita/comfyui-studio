@@ -837,14 +837,14 @@
         }
       }
 
-      $progressStep.textContent = 'Queued...';
+      $progressStep.textContent = 'Queued \u00b7 ' + currentPromptId.slice(0, 12) + '...';
       $progressFill.classList.add('indeterminate');
       startStatusPolling();
 
     } catch (e) {
       stopElapsedTimer();
       if (e.message !== 'auth') {
-        showExecError(e.message);
+        showExecError(e.message + (currentPromptId ? ' \u00b7 job: ' + currentPromptId : ''));
       }
       $progressPanel.classList.remove('visible');
       $generateBtn.disabled = false;
@@ -883,7 +883,8 @@
         if (totalSteps > 0) {
           label = node + ' \u00b7 step ' + step + '/' + totalSteps;
         }
-        $progressStep.textContent = label;
+        var jobHint = currentPromptId ? ' \u00b7 ' + currentPromptId.slice(0, 8) : '';
+        $progressStep.textContent = label + jobHint;
 
         // Always use the overall percent from backend
         $progressFill.classList.remove('indeterminate');
@@ -903,7 +904,7 @@
         stopPolling();
         stopElapsedTimer();
         $progressPanel.classList.remove('visible');
-        showExecError(data.error || data.message || 'Execution failed.');
+        showExecError((data.error || data.message || 'Execution failed.') + (currentPromptId ? ' \u00b7 job: ' + currentPromptId : ''));
         $generateBtn.disabled = false;
         $generateBtn.innerHTML = '&#9654; Generate';
 
