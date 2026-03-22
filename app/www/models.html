@@ -405,6 +405,26 @@
   .source-badge.huggingface { background: #1f2a1f; color: #a0d0a0; }
   .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
 
+  .model-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .model-link {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .model-link:hover { border-color: var(--accent); color: var(--accent); }
+
   .source-link {
     color: var(--muted);
     text-decoration: none;
@@ -1221,9 +1241,7 @@
     card.dataset.category = catId;
 
     const sourceUrl = makeSourceLink(m.url, m);
-    const linkHtml = sourceUrl
-      ? '<a class="source-link" href="' + escHtml(sourceUrl) + '" target="_blank" rel="noopener" title="Open source page">\u2197</a>'
-      : '';
+    // Old source link replaced by model-links badges
 
     card.innerHTML =
       '<div class="card-top">' +
@@ -1263,10 +1281,38 @@
     const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
     var versionHtml = m.civitai_version ? ' <span style="font-family:var(--mono);font-size:10px;color:var(--muted);">' + escHtml(m.civitai_version) + '</span>' : '';
     var baseModelHtml = m.civitai_base_model ? ' <span class="tag-pill">' + escHtml(m.civitai_base_model) + '</span>' : '';
+
+    // Build model links
+    var linksHtml = '<div class="model-links">';
+    if (m.civitai_version_id) {
+      var vid = m.civitai_version_id;
+      var mid = m.civitai_model_id;
+      linksHtml += '<a class="model-link" href="https://civitai.com/api/download/models/' + vid + '" target="_blank">download</a>';
+      if (mid) {
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '?modelVersionId=' + vid + '" target="_blank">version</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '" target="_blank">model</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/model-versions/' + vid + '" target="_blank">api:ver</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/models/' + mid + '" target="_blank">api:model</a>';
+      }
+    } else if (m.hf_repo) {
+      var repo = m.hf_repo;
+      var hfFile = m.hf_file || '';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/resolve/main/' + hfFile + '" target="_blank">download</a>';
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/blob/main/' + hfFile + '" target="_blank">file</a>';
+      }
+      linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '" target="_blank">repo</a>';
+      linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '" target="_blank">api:repo</a>';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '/tree/main/' + hfFile + '" target="_blank">api:file</a>';
+      }
+    }
+    linksHtml += '</div>';
+
     refs.meta.innerHTML = '<span>' + escHtml(sizeStr) + '</span>' +
       '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>' +
       versionHtml + baseModelHtml +
-      linkHtml;
+      linksHtml;
 
     // Compact-mode columns
     refs.compactSize.textContent = sizeStr;
