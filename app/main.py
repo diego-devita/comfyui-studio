@@ -1824,6 +1824,40 @@ async def list_assets(asset_type: str):
     return {"files": files, "total_size": total_size}
 
 
+@app.post("/api/admin/assets/delete")
+async def delete_assets(request: Request):
+    """Delete one or more files from ComfyUI input or output directory."""
+    body = await request.json()
+    asset_type = body.get("type", "")
+    files = body.get("files", [])
+
+    if asset_type == "inputs":
+        base = Path(COMFYUI_DIR) / "input"
+    elif asset_type == "outputs":
+        base = Path(COMFYUI_DIR) / "output"
+    else:
+        raise HTTPException(400, "Invalid type")
+
+    deleted = []
+    errors = []
+    for rel_path in files:
+        # Sanitize: no path traversal
+        if ".." in rel_path or rel_path.startswith("/"):
+            errors.append(f"{rel_path}: invalid path")
+            continue
+        target = base / rel_path
+        if target.exists() and target.is_file():
+            try:
+                target.unlink()
+                deleted.append(rel_path)
+            except Exception as e:
+                errors.append(f"{rel_path}: {str(e)}")
+        else:
+            errors.append(f"{rel_path}: not found")
+
+    return {"deleted": deleted, "errors": errors}
+
+
 # ── Job History endpoints ────────────────────────────────────────────────────
 
 

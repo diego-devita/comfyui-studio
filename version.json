@@ -2,8 +2,8 @@
   "app_version": "4.3.0",
   "date": "2026-03-22 10:58",
   "components": {
-    "backend": {"version": "4.3.0", "date": "2026-03-22 10:58", "file": "app/main.py"},
-    "frontend": {"version": "4.3.1", "date": "2026-03-22 10:58", "dir": "app/www/"},
+    "backend": {"version": "4.3.1", "date": "2026-03-22 10:58", "file": "app/main.py"},
+    "frontend": {"version": "4.3.2", "date": "2026-03-22 10:58", "dir": "app/www/"},
     "models": {"version": 8, "date": "2026-03-22 02:25", "file": "app/models.json"},
     "workflows": {"version": 16, "date": "2026-03-22 10:12", "dir": "workflows/"}
   }

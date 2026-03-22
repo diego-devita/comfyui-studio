@@ -82,6 +82,18 @@
     transition: border-color 0.15s;
   }
   .asset-card:hover { border-color: var(--accent); }
+  .asset-card.selected { border-color: var(--accent); background: rgba(232,255,71,0.05); }
+  .asset-check {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 2;
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+  .asset-card { position: relative; }
 
   .asset-thumb {
     width: 100%;
@@ -170,7 +182,15 @@
     <button class="tab" data-tab="outputs">Outputs</button>
   </div>
 
-  <div class="tab-info" id="tabInfo">Loading...</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div class="tab-info" id="tabInfo" style="margin-bottom:0;">Loading...</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <label style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" id="selectAll" style="accent-color:var(--accent);"> Select all
+      </label>
+      <button class="btn btn--danger btn--sm" id="deleteBtn" style="display:none;">Delete selected</button>
+    </div>
+  </div>
 
   <div class="loading-state" id="loadingState">
     <span class="spinner"></span>
@@ -218,6 +238,8 @@
   var $overlayContent = document.getElementById('assetOverlayContent');
   var $overlayInfo = document.getElementById('assetOverlayInfo');
 
+  var $selectAll = document.getElementById('selectAll');
+  var $deleteBtn = document.getElementById('deleteBtn');
   var currentTab = 'inputs';
 
   $tabs.forEach(function(tab) {
@@ -225,7 +247,49 @@
       $tabs.forEach(function(t) { t.classList.remove('active'); });
       tab.classList.add('active');
       currentTab = tab.dataset.tab;
+      $selectAll.checked = false;
       loadAssets();
+    });
+  });
+
+  $selectAll.addEventListener('change', function() {
+    $grid.querySelectorAll('.asset-check').forEach(function(cb) {
+      cb.checked = $selectAll.checked;
+      cb.closest('.asset-card').classList.toggle('selected', $selectAll.checked);
+    });
+    updateDeleteBtn();
+  });
+
+  function updateDeleteBtn() {
+    var count = $grid.querySelectorAll('.asset-check:checked').length;
+    $deleteBtn.style.display = count > 0 ? '' : 'none';
+    $deleteBtn.textContent = 'Delete ' + count + ' selected';
+  }
+
+  $deleteBtn.addEventListener('click', function() {
+    var checked = $grid.querySelectorAll('.asset-check:checked');
+    var paths = [];
+    checked.forEach(function(cb) { paths.push(cb.dataset.path); });
+    if (paths.length === 0) return;
+    if (!confirm('Delete ' + paths.length + ' file(s)? This cannot be undone.')) return;
+
+    $deleteBtn.disabled = true;
+    $deleteBtn.textContent = 'Deleting...';
+
+    apiFetch('/api/admin/assets/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({type: currentTab, files: paths})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      $deleteBtn.disabled = false;
+      $selectAll.checked = false;
+      loadAssets();
+    })
+    .catch(function(e) {
+      $deleteBtn.disabled = false;
+      if (e.message !== 'auth') alert('Delete failed: ' + e.message);
     });
   });
 
@@ -263,15 +327,17 @@
             '&type=' + comfyType +
             (f.subfolder ? '&subfolder=' + encodeURIComponent(f.subfolder) : '');
 
+          var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + f.path + '" onclick="event.stopPropagation();">';
+
           if (f.type === 'image') {
-            card.innerHTML =
+            card.innerHTML = checkHtml +
               '<img class="asset-thumb" src="' + viewUrl + '" loading="lazy">' +
               '<div class="asset-info">' +
                 '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
                 '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
               '</div>';
           } else {
-            card.innerHTML =
+            card.innerHTML = checkHtml +
               '<div class="asset-thumb-video">&#9654;</div>' +
               '<div class="asset-info">' +
                 '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
@@ -279,7 +345,15 @@
               '</div>';
           }
 
-          card.onclick = function() { showAsset(f, viewUrl); };
+          card.onclick = function(e) {
+            if (e.target.classList.contains('asset-check')) return;
+            showAsset(f, viewUrl);
+          };
+          var cb = card.querySelector('.asset-check');
+          cb.addEventListener('change', function() {
+            card.classList.toggle('selected', cb.checked);
+            updateDeleteBtn();
+          });
           $grid.appendChild(card);
         });
       })
