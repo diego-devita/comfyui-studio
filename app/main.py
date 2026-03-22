@@ -1278,6 +1278,7 @@ async def sync_reference_workflows():
                     "comfyorg_wan22_14B_i2v.json",
                     "kijai_wan22_14B_i2v.json",
                     "lightx2v_4step_kijai.json",
+                    "svi_pro_multiscene.json",
                 ]:
                     r = await client.get(f"{REPO_BASE}/workflows/reference/{fname}")
                     if r.status_code == 200:
