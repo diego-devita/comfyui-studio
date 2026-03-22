@@ -470,6 +470,30 @@ def _workflows_path(subpath: str) -> Path:
     return WORKFLOWS_DIR_DEFAULT / subpath
 
 
+def _make_input_filename(original_filename: str) -> str:
+    """Generate a descriptive input filename: YYYYMMDD_HHMMSS_originalname.ext"""
+    import re
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=1)))
+    ts = now.strftime("%Y%m%d_%H%M%S")
+
+    original = original_filename or "image.png"
+    # Split name and extension
+    if "." in original:
+        name, ext = original.rsplit(".", 1)
+    else:
+        name, ext = original, "png"
+
+    # Sanitize: keep only alphanumeric, dash, underscore
+    name = re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
+    # Truncate long names
+    if len(name) > 60:
+        name = name[:60]
+    ext = ext.lower()
+
+    return f"{ts}_{name}.{ext}"
+
+
 def _load_manifest(workflow_id: str) -> dict:
     """Load manifest.yaml for a workflow by its ID."""
     p = _workflows_path(f"{workflow_id}/manifest.yaml")
@@ -845,6 +869,11 @@ async def serve_nodes_page():
 @app.get("/admin/history", response_class=HTMLResponse)
 async def serve_history_page():
     return HTMLResponse(_www("history.html").read_text())
+
+
+@app.get("/admin/assets", response_class=HTMLResponse)
+async def serve_assets_page():
+    return HTMLResponse(_www("assets.html").read_text())
 
 
 @app.get("/run/{workflow_id}", response_class=HTMLResponse)
@@ -1256,6 +1285,7 @@ async def system_update():
                             "nodes.html",
                             "runner.html",
                             "history.html",
+                            "assets.html",
                         ]:
                             fu = f"{REPO_BASE}/app/www/{fname}"
                             fres = await dl_client.get(fu)
@@ -1750,6 +1780,50 @@ async def list_compatible_loras(base_model: str):
     return list(pairs.values())
 
 
+# ── Assets endpoints ─────────────────────────────────────────────────────────
+
+
+@app.get("/api/admin/assets/{asset_type}")
+async def list_assets(asset_type: str):
+    """List files in ComfyUI input or output directory."""
+    if asset_type == "inputs":
+        base = Path(COMFYUI_DIR) / "input"
+    elif asset_type == "outputs":
+        base = Path(COMFYUI_DIR) / "output"
+    else:
+        raise HTTPException(400, "Invalid asset type. Use 'inputs' or 'outputs'.")
+
+    if not base.exists():
+        return {"files": [], "total_size": 0}
+
+    files = []
+    total_size = 0
+    for f in sorted(base.rglob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not f.is_file():
+            continue
+        # Skip hidden files and workflow PNGs
+        if f.name.startswith("."):
+            continue
+        stat = f.stat()
+        rel = str(f.relative_to(base))
+        ext = f.suffix.lower()
+        is_video = ext in (".mp4", ".webm", ".mov", ".avi")
+        is_image = ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+        if not is_video and not is_image:
+            continue
+        files.append({
+            "filename": f.name,
+            "path": rel,
+            "subfolder": str(f.parent.relative_to(base)) if f.parent != base else "",
+            "size": stat.st_size,
+            "modified": stat.st_mtime,
+            "type": "video" if is_video else "image",
+        })
+        total_size += stat.st_size
+
+    return {"files": files, "total_size": total_size}
+
+
 # ── Job History endpoints ────────────────────────────────────────────────────
 
 
@@ -1817,8 +1891,7 @@ async def execute_workflow(
         uploaded_name = None
         if input_image:
             image_bytes = await input_image.read()
-            ext = input_image.filename.rsplit(".", 1)[-1] if "." in (input_image.filename or "") else "png"
-            unique_name = f"{uuid.uuid4().hex}.{ext}"
+            unique_name = _make_input_filename(input_image.filename)
             async with httpx.AsyncClient(timeout=30) as client:
                 r = await client.post(
                     f"{COMFY_URL}/upload/image",
@@ -1847,8 +1920,7 @@ async def execute_workflow(
     # Static workflow: upload image and apply params
     if not is_dynamic and input_image:
         image_bytes = await input_image.read()
-        ext = input_image.filename.rsplit(".", 1)[-1] if "." in (input_image.filename or "") else "png"
-        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        unique_name = _make_input_filename(input_image.filename)
 
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
