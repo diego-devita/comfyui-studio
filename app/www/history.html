@@ -249,9 +249,18 @@
 
         var statusCls = job.status === 'completed' ? 'completed' : (job.status === 'error' ? 'error' : 'running');
 
-        var thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+        var thumbHtml;
+        if (job.input_image) {
+          thumbHtml = '<img class="job-thumb" src="/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#9654;</div>\'">';
+        } else {
+          thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+        }
 
         var prompt = job.params && job.params.positive_prompt ? job.params.positive_prompt : '';
+        // For dynamic workflows, get first scene prompt
+        if (!prompt && job.params && job.params.scenes && job.params.scenes.length > 0) {
+          prompt = job.params.scenes[0].prompt || '';
+        }
         if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
 
         card.innerHTML =
@@ -284,6 +293,7 @@
     rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
     rows += '<tr><td>Status</td><td>' + escHtml(job.status) + '</td></tr>';
+    if (job.input_image) rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) + '</td></tr>';
     rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
     if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
     if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';

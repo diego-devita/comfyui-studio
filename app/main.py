@@ -1899,6 +1899,21 @@ async def execute_workflow(
     # Save job record
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone(timedelta(hours=1)))  # Europe/Rome approx
+    # Find the input image filename used
+    input_image_name = None
+    if is_dynamic:
+        input_image_name = form_params.get("_uploaded_image")
+    else:
+        for inp in manifest.get("inputs", []):
+            if inp["type"] == "image":
+                node_id = str(inp["node_id"])
+                field = inp["field"]
+                if node_id in workflow:
+                    input_image_name = workflow[node_id]["inputs"].get(field)
+
+    # Clean internal fields from params before saving
+    save_params = {k: v for k, v in form_params.items() if not k.startswith("_")}
+
     job_record = {
         "prompt_id": prompt_id,
         "workflow_id": workflow_id,
@@ -1907,7 +1922,8 @@ async def execute_workflow(
         "started_at": now.strftime("%Y-%m-%dT%H:%M:%S"),
         "finished_at": None,
         "duration": None,
-        "params": form_params,
+        "input_image": input_image_name,
+        "params": save_params,
         "seeds": used_seeds,
         "output": None,
         "error": None,
@@ -1998,6 +2014,26 @@ async def run_status(prompt_id: str):
         "status": "completed",
         "outputs": result_outputs,
     }
+
+
+@app.get("/api/comfyui/view")
+async def comfyui_view(filename: str, type: str = "input", subfolder: str = ""):
+    """Proxy to ComfyUI /view endpoint for serving images."""
+    params = {"filename": filename, "type": type}
+    if subfolder:
+        params["subfolder"] = subfolder
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(f"{COMFY_URL}/view", params=params)
+            if r.status_code != 200:
+                raise HTTPException(r.status_code, "Image not found")
+            ct = r.headers.get("content-type", "image/png")
+            from starlette.responses import Response
+            return Response(content=r.content, media_type=ct)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(404, "ComfyUI unreachable")
 
 
 @app.get("/api/run/result/{prompt_id}")
