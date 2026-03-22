@@ -316,7 +316,7 @@
     if (job.input_image) {
       var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
-        ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;" onmouseenter="this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.querySelector(\'.img-preview-popup\').style.display=\'none\'">' +
+        ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;" onmouseenter="this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
         '&#128247;' +
         '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
         '</span></td></tr>';
@@ -337,7 +337,7 @@
             var sceneSeed = job.seeds && job.seeds[sceneSeedKey] ? job.seeds[sceneSeedKey] : (scene.seed != null ? scene.seed : '?');
             rows += '<tr><td>Scene ' + (idx+1) + '</td><td style="white-space:pre-wrap;">' +
               escHtml(scene.prompt || '') +
-              ' <span style="color:var(--muted);">(' + (scene.duration || '?') + 's · seed: ' + sceneSeed + ')</span></td></tr>';
+              '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's · seed: ' + sceneSeed + '</span></td></tr>';
           });
         } else if (key === 'loras' && Array.isArray(val)) {
           val.forEach(function(lora, idx) {
@@ -355,9 +355,10 @@
       }
     }
 
-    // Seeds
+    // Seeds (skip scene_* keys — those are already shown in the scenes section)
     if (job.seeds) {
       for (var sid in job.seeds) {
+        if (/^scene_\d+$/.test(sid)) continue;
         rows += '<tr><td>seed (' + escHtml(sid) + ')</td><td>' + job.seeds[sid] + '</td></tr>';
       }
     }
@@ -389,6 +390,19 @@
   $overlay.addEventListener('click', function(e) {
     if (e.target === $overlay) $overlay.classList.remove('visible');
   });
+
+  // Fullscreen image viewer (sits on top of detail overlay)
+  var $imgOverlay = document.createElement('div');
+  $imgOverlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:20000;cursor:pointer;justify-content:center;align-items:center;';
+  $imgOverlay.addEventListener('click', function() {
+    $imgOverlay.style.display = 'none';
+  });
+  document.body.appendChild($imgOverlay);
+
+  function showImageFullscreen(url) {
+    $imgOverlay.innerHTML = '<img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">';
+    $imgOverlay.style.display = 'flex';
+  }
 
   loadHistory();
 })();
