@@ -52,13 +52,6 @@ inputs:
     type: image
     required: true
 
-  - id: num_scenes
-    name: "Number of Scenes"
-    type: int
-    min: 1
-    max: 10
-    default: 3
-
   - id: scenes
     name: "Scenes"
     type: scene_list

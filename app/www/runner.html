@@ -1123,7 +1123,6 @@
         if (el.type === 'file') return;
         if (el.classList.contains('scene-list')) {
           params[id] = getSceneListValue(id);
-          params['num_scenes'] = params[id].length;
         } else if (el.classList.contains('lora-picker')) {
           params[id] = getLoraPickerValue(id);
         } else if (el.type === 'range') {

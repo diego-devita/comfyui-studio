@@ -502,12 +502,11 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     for stage in pipeline:
         block_templates[stage["block"]] = load_block(stage["file"])
 
-    # Determine scene count
-    num_scenes = int(params.get("num_scenes", 3))
+    # Scene count comes from the scenes list itself
     scenes = params.get("scenes", [])
-    # Pad scenes if fewer provided than num_scenes
-    while len(scenes) < num_scenes:
-        scenes.append({"prompt": "", "duration": 5})
+    if not scenes:
+        scenes = [{"prompt": "", "duration": 5}]
+    num_scenes = len(scenes)
 
     neg_prompt = defaults.get("negative_prompt", "")
     lora_accelerator = defaults.get("lora_accelerator", "")
