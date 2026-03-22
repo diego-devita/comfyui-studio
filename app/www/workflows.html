@@ -387,7 +387,7 @@
     card.innerHTML =
       '<div class="wf-card-top">' +
         '<div class="wf-card-info">' +
-          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + '</div>' +
+          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + (wf.type === 'dynamic' ? ' <span style="display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(232,255,71,0.1);color:var(--accent);border:1px solid var(--accent);vertical-align:middle;">Dynamic</span>' : '') + '</div>' +
           '<div class="wf-card-meta">' + escHtml(metaParts) + '</div>' +
         '</div>' +
         (version ? '<span class="wf-card-version">' + escHtml(version) + '</span>' : '') +
