@@ -1278,10 +1278,26 @@ async def system_update():
                                 if not lwf or type(rwf_v) != type(lwf_v) or rwf_v > lwf_v:
                                     wf_dir = WORKFLOWS_DIR / wf_id
                                     wf_dir.mkdir(parents=True, exist_ok=True)
-                                    for fname in ["manifest.yaml", "workflow.json"]:
-                                        fr = await dl_client.get(f"{wf_base}/{wf_id}/{fname}")
-                                        if fr.status_code == 200:
-                                            (wf_dir / fname).write_text(fr.text)
+                                    # Download manifest
+                                    mr = await dl_client.get(f"{wf_base}/{wf_id}/manifest.yaml")
+                                    if mr.status_code == 200:
+                                        (wf_dir / "manifest.yaml").write_text(mr.text)
+                                        # Check if dynamic workflow
+                                        mdata = yaml.safe_load(mr.text) if mr.text else {}
+                                        if mdata.get("type") == "dynamic":
+                                            bdir_name = mdata.get("blocks_dir", "blocks")
+                                            bdir = wf_dir / bdir_name
+                                            bdir.mkdir(parents=True, exist_ok=True)
+                                            for stage in mdata.get("pipeline", []):
+                                                bf = stage.get("file", "")
+                                                if bf:
+                                                    br = await dl_client.get(f"{wf_base}/{wf_id}/{bdir_name}/{bf}")
+                                                    if br.status_code == 200:
+                                                        (bdir / bf).write_text(br.text)
+                                        else:
+                                            wr = await dl_client.get(f"{wf_base}/{wf_id}/workflow.json")
+                                            if wr.status_code == 200:
+                                                (wf_dir / "workflow.json").write_text(wr.text)
                             # Save remote index locally
                             WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
                             (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
