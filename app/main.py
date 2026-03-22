@@ -1794,18 +1794,23 @@ async def list_assets(asset_type: str):
         raise HTTPException(400, "Invalid asset type. Use 'inputs' or 'outputs'.")
 
     if not base.exists():
-        return {"files": [], "total_size": 0}
+        return {"files": [], "studio_jobs": [], "total_size": 0}
 
+    STUDIO_DIR = "comfyui-studio"
     files = []
+    studio_jobs = []
     total_size = 0
+
+    # Regular files (exclude anything under comfyui-studio/)
     for f in sorted(base.rglob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
         if not f.is_file():
             continue
-        # Skip hidden files and workflow PNGs
         if f.name.startswith("."):
             continue
-        stat = f.stat()
         rel = str(f.relative_to(base))
+        if asset_type == "outputs" and rel.startswith(STUDIO_DIR + "/"):
+            continue  # handled separately as studio_jobs
+        stat = f.stat()
         ext = f.suffix.lower()
         is_video = ext in (".mp4", ".webm", ".mov", ".avi")
         is_image = ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
@@ -1821,7 +1826,46 @@ async def list_assets(asset_type: str):
         })
         total_size += stat.st_size
 
-    return {"files": files, "total_size": total_size}
+    # Studio jobs (grouped by folder)
+    if asset_type == "outputs":
+        studio_base = base / STUDIO_DIR
+        if studio_base.exists():
+            for job_dir in sorted(studio_base.iterdir(), key=lambda d: d.stat().st_mtime, reverse=True):
+                if not job_dir.is_dir():
+                    continue
+                video_file = None
+                thumb_file = None
+                folder_size = 0
+                for child in job_dir.iterdir():
+                    if not child.is_file():
+                        continue
+                    folder_size += child.stat().st_size
+                    ext = child.suffix.lower()
+                    if ext in (".mp4", ".webm", ".mov", ".avi") and not video_file:
+                        video_file = child
+                    elif ext in (".png", ".jpg", ".jpeg") and not thumb_file:
+                        thumb_file = child
+                if not video_file:
+                    continue  # skip incomplete jobs
+                subfolder = str(job_dir.relative_to(base))
+                studio_jobs.append({
+                    "folder": job_dir.name,
+                    "folder_path": subfolder,
+                    "video": {
+                        "filename": video_file.name,
+                        "subfolder": subfolder,
+                    },
+                    "thumbnail": {
+                        "filename": thumb_file.name,
+                        "subfolder": subfolder,
+                    } if thumb_file else None,
+                    "total_size": folder_size,
+                    "modified": video_file.stat().st_mtime,
+                    "type": "studio_job",
+                })
+                total_size += folder_size
+
+    return {"files": files, "studio_jobs": studio_jobs, "total_size": total_size}
 
 
 @app.post("/api/admin/assets/delete")
@@ -1846,7 +1890,17 @@ async def delete_assets(request: Request):
             errors.append(f"{rel_path}: invalid path")
             continue
         target = base / rel_path
-        if target.exists() and target.is_file():
+        if target.is_dir():
+            # Only allow directory deletion under comfyui-studio/
+            if not rel_path.startswith("comfyui-studio/") or rel_path.count("/") != 1:
+                errors.append(f"{rel_path}: directory deletion not allowed")
+                continue
+            try:
+                shutil.rmtree(target)
+                deleted.append(rel_path)
+            except Exception as e:
+                errors.append(f"{rel_path}: {str(e)}")
+        elif target.is_file():
             try:
                 target.unlink()
                 deleted.append(rel_path)

@@ -95,6 +95,22 @@
   }
   .asset-card { position: relative; }
 
+  .studio-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(232,255,71,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(232,255,71,0.3);
+  }
+
   .asset-thumb {
     width: 100%;
     aspect-ratio: 1;
@@ -262,6 +278,28 @@
     updateDeleteBtn();
   });
 
+  function toggleCard(card) {
+    var cb = card.querySelector('.asset-check');
+    cb.checked = !cb.checked;
+    card.classList.toggle('selected', cb.checked);
+    lastClickedIndex = parseInt(card.dataset.index);
+    updateDeleteBtn();
+  }
+
+  function rangeSelect(card) {
+    var from = Math.min(lastClickedIndex, parseInt(card.dataset.index));
+    var to = Math.max(lastClickedIndex, parseInt(card.dataset.index));
+    $grid.querySelectorAll('.asset-card').forEach(function(c) {
+      var idx = parseInt(c.dataset.index);
+      if (idx >= from && idx <= to) {
+        var cb = c.querySelector('.asset-check');
+        cb.checked = true;
+        c.classList.add('selected');
+      }
+    });
+    updateDeleteBtn();
+  }
+
   function updateDeleteBtn() {
     var count = $grid.querySelectorAll('.asset-check:checked').length;
     $deleteBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
@@ -273,7 +311,7 @@
     var paths = [];
     checked.forEach(function(cb) { paths.push(cb.dataset.path); });
     if (paths.length === 0) return;
-    if (!confirm('Delete ' + paths.length + ' file(s)? This cannot be undone.')) return;
+    if (!confirm('Delete ' + paths.length + ' item(s)? This cannot be undone.')) return;
 
     $deleteBtn.disabled = true;
     $deleteBtn.textContent = 'Deleting...';
@@ -312,70 +350,93 @@
       .then(function(data) {
         $loading.style.display = 'none';
         var files = data.files || [];
+        var studioJobs = data.studio_jobs || [];
         var comfyType = currentTab === 'inputs' ? 'input' : 'output';
 
-        $tabInfo.textContent = files.length + ' files \u00b7 ' + fmtSize(data.total_size || 0);
+        var counts = [];
+        if (studioJobs.length > 0) counts.push(studioJobs.length + ' studio');
+        if (files.length > 0) counts.push(files.length + ' files');
+        $tabInfo.textContent = (counts.join(' + ') || '0 files') + ' \u00b7 ' + fmtSize(data.total_size || 0);
 
-        if (files.length === 0) {
+        if (files.length === 0 && studioJobs.length === 0) {
           $grid.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1;">No files found.</div>';
           return;
         }
 
-        files.forEach(function(f) {
+        // Build unified items list: studio jobs first, then regular files
+        var allItems = [];
+        studioJobs.forEach(function(sj) { allItems.push({_kind: 'studio_job', data: sj}); });
+        files.forEach(function(f) { allItems.push({_kind: 'file', data: f}); });
+
+        allItems.forEach(function(item, idx) {
           var card = document.createElement('div');
           card.className = 'asset-card';
+          card.dataset.index = idx;
 
-          var viewUrl = '/api/comfyui/view?filename=' + encodeURIComponent(f.filename) +
-            '&type=' + comfyType +
-            (f.subfolder ? '&subfolder=' + encodeURIComponent(f.subfolder) : '');
+          if (item._kind === 'studio_job') {
+            var sj = item.data;
+            var checkPath = sj.folder_path;
+            var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + checkPath + '" onclick="event.stopPropagation();">';
+            var badgeHtml = '<span class="studio-badge">Studio</span>';
 
-          var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + f.path + '" onclick="event.stopPropagation();">';
-
-          if (f.type === 'image') {
-            card.innerHTML = checkHtml +
-              '<img class="asset-thumb" src="' + viewUrl + '" loading="lazy">' +
-              '<div class="asset-info">' +
-                '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
-                '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
-              '</div>';
-          } else {
-            card.innerHTML = checkHtml +
-              '<div class="asset-thumb-video">&#9654;</div>' +
-              '<div class="asset-info">' +
-                '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
-                '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
-              '</div>';
-          }
-
-          card.dataset.index = files.indexOf(f);
-
-          card.onclick = function(e) {
-            if (e.target.classList.contains('asset-check')) return;
-
-            if (e.ctrlKey || e.metaKey) {
-              // Ctrl+click: toggle this card
-              var cb = card.querySelector('.asset-check');
-              cb.checked = !cb.checked;
-              card.classList.toggle('selected', cb.checked);
-              lastClickedIndex = parseInt(card.dataset.index);
-              updateDeleteBtn();
-            } else if (e.shiftKey && lastClickedIndex !== null) {
-              // Shift+click: range select
-              var from = Math.min(lastClickedIndex, parseInt(card.dataset.index));
-              var to = Math.max(lastClickedIndex, parseInt(card.dataset.index));
-              $grid.querySelectorAll('.asset-card').forEach(function(c) {
-                var idx = parseInt(c.dataset.index);
-                if (idx >= from && idx <= to) {
-                  var cb = c.querySelector('.asset-check');
-                  cb.checked = true;
-                  c.classList.add('selected');
-                }
-              });
-              updateDeleteBtn();
+            if (sj.thumbnail) {
+              var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.thumbnail.filename) +
+                '&type=output&subfolder=' + encodeURIComponent(sj.thumbnail.subfolder);
+              card.innerHTML = checkHtml + badgeHtml +
+                '<img class="asset-thumb" src="' + thumbUrl + '" loading="lazy">' +
+                '<div class="asset-info">' +
+                  '<div class="asset-name" title="' + sj.folder_path + '">' + sj.folder + '</div>' +
+                  '<div class="asset-meta">' + fmtSize(sj.total_size) + ' \u00b7 ' + fmtDate(sj.modified) + '</div>' +
+                '</div>';
             } else {
-              showAsset(f, viewUrl);
+              card.innerHTML = checkHtml + badgeHtml +
+                '<div class="asset-thumb-video">&#9654;</div>' +
+                '<div class="asset-info">' +
+                  '<div class="asset-name" title="' + sj.folder_path + '">' + sj.folder + '</div>' +
+                  '<div class="asset-meta">' + fmtSize(sj.total_size) + ' \u00b7 ' + fmtDate(sj.modified) + '</div>' +
+                '</div>';
             }
-          };
+
+            var videoUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.video.filename) +
+              '&type=output&subfolder=' + encodeURIComponent(sj.video.subfolder);
+
+            card.onclick = function(e) {
+              if (e.target.classList.contains('asset-check')) return;
+              if (e.ctrlKey || e.metaKey) { toggleCard(card); return; }
+              if (e.shiftKey && lastClickedIndex !== null) { rangeSelect(card); return; }
+              showAsset({type: 'video', path: sj.folder_path, size: sj.total_size, modified: sj.modified}, videoUrl);
+            };
+
+          } else {
+            var f = item.data;
+            var viewUrl = '/api/comfyui/view?filename=' + encodeURIComponent(f.filename) +
+              '&type=' + comfyType +
+              (f.subfolder ? '&subfolder=' + encodeURIComponent(f.subfolder) : '');
+            var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + f.path + '" onclick="event.stopPropagation();">';
+
+            if (f.type === 'image') {
+              card.innerHTML = checkHtml +
+                '<img class="asset-thumb" src="' + viewUrl + '" loading="lazy">' +
+                '<div class="asset-info">' +
+                  '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
+                  '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
+                '</div>';
+            } else {
+              card.innerHTML = checkHtml +
+                '<div class="asset-thumb-video">&#9654;</div>' +
+                '<div class="asset-info">' +
+                  '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
+                  '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
+                '</div>';
+            }
+
+            card.onclick = function(e) {
+              if (e.target.classList.contains('asset-check')) return;
+              if (e.ctrlKey || e.metaKey) { toggleCard(card); return; }
+              if (e.shiftKey && lastClickedIndex !== null) { rangeSelect(card); return; }
+              showAsset(f, viewUrl);
+            };
+          }
 
           var cb = card.querySelector('.asset-check');
           cb.addEventListener('change', function() {
