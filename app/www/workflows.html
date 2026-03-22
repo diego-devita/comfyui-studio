@@ -261,7 +261,7 @@
 
   // ── State ──
   let workflows = [];
-  let pollTimer = null;
+
 
   // ── DOM refs ──
   const $main         = document.getElementById('mainContent');
@@ -295,7 +295,6 @@
       const data = await resp.json();
       handleWorkflowData(data);
       $loading.style.display = 'none';
-      startPolling();
     } catch (e) {
       if (e.message !== 'auth') {
         console.error('Initial load error:', e);
@@ -497,28 +496,6 @@
   }
 
 
-  // ── Polling ──
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(pollWorkflows, 10000);
-  }
-
-  function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  }
-
-  async function pollWorkflows() {
-    try {
-      const resp = await apiFetch('/api/admin/workflows');
-      if (!resp.ok) return;
-      const data = await resp.json();
-      handleWorkflowData(data);
-    } catch (e) {
-      if (e.message !== 'auth') {
-        console.error('Poll error:', e);
-      }
-    }
-  }
 
   // ── Sync Reference Workflows to ComfyUI ──
   const $syncRefBtn = document.getElementById('syncRefBtn');
