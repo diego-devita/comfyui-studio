@@ -1872,6 +1872,49 @@ async def list_assets(asset_type: str):
     return {"files": files, "studio_jobs": studio_jobs, "total_size": total_size}
 
 
+@app.get("/api/admin/assets/download-outputs")
+async def download_outputs():
+    """Create a ZIP of the entire output directory and stream it."""
+    import zipfile
+    import tempfile
+
+    output_dir = Path(COMFYUI_DIR) / "output"
+    if not output_dir.exists():
+        raise HTTPException(404, "Output directory not found")
+
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=1)))
+    filename = f"outputs_{now.strftime('%Y%m%d_%H%M%S')}.zip"
+
+    # Create temp ZIP file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp_path = tmp.name
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in output_dir.rglob("*"):
+                if f.is_file():
+                    zf.write(f, str(f.relative_to(output_dir)))
+        tmp.close()
+
+        def stream_and_cleanup():
+            try:
+                with open(tmp_path, "rb") as fh:
+                    while chunk := fh.read(1024 * 1024):
+                        yield chunk
+            finally:
+                os.unlink(tmp_path)
+
+        return StreamingResponse(
+            stream_and_cleanup(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception:
+        tmp.close()
+        os.unlink(tmp_path)
+        raise
+
+
 @app.post("/api/admin/assets/delete")
 async def delete_assets(request: Request):
     """Delete one or more files from ComfyUI input or output directory."""
