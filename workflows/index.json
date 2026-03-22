@@ -1,6 +1,6 @@
 {
-  "version": 21,
-  "date": "2026-03-22 20:30",
+  "version": 22,
+  "date": "2026-03-22 20:40",
   "workflows": [
     {"id": "wan22-i2v-lightx2v", "version": 5, "date": "2026-03-21 23:59"},
     {"id": "wan22-i2v-fp8", "version": 2, "date": "2026-03-21 22:14"},
@@ -9,6 +9,7 @@
     {"id": "wan22-svi-dynamic", "version": 7, "date": "2026-03-22 15:52"},
     {"id": "t2i-dynamic", "version": 2, "date": "2026-03-22 20:05"},
     {"id": "t2i-batch", "version": 1, "date": "2026-03-22 20:15"},
-    {"id": "i2i-batch", "version": 1, "date": "2026-03-22 20:30"}
+    {"id": "i2i-batch", "version": 1, "date": "2026-03-22 20:30"},
+    {"id": "ipa-batch", "version": 1, "date": "2026-03-22 20:40"}
   ]
 }

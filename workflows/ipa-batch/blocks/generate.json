@@ -1,0 +1,50 @@
+{
+  "nodes": {
+    "empty_latent": {
+      "inputs": {
+        "width": "{{width}}",
+        "height": "{{height}}",
+        "batch_size": "{{batch_size}}"
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {"title": "Empty Latent ({{width}}x{{height}} x{{batch_size}})"}
+    },
+    "sampler": {
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{steps}}",
+        "cfg": "{{cfg}}",
+        "sampler_name": "{{sampler_name}}",
+        "scheduler": "{{scheduler}}",
+        "denoise": "{{denoise}}",
+        "model": "{{model}}",
+        "positive": "{{positive}}",
+        "negative": "{{negative}}",
+        "latent_image": ["empty_latent", 0]
+      },
+      "class_type": "KSampler",
+      "_meta": {"title": "KSampler"}
+    },
+    "vae_decode": {
+      "inputs": {
+        "samples": ["sampler", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEDecode",
+      "_meta": {"title": "VAE Decode"}
+    },
+    "save": {
+      "inputs": {
+        "filename_prefix": "{{output_prefix}}",
+        "images": ["vae_decode", 0]
+      },
+      "class_type": "SaveImage",
+      "_meta": {"title": "Save Image"}
+    }
+  },
+  "imports": ["model", "positive", "negative", "vae"],
+  "exports": {
+    "image": {"node": "vae_decode", "output": 0}
+  },
+  "variables": ["width", "height", "batch_size", "seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "output_prefix"]
+}

@@ -1,0 +1,175 @@
+id: ipa-batch
+name: "IP-Adapter (Batch)"
+version: 1
+date: "2026-03-22 20:40"
+type: dynamic
+description: "IP-Adapter reference image + LoRA stack + prompt. The reference image provides the subject, the LoRA and prompt define the scenario. Generates from empty latent."
+author: ""
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+  - block: generate
+    file: "generate.json"
+
+inputs:
+  - id: image
+    name: "Reference Image"
+    type: image
+    required: true
+
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    required: true
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker_dynamic
+    max_loras: 5
+
+  - id: ipa_preset
+    name: "IP-Adapter Preset"
+    type: select
+    options:
+      - {label: "PLUS (high strength)", value: "PLUS (high strength)"}
+      - {label: "PLUS FACE (portraits)", value: "PLUS FACE (portraits)"}
+      - {label: "STANDARD (medium strength)", value: "STANDARD (medium strength)"}
+      - {label: "VIT-G (medium strength)", value: "VIT-G (medium strength)"}
+      - {label: "LIGHT - SD1.5 only (low strength)", value: "LIGHT - SD1.5 only (low strength)"}
+      - {label: "FULL FACE - SD1.5 only (portraits stronger)", value: "FULL FACE - SD1.5 only (portraits stronger)"}
+    default: "PLUS FACE (portraits)"
+
+  - id: ipa_weight
+    name: "IP-Adapter Weight"
+    type: float
+    min: 0.0
+    max: 2.0
+    step: 0.05
+    default: 0.8
+
+  - id: ipa_start
+    name: "IP-Adapter Start"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 0.0
+
+  - id: ipa_end
+    name: "IP-Adapter End"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 1.0
+
+  - id: clip_skip
+    name: "CLIP Skip"
+    type: int
+    min: -12
+    max: -1
+    default: -2
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    required: true
+    default: ""
+    placeholder: "masterpiece, best quality, ..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "bad quality, worst quality, low quality"
+
+  - id: resolution
+    name: "Resolution"
+    type: resolution_picker
+    presets:
+      sd15: [{label: "512x512", w: 512, h: 512}, {label: "512x768", w: 512, h: 768}, {label: "768x512", w: 768, h: 512}]
+      sdxl: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      pony: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      flux: [{label: "1024x1024", w: 1024, h: 1024}, {label: "768x1344", w: 768, h: 1344}, {label: "1344x768", w: 1344, h: 768}]
+    default: {w: 832, h: 1216}
+
+  - id: batch_size
+    name: "Batch Size"
+    type: int
+    min: 1
+    max: 100
+    default: 1
+
+  - id: steps
+    name: "Steps"
+    type: int
+    min: 1
+    max: 100
+    default: 19
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 4.0
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    options:
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "Euler", value: "euler"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+      - {label: "UniPC", value: "uni_pc"}
+    default: "euler_ancestral"
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+      - {label: "SGM Uniform", value: "sgm_uniform"}
+      - {label: "Simple", value: "simple"}
+    default: "normal"
+
+  - id: denoise
+    name: "Denoise"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 1.0
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+
+outputs:
+  - id: image
+    name: "Output Images"
+    type: image
+
+required_models: []
+
+required_nodes:
+  - "CheckpointLoaderSimple"
+  - "CLIPSetLastLayer"
+  - "CLIPTextEncode"
+  - "EmptyLatentImage"
+  - "KSampler"
+  - "VAEDecode"
+  - "SaveImage"
+  - "LoadImage"
+  - "IPAdapterUnifiedLoader"
+  - "IPAdapterAdvanced"
