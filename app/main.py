@@ -1872,7 +1872,7 @@ async def list_assets(asset_type: str):
     return {"files": files, "studio_jobs": studio_jobs, "total_size": total_size}
 
 
-@app.get("/api/admin/assets/download-outputs")
+@app.get("/api/admin/outputs-zip")
 async def download_outputs():
     """Create a ZIP of the entire output directory and stream it."""
     import zipfile

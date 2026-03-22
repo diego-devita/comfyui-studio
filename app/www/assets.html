@@ -199,12 +199,14 @@
   </div>
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <div class="tab-info" id="tabInfo" style="margin-bottom:0;">Loading...</div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div class="tab-info" id="tabInfo" style="margin-bottom:0;">Loading...</div>
+      <button class="btn btn--sm" id="downloadAllBtn" style="display:none;">Download ZIP</button>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <label style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
         <input type="checkbox" id="selectAll" style="accent-color:var(--accent);"> Select all
       </label>
-      <button class="btn btn--sm" id="downloadAllBtn" style="display:none;">Download ZIP</button>
       <button class="btn btn--danger btn--sm" id="deleteBtn" style="visibility:hidden;">Delete selected</button>
     </div>
   </div>
@@ -340,7 +342,7 @@
     $downloadAllBtn.disabled = true;
     $downloadAllBtn.textContent = 'Preparing...';
     var a = document.createElement('a');
-    a.href = '/api/admin/assets/download-outputs';
+    a.href = '/api/admin/outputs-zip';
     a.download = '';
     document.body.appendChild(a);
     a.click();
