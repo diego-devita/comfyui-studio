@@ -517,18 +517,26 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     split_step = defaults.get("split_step", 3)
 
     # Build LoRA inputs from picker
-    selected_loras = params.get("loras", [])
-    # Each lora is a pair_id; resolve to high/low files from models catalog
+    raw_loras = params.get("loras", [])
+    # Normalize: can be list of strings (pair_ids) or list of {pair_id, strength}
+    selected_loras = []
+    for item in raw_loras:
+        if isinstance(item, str):
+            selected_loras.append({"pair_id": item, "strength": 1.0})
+        elif isinstance(item, dict):
+            selected_loras.append({"pair_id": item.get("pair_id", ""), "strength": float(item.get("strength", 1.0))})
+
+    # Resolve pair_ids to high/low files from models catalog
     _reload_models()
-    lora_pairs = {}
+    lora_file_map = {}  # pair_id -> {high: file, low: file, both: file}
     for cat in _models_data.get("categories", []):
         for m in cat.get("models", []):
             pid = m.get("pair_id")
-            if pid and pid in selected_loras:
+            if pid:
                 role = m.get("pair_role", "both")
-                if pid not in lora_pairs:
-                    lora_pairs[pid] = {}
-                lora_pairs[pid][role] = m["file"]
+                if pid not in lora_file_map:
+                    lora_file_map[pid] = {}
+                lora_file_map[pid][role] = m["file"]
 
     # Collected workflow nodes (global ID -> node)
     workflow = {}
@@ -633,14 +641,16 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     import copy
     setup_tmpl = copy.deepcopy(setup_tmpl)
     lora_idx = 2  # lora_1 is the accelerator
-    for pid in selected_loras:
-        pair = lora_pairs.get(pid, {})
+    for lora_sel in selected_loras:
+        pid = lora_sel["pair_id"]
+        strength = lora_sel["strength"]
+        pair = lora_file_map.get(pid, {})
         high_file = pair.get("high", pair.get("both", ""))
         low_file = pair.get("low", pair.get("both", ""))
         if high_file:
             slot = f"lora_{lora_idx}"
-            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": 1}
-            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": 1}
+            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": strength}
+            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": strength}
             lora_idx += 1
 
     # Remove template placeholders

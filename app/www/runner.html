@@ -392,17 +392,6 @@
 
   /* ── LoRA Picker ── */
   .lora-picker { display: flex; flex-direction: column; gap: 8px; }
-  .lora-option {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; background: var(--bg);
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    cursor: pointer; transition: border-color 0.15s;
-  }
-  .lora-option:hover { border-color: var(--accent); }
-  .lora-option.selected { border-color: var(--accent); background: rgba(232,255,71,0.05); }
-  .lora-option input[type="checkbox"] { accent-color: var(--accent); }
-  .lora-option-name { font-size: 13px; flex: 1; }
-  .lora-option-files { font-family: var(--mono); font-size: 10px; color: var(--muted); }
 
   /* ── Dynamic Badge ── */
   .badge-dynamic {
@@ -954,6 +943,8 @@
   }
 
   // ── LoRA Picker Builder ──
+  var _loraPairs = []; // cached LoRA pairs from API
+
   function buildLoraPicker(inputId, input) {
     var container = document.createElement('div');
     container.className = 'lora-picker';
@@ -968,37 +959,89 @@
     apiFetch('/api/admin/loras/compatible/' + encodeURIComponent(baseModel))
       .then(function(r) { return r.json(); })
       .then(function(pairs) {
+        // Filter out the accelerator (LightX2V unified — pair_role: both)
+        _loraPairs = (pairs || []).filter(function(p) { return p.pair_id !== 'lightx2v-unified'; });
         container.innerHTML = '';
-        if (!pairs || pairs.length === 0) {
-          container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No compatible LoRAs found. Download them from the Models page.</div>';
+
+        if (_loraPairs.length === 0) {
+          container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No style LoRAs found. Download them from the Models page.</div>';
           return;
         }
-        pairs.forEach(function(pair) {
-          var opt = document.createElement('label');
-          opt.className = 'lora-option';
 
-          var cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.value = pair.pair_id;
-          cb.onchange = function() { opt.classList.toggle('selected', cb.checked); };
-          opt.appendChild(cb);
+        // Slots container
+        var slotsDiv = document.createElement('div');
+        slotsDiv.className = 'lora-slots';
+        slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+        container.appendChild(slotsDiv);
 
-          var nameEl = document.createElement('span');
-          nameEl.className = 'lora-option-name';
-          nameEl.textContent = pair.name || pair.pair_id;
-          opt.appendChild(nameEl);
+        function addSlot(defaultPairId) {
+          var slot = document.createElement('div');
+          slot.className = 'lora-slot';
+          slot.style.cssText = 'display:flex;gap:8px;align-items:center;';
 
-          var filesEl = document.createElement('span');
-          filesEl.className = 'lora-option-files';
-          var roles = [];
-          if (pair.high) roles.push('H');
-          if (pair.low) roles.push('L');
-          if (pair.both) roles.push('H+L');
-          filesEl.textContent = roles.join('/');
-          opt.appendChild(filesEl);
+          // Dropdown
+          var sel = document.createElement('select');
+          sel.className = 'lora-select';
+          sel.style.cssText = 'flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
 
-          container.appendChild(opt);
-        });
+          var noneOpt = document.createElement('option');
+          noneOpt.value = '';
+          noneOpt.textContent = '— None —';
+          sel.appendChild(noneOpt);
+
+          _loraPairs.forEach(function(pair) {
+            var o = document.createElement('option');
+            o.value = pair.pair_id;
+            o.textContent = pair.name || pair.pair_id;
+            if (pair.pair_id === defaultPairId) o.selected = true;
+            sel.appendChild(o);
+          });
+          slot.appendChild(sel);
+
+          // Strength slider
+          var strLabel = document.createElement('span');
+          strLabel.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;';
+          strLabel.textContent = 'str:';
+          slot.appendChild(strLabel);
+
+          var strInput = document.createElement('input');
+          strInput.type = 'range';
+          strInput.className = 'lora-strength';
+          strInput.min = '0';
+          strInput.max = '3';
+          strInput.step = '0.1';
+          strInput.value = '1';
+          strInput.style.cssText = 'width:80px;accent-color:var(--accent);';
+          slot.appendChild(strInput);
+
+          var strVal = document.createElement('span');
+          strVal.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--text);min-width:28px;';
+          strVal.textContent = '1.0';
+          strInput.oninput = function() { strVal.textContent = parseFloat(strInput.value).toFixed(1); };
+          slot.appendChild(strVal);
+
+          // Remove button
+          var rmBtn = document.createElement('button');
+          rmBtn.type = 'button';
+          rmBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;';
+          rmBtn.innerHTML = '&times;';
+          rmBtn.onclick = function() { slot.remove(); };
+          slot.appendChild(rmBtn);
+
+          slotsDiv.appendChild(slot);
+        }
+
+        // Add LoRA button
+        var addBtn = document.createElement('button');
+        addBtn.className = 'scene-add-btn';
+        addBtn.type = 'button';
+        addBtn.textContent = '+ Add LoRA';
+        addBtn.style.marginTop = '4px';
+        addBtn.onclick = function() { addSlot(''); };
+        container.appendChild(addBtn);
+
+        // Start with 1 empty slot
+        addSlot('');
       })
       .catch(function() {
         container.innerHTML = '<div style="color:var(--error);font-size:12px;">Failed to load LoRAs</div>';
@@ -1010,11 +1053,15 @@
   function getLoraPickerValue(inputId) {
     var container = document.querySelector('[data-input-id="' + inputId + '"]');
     if (!container) return [];
-    var selected = [];
-    container.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
-      selected.push(cb.value);
+    var result = [];
+    container.querySelectorAll('.lora-slot').forEach(function(slot) {
+      var sel = slot.querySelector('.lora-select');
+      var str = slot.querySelector('.lora-strength');
+      if (sel && sel.value) {
+        result.push({pair_id: sel.value, strength: parseFloat(str ? str.value : 1)});
+      }
     });
-    return selected;
+    return result;
   }
 
 
