@@ -7,15 +7,34 @@
 <link rel="stylesheet" href="/static/styles.css">
 <style>
   header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 24px 32px 16px;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
   }
-  .logo { font-family: var(--display); font-size: 22px; font-weight: 800; }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
   .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
 
-  main { padding: 0 32px 32px; }
+  main { padding: 32px 40px 64px; }
 
   .history-list { display: flex; flex-direction: column; gap: 12px; }
 
