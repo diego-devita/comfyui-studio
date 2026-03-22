@@ -312,8 +312,17 @@
         var statusCls = job.status === 'completed' ? 'completed' : (job.status === 'error' ? 'error' : 'running');
 
         var thumbHtml;
-        if (job.input_image) {
+        var thumbOutput = job.output || (job.outputs && job.outputs[0]);
+        if (thumbOutput && thumbOutput.filename && !thumbOutput.filename.match(/\.(mp4|webm)$/i)) {
+          var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(thumbOutput.filename) +
+            '&type=' + encodeURIComponent(thumbOutput.type || 'output') +
+            (thumbOutput.subfolder ? '&subfolder=' + encodeURIComponent(thumbOutput.subfolder) : '');
+          var countBadge = job.outputs && job.outputs.length > 1 ? '<span style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;">' + job.outputs.length + '</span>' : '';
+          thumbHtml = '<div style="position:relative;"><img class="job-thumb" src="' + thumbUrl + '" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#128444;</div>\'">' + countBadge + '</div>';
+        } else if (job.input_image) {
           thumbHtml = '<img class="job-thumb" src="/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#9654;</div>\'">';
+        } else if (thumbOutput && thumbOutput.filename) {
+          thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
         } else {
           thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
         }
@@ -493,7 +502,17 @@
 
     // Output
     var outputHtml = '';
-    if (job.output && job.output.filename) {
+    var outputImages = job.outputs || (job.output ? [job.output] : []);
+    if (outputImages.length > 1) {
+      // Gallery view for batch outputs
+      outputHtml = '<div class="detail-output" style="position:relative;">' +
+        '<div id="histGalleryInfo" style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:6px;">1/' + outputImages.length + '</div>' +
+        '<div style="position:relative;display:flex;align-items:center;justify-content:center;">' +
+          '<button id="histGalPrev" style="position:absolute;left:0;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:6px;z-index:5;">&lsaquo;</button>' +
+          '<img id="histGalImg" src="" style="max-width:100%;max-height:400px;object-fit:contain;border-radius:4px;">' +
+          '<button id="histGalNext" style="position:absolute;right:0;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:6px;z-index:5;">&rsaquo;</button>' +
+        '</div></div>';
+    } else if (job.output && job.output.filename) {
       var url = '/api/comfyui/view?filename=' + encodeURIComponent(job.output.filename) +
         '&type=' + encodeURIComponent(job.output.type || 'output') +
         (job.output.subfolder ? '&subfolder=' + encodeURIComponent(job.output.subfolder) : '');
@@ -522,6 +541,28 @@
 
     window._detailJob = job;
     $overlay.classList.add('visible');
+
+    // Wire up gallery navigation if batch output
+    if (outputImages.length > 1) {
+      var galIdx = 0;
+      function galUrl(idx) {
+        var o = outputImages[idx];
+        return '/api/comfyui/view?filename=' + encodeURIComponent(o.filename) +
+          '&type=' + encodeURIComponent(o.type || 'output') +
+          (o.subfolder ? '&subfolder=' + encodeURIComponent(o.subfolder) : '');
+      }
+      function galRender() {
+        var $img = document.getElementById('histGalImg');
+        var $info = document.getElementById('histGalleryInfo');
+        if ($img) $img.src = galUrl(galIdx);
+        if ($info) $info.textContent = (galIdx + 1) + '/' + outputImages.length + ' \u00b7 ' + outputImages[galIdx].filename;
+      }
+      galRender();
+      var $prev = document.getElementById('histGalPrev');
+      var $next = document.getElementById('histGalNext');
+      if ($prev) $prev.onclick = function() { galIdx = (galIdx - 1 + outputImages.length) % outputImages.length; galRender(); };
+      if ($next) $next.onclick = function() { galIdx = (galIdx + 1) % outputImages.length; galRender(); };
+    }
   }
 
   $overlay.addEventListener('click', function(e) {
