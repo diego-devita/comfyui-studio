@@ -377,7 +377,7 @@
     const comfyRunning = comfy.status === 'running' || comfy.running === true;
     const comfyPort = comfy.port || 8188;
     if (comfyRunning) {
-      $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort + ' <a href="http://' + location.hostname + ':' + comfyPort + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open ComfyUI">&#8599;</a>');
+      $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort) + ' <a href="http://' + location.hostname + ':' + comfyPort + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open ComfyUI">&#8599;</a>';
     } else {
       $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: ' + (comfy.status || 'Not running'));
     }

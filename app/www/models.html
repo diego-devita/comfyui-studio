@@ -778,7 +778,6 @@
   const $searchInput  = document.getElementById('searchInput');
   const $main         = document.getElementById('mainContent');
   const $loading      = document.getElementById('loadingState');
-  const $globalDlAll  = document.getElementById('globalDlAll');
   const $categoryFilters = document.getElementById('categoryFilters');
   const $tagFilters   = document.getElementById('tagFilters');
   const $statusFilters = document.getElementById('statusFilters');
@@ -1056,7 +1055,7 @@
 
   function _autoPoll(stats) {
     const st = stats || {};
-    const busy = (st.downloading_count || 0) + (st.queued_count || 0) + (st.fetching_count || 0);
+    const busy = (st.downloading_count || 0) + (st.queued_count || 0);
     if (busy > 0) {
       if (!pollTimer) startPolling();
     } else {
@@ -1484,21 +1483,6 @@
       }
     }
   }
-
-  $globalDlAll.addEventListener('click', async () => {
-    const filenames = [];
-    categories.forEach(cat => {
-      cat.models.forEach(m => {
-        if (m.status === 'missing') filenames.push(m.file);
-      });
-    });
-    if (!filenames.length) { alert('No missing models to download.'); return; }
-    $globalDlAll.disabled = true;
-    $globalDlAll.textContent = 'Queuing ' + filenames.length + ' downloads...';
-    await downloadMissing(filenames);
-    $globalDlAll.disabled = false;
-    $globalDlAll.textContent = 'Download All Missing';
-  });
 
   // ── Polling ──
   function startPolling() {

@@ -90,9 +90,51 @@
     font-size: 10px;
     letter-spacing: 0;
     text-transform: none;
-    color: #6666780;
+    color: #666678;
     margin-left: 8px;
   }
+  .form-tooltip {
+    display: inline-block;
+    margin-left: 6px;
+    width: 15px;
+    height: 15px;
+    line-height: 15px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    color: var(--muted);
+    cursor: help;
+    position: relative;
+    vertical-align: middle;
+  }
+  .form-tooltip:hover { background: rgba(255,255,255,0.15); color: var(--text); }
+  .form-tooltip .tooltip-text {
+    display: none;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 24px;
+    width: 280px;
+    padding: 10px 12px;
+    background: #1a1a2e;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: normal;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  .form-tooltip:hover .tooltip-text { display: block; }
 
   .form-input {
     display: block;
@@ -716,6 +758,13 @@
       const label = document.createElement('label');
       label.className = 'form-label';
       label.textContent = input.label || input.name || input.id;
+      if (input.tooltip) {
+        var tip = document.createElement('span');
+        tip.className = 'form-tooltip';
+        tip.textContent = '?';
+        tip.innerHTML += '<span class="tooltip-text">' + escHtml(input.tooltip) + '</span>';
+        label.appendChild(tip);
+      }
       if (input.description) {
         const hint = document.createElement('span');
         hint.className = 'form-hint';

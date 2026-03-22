@@ -1,8 +1,8 @@
 id: ipa-batch
 category: ipa
 name: "IP-Adapter (Batch)"
-version: 1
-date: "2026-03-22 20:40"
+version: 2
+date: "2026-03-23 00:15"
 type: dynamic
 description: "IP-Adapter reference image + LoRA stack + prompt. The reference image provides the subject, the LoRA and prompt define the scenario. Generates from empty latent."
 author: ""
@@ -20,16 +20,19 @@ inputs:
     name: "Reference Image"
     type: image
     required: true
+    tooltip: "The face or subject you want to inject into the generated image. IP-Adapter extracts visual features from this image and uses them to guide generation. Works best with clear, well-lit photos — cropped faces work great for portrait presets."
 
   - id: checkpoint
     name: "Checkpoint"
     type: checkpoint_picker
     required: true
+    tooltip: "The base model that defines the visual style. Realistic checkpoints (CyberRealistic, RealVisXL) produce photorealistic results. Anime/illustration checkpoints (WAI-illustrious, Pony) produce stylized results. Must be SD 1.5 or SDXL-based — FLUX is not supported by IP-Adapter."
 
   - id: loras
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5
+    tooltip: "Optional style or concept LoRAs that modify the generation. The LoRA defines the scenario (e.g. a scene, pose, or aesthetic), while IP-Adapter preserves the subject. If the LoRA effect is too weak, lower the IP-Adapter weight to give the LoRA more room."
 
   - id: ipa_preset
     name: "IP-Adapter Preset"
@@ -42,6 +45,7 @@ inputs:
       - {label: "LIGHT - SD1.5 only (low strength)", value: "LIGHT - SD1.5 only (low strength)"}
       - {label: "FULL FACE - SD1.5 only (portraits stronger)", value: "FULL FACE - SD1.5 only (portraits stronger)"}
     default: "PLUS FACE (portraits)"
+    tooltip: "Determines which IP-Adapter model to use. PLUS FACE focuses on preserving facial identity — best for portraits. PLUS preserves general composition and style. STANDARD gives medium influence, leaving more room for the prompt. LIGHT barely influences the output. FULL FACE is the strongest face mode but SD 1.5 only."
 
   - id: ipa_weight
     name: "IP-Adapter Weight"
@@ -50,6 +54,7 @@ inputs:
     max: 2.0
     step: 0.05
     default: 0.8
+    tooltip: "How strongly the reference image influences the output. 0.0 = reference ignored completely, the prompt drives everything. 0.5-0.7 = balanced, subject recognizable but prompt/LoRA have room. 0.8-1.0 = strong likeness, less prompt flexibility. Above 1.0 = can produce artifacts. Start at 0.7 and adjust."
 
   - id: ipa_start
     name: "IP-Adapter Start"
@@ -58,6 +63,7 @@ inputs:
     max: 1.0
     step: 0.05
     default: 0.0
+    tooltip: "At which point in the diffusion process IP-Adapter kicks in. 0.0 = from the very beginning (full influence on composition). 0.2-0.3 = lets the model establish composition first, then applies the subject — useful if IP-Adapter is fighting the prompt layout."
 
   - id: ipa_end
     name: "IP-Adapter End"
@@ -66,6 +72,7 @@ inputs:
     max: 1.0
     step: 0.05
     default: 1.0
+    tooltip: "At which point IP-Adapter stops influencing. 1.0 = active until the end (strongest effect). 0.7-0.8 = lets the final refinement steps run without IP-Adapter, which can sharpen details. Lowering this can reduce artifacts while keeping the subject."
 
   - id: clip_skip
     name: "CLIP Skip"
@@ -73,6 +80,7 @@ inputs:
     min: -12
     max: -1
     default: -2
+    tooltip: "How many CLIP layers to skip from the end. -1 = use all layers (most literal prompt interpretation). -2 = skip last layer (recommended for most models, especially Pony/Illustrious). More negative = more abstract/creative prompt interpretation. Most checkpoints are trained with -2."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -80,12 +88,14 @@ inputs:
     required: true
     default: ""
     placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes what you want to see. Works together with the reference image — the prompt sets the scene/scenario while IP-Adapter injects the subject. Include quality tags (masterpiece, best quality) and the scenario you want. If using a LoRA, include its trigger words here."
 
   - id: negative_prompt
     name: "Negative Prompt"
     type: text
     required: false
     default: "bad quality, worst quality, low quality"
+    tooltip: "What you want to avoid. Standard negatives like 'bad quality, worst quality, deformed' help across all models. Add specific things you don't want (e.g. 'glasses' if the reference has glasses but you don't want them)."
 
   - id: resolution
     name: "Resolution"
@@ -97,6 +107,7 @@ inputs:
       illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
       flux: [{label: "1024x1024", w: 1024, h: 1024}, {label: "768x1344", w: 768, h: 1344}, {label: "1344x768", w: 1344, h: 768}]
     default: {w: 832, h: 1216}
+    tooltip: "Output image size. Use the presets matching your checkpoint — SD 1.5 models work at 512px, SDXL/Pony/Illustrious at 1024px. Portrait (832x1216) is taller, landscape (1216x832) is wider. Going outside the model's training resolution produces bad results."
 
   - id: batch_size
     name: "Batch Size"
@@ -104,6 +115,7 @@ inputs:
     min: 1
     max: 100
     default: 1
+    tooltip: "Number of images to generate in a single pass. All images use the same seed but ComfyUI adds different noise per batch item, producing variations. Higher batch sizes use more VRAM — with SDXL at 1024px, ~10 is safe on most GPUs. For many images, generate in batches of 10-20."
 
   - id: steps
     name: "Steps"
@@ -111,6 +123,7 @@ inputs:
     min: 1
     max: 100
     default: 19
+    tooltip: "Number of denoising steps. More steps = more refined output but slower. 15-25 is the sweet spot for most models. Below 10 looks noisy, above 30 rarely improves quality. Euler Ancestral can look good with as few as 15 steps."
 
   - id: cfg
     name: "CFG Scale"
@@ -119,6 +132,7 @@ inputs:
     max: 30.0
     step: 0.5
     default: 4.0
+    tooltip: "How closely the model follows the prompt. Low (2-5) = creative, soft, natural. Medium (6-8) = balanced. High (9-15) = strict prompt adherence but can look artificial. Pony/Illustrious models typically work best at 3-5. SD 1.5 at 7-9."
 
   - id: sampler_name
     name: "Sampler"
@@ -131,6 +145,7 @@ inputs:
       - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
       - {label: "UniPC", value: "uni_pc"}
     default: "euler_ancestral"
+    tooltip: "The algorithm used to denoise the image. Euler Ancestral adds randomness — great for creative variety, each run looks different. DPM++ 2M is deterministic and converges quickly. DPM++ SDE balances both. For batch generation, Euler Ancestral gives the most variety."
 
   - id: scheduler
     name: "Scheduler"
@@ -142,6 +157,7 @@ inputs:
       - {label: "SGM Uniform", value: "sgm_uniform"}
       - {label: "Simple", value: "simple"}
     default: "normal"
+    tooltip: "Controls the noise schedule — how fast noise is removed across steps. Normal is linear. Karras front-loads denoising (sharper details, popular choice). Exponential is aggressive early then gentle. For most cases, Normal or Karras work well."
 
   - id: denoise
     name: "Denoise"
@@ -150,11 +166,13 @@ inputs:
     max: 1.0
     step: 0.05
     default: 1.0
+    tooltip: "How much of the latent to regenerate. 1.0 = generate from pure noise (standard for text-to-image). Values below 1.0 would partially preserve a starting image, but this workflow generates from empty latent so keep at 1.0."
 
   - id: seed
     name: "Seed"
     type: seed
     default: -1
+    tooltip: "Random seed for reproducibility. -1 = random seed each time. Set a specific number to reproduce the exact same result. With batch_size > 1, each image in the batch gets unique noise but the base seed is shared."
 
 outputs:
   - id: image
