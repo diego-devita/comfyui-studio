@@ -41,7 +41,7 @@
   }
 
   /* ── Main ── */
-  main { padding: 32px 40px 64px; max-width: 960px; }
+  main { padding: 32px 40px 64px; max-width: 960px; margin: 0 auto; }
 
   /* ── Component Table ── */
   .comp-table {
@@ -83,17 +83,23 @@
   .status-dot.orange { background: var(--queued); }
   .status-dot.red { background: var(--error); }
 
-  /* ── Update Button Row ── */
-  .update-row {
-    margin-bottom: 32px;
+  /* ── Update (in header) ── */
+  .header-update {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .header-update .header-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
   }
   .update-result {
     font-family: var(--mono);
     font-size: 12px;
     color: var(--muted);
+    margin-bottom: 16px;
   }
 
   /* ── Stat Cards ── */
@@ -180,7 +186,10 @@
 <!-- Header -->
 <header>
   <div class="logo">ComfyUI <span>Studio</span> <span class="version-tag" id="versionTag"></span></div>
-  <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
+  <div class="header-update">
+    <button class="btn" id="updateBtn">Check for Updates</button>
+    <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
+  </div>
 </header>
 
 <!-- Main content -->
@@ -216,6 +225,9 @@
       </div>
     </div>
 
+    <!-- Update Result (shown after check) -->
+    <div class="update-result" id="updateResult"></div>
+
     <!-- Component Table -->
     <table class="comp-table" id="compTable">
       <thead>
@@ -229,12 +241,6 @@
       <tbody id="compBody">
       </tbody>
     </table>
-
-    <!-- Update Button -->
-    <div class="update-row">
-      <button class="btn" id="updateBtn">Check for Updates</button>
-      <span class="update-result" id="updateResult"></span>
-    </div>
 
     <!-- System Info -->
     <div class="sys-info" id="sysInfo">
@@ -311,7 +317,13 @@
 
     // Date
     const date = data.date || data.updated_at || '2026-03-21';
-    $lastUpdated.textContent = typeof date === 'string' ? date.substring(0, 16) : date;
+    if (typeof date === 'string' && date.length >= 10) {
+      var parts = date.substring(0, 10).split('-');
+      var time = date.substring(11, 16) || '';
+      $lastUpdated.textContent = parts[2] + '/' + parts[1] + '/' + parts[0] + (time ? ' ' + time : '');
+    } else {
+      $lastUpdated.textContent = date;
+    }
 
     // Component table
     const compObj = data.components || {};
@@ -364,9 +376,14 @@
 
     // Disk info
     const disk = data.disk || {};
-    const modelsDiskStr = disk.models_bytes ? fmtBytes(disk.models_bytes) + ' models' : (disk.models || '--');
-    const freeStr = disk.free_bytes ? fmtBytes(disk.free_bytes) + ' free' : (disk.free || '--');
-    $diskInfo.textContent = 'Disk: ' + modelsDiskStr + ' \u00b7 ' + freeStr;
+    if (disk.total_bytes > 0) {
+      const usedStr = fmtBytes(disk.used_bytes || 0);
+      const totalStr = fmtBytes(disk.total_bytes);
+      const freeStr = fmtBytes(disk.free_bytes || 0);
+      $diskInfo.textContent = 'Disk: ' + usedStr + ' / ' + totalStr + ' \u00b7 ' + freeStr + ' free';
+    } else {
+      $diskInfo.textContent = 'Disk: --';
+    }
   }
 
   // ── Initial load ──
