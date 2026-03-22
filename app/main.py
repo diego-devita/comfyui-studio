@@ -1809,7 +1809,11 @@ async def list_assets(asset_type: str):
             continue
         rel = str(f.relative_to(base))
         if asset_type == "outputs" and rel.startswith(STUDIO_DIR + "/"):
-            continue  # handled separately as studio_jobs
+            # Skip files inside studio job subdirectories (they're grouped as studio_jobs)
+            # But keep files directly in comfyui-studio/ (legacy flat files)
+            parts = rel.split("/")
+            if len(parts) > 2:  # comfyui-studio/subfolder/file = grouped
+                continue
         stat = f.stat()
         ext = f.suffix.lower()
         is_video = ext in (".mp4", ".webm", ".mov", ".avi")
