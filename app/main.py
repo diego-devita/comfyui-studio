@@ -487,6 +487,225 @@ def _load_workflow_json(workflow_id: str) -> dict:
     return json.loads(p.read_text())
 
 
+def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
+    """Assemble a dynamic workflow from block templates based on manifest and runtime params."""
+    wf_id = manifest["id"]
+    blocks_dir = _workflows_path(f"{wf_id}/{manifest.get('blocks_dir', 'blocks')}")
+    defaults = manifest.get("defaults", {})
+
+    # Load block templates
+    def load_block(filename):
+        return json.loads((blocks_dir / filename).read_text())
+
+    pipeline = manifest["pipeline"]
+    block_templates = {}
+    for stage in pipeline:
+        block_templates[stage["block"]] = load_block(stage["file"])
+
+    # Determine scene count
+    num_scenes = int(params.get("num_scenes", 3))
+    scenes = params.get("scenes", [])
+    # Pad scenes if fewer provided than num_scenes
+    while len(scenes) < num_scenes:
+        scenes.append({"prompt": "", "duration": 5})
+
+    neg_prompt = defaults.get("negative_prompt", "")
+    lora_accelerator = defaults.get("lora_accelerator", "")
+    lora_acc_str_high = defaults.get("lora_accelerator_strength_high", 3)
+    lora_acc_str_low = defaults.get("lora_accelerator_strength_low", 1.5)
+    steps = defaults.get("steps", 6)
+    split_step = defaults.get("split_step", 3)
+
+    # Build LoRA inputs from picker
+    selected_loras = params.get("loras", [])
+    # Each lora is a pair_id; resolve to high/low files from models catalog
+    _reload_models()
+    lora_pairs = {}
+    for cat in _models_data.get("categories", []):
+        for m in cat.get("models", []):
+            pid = m.get("pair_id")
+            if pid and pid in selected_loras:
+                role = m.get("pair_role", "both")
+                if pid not in lora_pairs:
+                    lora_pairs[pid] = {}
+                lora_pairs[pid][role] = m["file"]
+
+    # Collected workflow nodes (global ID -> node)
+    workflow = {}
+    node_counter = [100]  # mutable counter
+
+    def next_id():
+        node_counter[0] += 1
+        return str(node_counter[0])
+
+    # Track block instance exports: block_instance_name -> {export_name: [global_id, output_idx]}
+    block_exports = {}
+
+    def instantiate_block(block_name, template, variables, imports_map):
+        """Instantiate a block: assign global IDs, resolve imports and variables."""
+        local_to_global = {}
+        instance_name = block_name
+
+        # Assign global IDs to all nodes
+        for local_id in template["nodes"]:
+            local_to_global[local_id] = next_id()
+
+        # Process each node
+        for local_id, node_def in template["nodes"].items():
+            global_id = local_to_global[local_id]
+            node = {
+                "class_type": node_def["class_type"],
+                "_meta": dict(node_def.get("_meta", {})),
+            }
+
+            # Resolve _meta title variables
+            title = node["_meta"].get("title", "")
+            for vk, vv in variables.items():
+                title = title.replace("{{" + vk + "}}", str(vv))
+            node["_meta"]["title"] = title
+
+            # Process inputs
+            inputs = {}
+            for key, val in node_def.get("inputs", {}).items():
+                # Skip template LoRA slot placeholders
+                if key.startswith("{{") and key.endswith("}}"):
+                    continue
+                resolved = _resolve_value(val, local_to_global, imports_map, variables)
+                inputs[key] = resolved
+            node["inputs"] = inputs
+            workflow[global_id] = node
+
+        # Record exports
+        exports = {}
+        for exp_name, exp_def in template.get("exports", {}).items():
+            exp_node = exp_def["node"]
+            exp_output = exp_def["output"]
+            if exp_node in local_to_global:
+                exports[exp_name] = [local_to_global[exp_node], exp_output]
+        block_exports[instance_name] = exports
+
+        return exports
+
+    def _resolve_value(val, local_to_global, imports_map, variables):
+        """Resolve a value: local refs, import refs, variable substitutions."""
+        if isinstance(val, list) and len(val) == 2:
+            ref_id, ref_out = val
+            if isinstance(ref_id, str):
+                if ref_id in local_to_global:
+                    return [local_to_global[ref_id], ref_out]
+                # Might be a global reference already
+                return val
+            return val
+        if isinstance(val, str):
+            if val.startswith("{{") and val.endswith("}}"):
+                var_name = val[2:-2]
+                if var_name in imports_map:
+                    return imports_map[var_name]
+                if var_name in variables:
+                    return variables[var_name]
+                return val
+            # Replace inline {{var}} in strings
+            for vk, vv in variables.items():
+                val = val.replace("{{" + vk + "}}", str(vv))
+            return val
+        if isinstance(val, dict):
+            resolved = {}
+            for k, v in val.items():
+                rk = k
+                for vk, vv in variables.items():
+                    rk = rk.replace("{{" + vk + "}}", str(vv))
+                resolved[rk] = _resolve_value(v, local_to_global, imports_map, variables)
+            return resolved
+        return val
+
+    # --- Instantiate setup block ---
+    setup_vars = {
+        "steps": steps,
+        "split_step": split_step,
+        "input_image": params.get("_uploaded_image", "input.png"),
+        "lora_accelerator": lora_accelerator,
+        "lora_accelerator_strength_high": lora_acc_str_high,
+        "lora_accelerator_strength_low": lora_acc_str_low,
+    }
+    setup_tmpl = block_templates["setup"]
+
+    # Inject user-selected LoRAs into setup template before instantiation
+    import copy
+    setup_tmpl = copy.deepcopy(setup_tmpl)
+    lora_idx = 2  # lora_1 is the accelerator
+    for pid in selected_loras:
+        pair = lora_pairs.get(pid, {})
+        high_file = pair.get("high", pair.get("both", ""))
+        low_file = pair.get("low", pair.get("both", ""))
+        if high_file:
+            slot = f"lora_{lora_idx}"
+            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": 1}
+            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": 1}
+            lora_idx += 1
+
+    # Remove template placeholders
+    for node_key in ["lora_high", "lora_low"]:
+        inputs = setup_tmpl["nodes"][node_key]["inputs"]
+        for k in list(inputs.keys()):
+            if k.startswith("{{"):
+                del inputs[k]
+
+    setup_exports = instantiate_block("setup", setup_tmpl, setup_vars, {})
+
+    # --- Instantiate scenes ---
+    prev_scene_exports = None
+    last_scene_exports = None
+
+    for i in range(num_scenes):
+        scene = scenes[i] if i < len(scenes) else {"prompt": "", "duration": 5}
+        duration_sec = int(scene.get("duration", 5))
+        duration_frames = duration_sec * 16 + 1
+        scene_seed = int(params.get("seed", -1))
+        if scene_seed == -1:
+            scene_seed = random.randint(0, 2**53)
+
+        scene_vars = {
+            "prompt": scene.get("prompt", ""),
+            "negative_prompt": neg_prompt,
+            "duration_frames": duration_frames,
+            "seed": scene_seed,
+            "scene_num": str(i + 1),
+        }
+
+        # Build imports map from setup exports
+        imports_map = {
+            "model_high": setup_exports["model_high"],
+            "model_low": setup_exports["model_low"],
+            "clip": setup_exports["clip"],
+            "vae": setup_exports["vae"],
+            "sampler": setup_exports["sampler"],
+            "sigmas_high": setup_exports["sigmas_high"],
+            "sigmas_low": setup_exports["sigmas_low"],
+            "anchor_samples": setup_exports["anchor_samples"],
+        }
+
+        if i == 0:
+            tmpl = block_templates["scene_first"]
+            scene_exports = instantiate_block(f"scene_{i}", tmpl, scene_vars, imports_map)
+        else:
+            tmpl = block_templates["scene_extend"]
+            imports_map["prev_samples"] = prev_scene_exports["samples"]
+            imports_map["prev_images"] = prev_scene_exports["images"]
+            scene_exports = instantiate_block(f"scene_{i}", tmpl, scene_vars, imports_map)
+
+        prev_scene_exports = scene_exports
+        last_scene_exports = scene_exports
+
+    # --- Instantiate output block ---
+    output_tmpl = block_templates["output"]
+    # For single scene, images come from vae_decode; for multi, from last overlap
+    final_images = last_scene_exports["images"]
+    output_imports = {"final_images": final_images}
+    instantiate_block("output", output_tmpl, {}, output_imports)
+
+    return workflow
+
+
 def _load_workflows_index_raw() -> dict:
     """Load the full workflows index.json including version/date."""
     p = _workflows_path("index.json")
@@ -1456,6 +1675,28 @@ async def telemetry():
     return result
 
 
+@app.get("/api/admin/loras/compatible/{base_model}")
+async def list_compatible_loras(base_model: str):
+    """List LoRA pairs compatible with a given base model."""
+    _reload_models()
+    pairs = {}
+    for cat in _models_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m.get("base_model") == base_model and m.get("pair_id"):
+                pid = m["pair_id"]
+                if pid not in pairs:
+                    pairs[pid] = {"pair_id": pid, "name": m["name"].rsplit(" ", 2)[0], "high": None, "low": None, "both": None}
+                role = m.get("pair_role", "both")
+                pairs[pid][role] = m["file"]
+                if not pairs[pid]["name"] or pairs[pid]["name"] == m["name"]:
+                    # Clean up name: remove "High Noise" / "Low Noise" suffix
+                    name = m["name"]
+                    for suffix in [" High Noise", " Low Noise", " LoRA", " (Kijai)"]:
+                        name = name.replace(suffix, "")
+                    pairs[pid]["name"] = name.strip()
+    return list(pairs.values())
+
+
 # ── Job History endpoints ────────────────────────────────────────────────────
 
 
@@ -1513,13 +1754,41 @@ async def execute_workflow(
     if not manifest:
         raise HTTPException(404)
 
-    workflow = _load_workflow_json(workflow_id)
-    if not workflow:
-        raise HTTPException(404, "Workflow JSON not found")
     form_params = json.loads(params)
+    is_dynamic = manifest.get("type") == "dynamic"
 
-    # Upload image to ComfyUI if provided
-    if input_image:
+    if is_dynamic:
+        # Dynamic workflow: assemble from blocks
+        # Handle image upload first so we can pass the filename
+        uploaded_name = None
+        if input_image:
+            image_bytes = await input_image.read()
+            ext = input_image.filename.rsplit(".", 1)[-1] if "." in (input_image.filename or "") else "png"
+            unique_name = f"{uuid.uuid4().hex}.{ext}"
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    f"{COMFY_URL}/upload/image",
+                    files={"image": (unique_name, image_bytes, input_image.content_type or "image/png")},
+                    data={"overwrite": "true"},
+                )
+                r.raise_for_status()
+                uploaded_name = r.json()["name"]
+            input_image = None  # consumed
+
+        form_params["_uploaded_image"] = uploaded_name or "input.png"
+        # Parse scene list from JSON string if needed
+        if isinstance(form_params.get("scenes"), str):
+            form_params["scenes"] = json.loads(form_params["scenes"])
+        if isinstance(form_params.get("loras"), str):
+            form_params["loras"] = json.loads(form_params["loras"])
+        workflow = _assemble_dynamic_workflow(manifest, form_params)
+    else:
+        workflow = _load_workflow_json(workflow_id)
+        if not workflow:
+            raise HTTPException(404, "Workflow JSON not found")
+
+    # Static workflow: upload image and apply params
+    if not is_dynamic and input_image:
         image_bytes = await input_image.read()
         ext = input_image.filename.rsplit(".", 1)[-1] if "." in (input_image.filename or "") else "png"
         unique_name = f"{uuid.uuid4().hex}.{ext}"
@@ -1541,42 +1810,42 @@ async def execute_workflow(
                 if node_id in workflow:
                     workflow[node_id]["inputs"][field] = uploaded_name
 
-    # Apply form parameters
-    for inp in manifest.get("inputs", []):
-        if inp["id"] in form_params:
-            node_id = str(inp["node_id"])
-            field = inp["field"]
-            value = form_params[inp["id"]]
+    if not is_dynamic:
+        # Apply form parameters (static workflows only)
+        for inp in manifest.get("inputs", []):
+            if inp["id"] in form_params:
+                node_id = str(inp["node_id"])
+                field = inp["field"]
+                value = form_params[inp["id"]]
 
-            if node_id in workflow:
-                # Type casting
-                if inp["type"] == "int":
-                    value = int(value)
-                elif inp["type"] == "float":
-                    value = float(value)
-                elif inp["type"] == "select":
-                    value = int(value) if isinstance(value, str) and value.isdigit() else value
-                elif inp["type"] == "seed":
-                    value = int(value)
-                    if value == -1:
-                        value = random.randint(0, 2**53)
+                if node_id in workflow:
+                    if inp["type"] == "int":
+                        value = int(value)
+                    elif inp["type"] == "float":
+                        value = float(value)
+                    elif inp["type"] == "select":
+                        value = int(value) if isinstance(value, str) and value.isdigit() else value
+                    elif inp["type"] == "seed":
+                        value = int(value)
+                        if value == -1:
+                            value = random.randint(0, 2**53)
 
-                workflow[node_id]["inputs"][field] = value
+                    workflow[node_id]["inputs"][field] = value
 
-    # Handle seed -1 for seed type inputs not in form_params
-    for inp in manifest.get("inputs", []):
-        if inp["type"] == "seed" and inp["id"] not in form_params:
-            node_id = str(inp["node_id"])
-            field = inp["field"]
-            if node_id in workflow:
-                current = workflow[node_id]["inputs"].get(field, -1)
-                if current == -1:
-                    workflow[node_id]["inputs"][field] = random.randint(0, 2**53)
+        # Handle seed -1 for seed type inputs not in form_params
+        for inp in manifest.get("inputs", []):
+            if inp["type"] == "seed" and inp["id"] not in form_params:
+                node_id = str(inp["node_id"])
+                field = inp["field"]
+                if node_id in workflow:
+                    current = workflow[node_id]["inputs"].get(field, -1)
+                    if current == -1:
+                        workflow[node_id]["inputs"][field] = random.randint(0, 2**53)
 
     # Collect resolved seed values
     used_seeds = {}
     for inp in manifest.get("inputs", []):
-        if inp["type"] == "seed":
+        if inp["type"] == "seed" and inp.get("node_id"):
             node_id = str(inp["node_id"])
             field = inp["field"]
             if node_id in workflow:

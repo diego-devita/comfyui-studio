@@ -1,0 +1,100 @@
+{
+  "nodes": {
+    "pos_prompt": {
+      "inputs": {"text": "{{prompt}}", "clip": "{{clip}}"},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Positive Prompt"}
+    },
+    "neg_prompt": {
+      "inputs": {"text": "{{negative_prompt}}", "clip": "{{clip}}"},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Negative Prompt"}
+    },
+    "svi_pro": {
+      "inputs": {
+        "length": "{{duration_frames}}",
+        "motion_latent_count": 1,
+        "positive": ["pos_prompt", 0],
+        "negative": ["neg_prompt", 0],
+        "anchor_samples": "{{anchor_samples}}",
+        "prev_samples": "{{prev_samples}}"
+      },
+      "class_type": "WanImageToVideoSVIPro",
+      "_meta": {"title": "SVI Pro (Scene {{scene_num}})"}
+    },
+    "cfg_high": {
+      "inputs": {
+        "cfg": 1, "start_percent": 0, "end_percent": 1,
+        "model": "{{model_high}}",
+        "positive": ["svi_pro", 0],
+        "negative": ["svi_pro", 1]
+      },
+      "class_type": "ScheduledCFGGuidance",
+      "_meta": {"title": "CFG High (Scene {{scene_num}})"}
+    },
+    "cfg_low": {
+      "inputs": {
+        "cfg": 1, "start_percent": 0, "end_percent": 1,
+        "model": "{{model_low}}",
+        "positive": ["svi_pro", 0],
+        "negative": ["svi_pro", 1]
+      },
+      "class_type": "ScheduledCFGGuidance",
+      "_meta": {"title": "CFG Low (Scene {{scene_num}})"}
+    },
+    "noise": {
+      "inputs": {"noise_seed": "{{seed}}"},
+      "class_type": "RandomNoise",
+      "_meta": {"title": "Noise (Scene {{scene_num}})"}
+    },
+    "disable_noise": {
+      "inputs": {},
+      "class_type": "DisableNoise",
+      "_meta": {"title": "DisableNoise"}
+    },
+    "sampler_high": {
+      "inputs": {
+        "noise": ["noise", 0],
+        "guider": ["cfg_high", 0],
+        "sampler": "{{sampler}}",
+        "sigmas": "{{sigmas_high}}",
+        "latent_image": ["svi_pro", 2]
+      },
+      "class_type": "SamplerCustomAdvanced",
+      "_meta": {"title": "Sampler High (Scene {{scene_num}})"}
+    },
+    "sampler_low": {
+      "inputs": {
+        "noise": ["disable_noise", 0],
+        "guider": ["cfg_low", 0],
+        "sampler": "{{sampler}}",
+        "sigmas": "{{sigmas_low}}",
+        "latent_image": ["sampler_high", 0]
+      },
+      "class_type": "SamplerCustomAdvanced",
+      "_meta": {"title": "Sampler Low (Scene {{scene_num}})"}
+    },
+    "vae_decode": {
+      "inputs": {"samples": ["sampler_low", 0], "vae": "{{vae}}"},
+      "class_type": "VAEDecode",
+      "_meta": {"title": "VAE Decode (Scene {{scene_num}})"}
+    },
+    "overlap": {
+      "inputs": {
+        "overlap": 5,
+        "overlap_side": "source",
+        "overlap_mode": "linear_blend",
+        "source_images": "{{prev_images}}",
+        "new_images": ["vae_decode", 0]
+      },
+      "class_type": "ImageBatchExtendWithOverlap",
+      "_meta": {"title": "Concat (Scene {{scene_num}})"}
+    }
+  },
+  "imports": ["model_high", "model_low", "clip", "vae", "sampler", "sigmas_high", "sigmas_low", "anchor_samples", "prev_samples", "prev_images"],
+  "exports": {
+    "samples": {"node": "sampler_low", "output": 0},
+    "images": {"node": "overlap", "output": 2}
+  },
+  "variables": ["prompt", "negative_prompt", "duration_frames", "seed", "scene_num"]
+}

@@ -1,0 +1,125 @@
+id: wan22-svi-dynamic
+name: "WAN 2.2 SVI Pro Dynamic Multi-Scene"
+version: 1
+date: "2026-03-22 01:50"
+type: dynamic
+description: "Dynamic multi-scene I2V with configurable scene count, per-scene prompts and durations, LoRA picker. Uses GGUF Q8 models, SVI Pro technique, RIFE 2x interpolation."
+author: "comfyui-studio"
+
+base_model: "wan-i2v-14b"
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+  - block: scene_first
+    file: "scene_first.json"
+    repeat: 1
+  - block: scene_extend
+    file: "scene_extend.json"
+    repeat_variable: "extra_scenes"
+  - block: output
+    file: "output.json"
+
+connections:
+  setup_to_scenes:
+    model_high: "setup.model_high"
+    model_low: "setup.model_low"
+    clip: "setup.clip"
+    vae: "setup.vae"
+    sampler: "setup.sampler"
+    sigmas_high: "setup.sigmas_high"
+    sigmas_low: "setup.sigmas_low"
+    anchor_samples: "setup.anchor_samples"
+  scene_chain:
+    prev_samples: "prev_scene.samples"
+    prev_images: "prev_scene.images"
+  last_scene_to_output:
+    final_images: "last_scene.images"
+
+defaults:
+  negative_prompt: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+  steps: 6
+  split_step: 3
+  lora_accelerator: "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+  lora_accelerator_strength_high: 3
+  lora_accelerator_strength_low: 1.5
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    required: true
+
+  - id: num_scenes
+    name: "Number of Scenes"
+    type: int
+    min: 1
+    max: 10
+    default: 3
+
+  - id: scenes
+    name: "Scenes"
+    type: scene_list
+    per_scene:
+      - id: prompt
+        name: "Prompt"
+        type: text
+        required: true
+      - id: duration
+        name: "Duration (seconds)"
+        type: select
+        options:
+          - {label: "3 seconds", value: 3}
+          - {label: "5 seconds", value: 5}
+          - {label: "6 seconds", value: 6}
+          - {label: "8 seconds", value: 8}
+          - {label: "10 seconds", value: 10}
+        default: 5
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker
+    base_model: "wan-i2v-14b"
+    max_loras: 3
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+
+required_models:
+  - "wan2.2_i2v_high_noise_14B_Q8_0.gguf"
+  - "wan2.2_i2v_low_noise_14B_Q8_0.gguf"
+  - "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+
+required_nodes:
+  - "CLIPLoader"
+  - "VAELoader"
+  - "VAEEncode"
+  - "VAEDecode"
+  - "LoadImage"
+  - "CLIPTextEncode"
+  - "UnetLoaderGGUF"
+  - "wanBlockSwap"
+  - "Power Lora Loader (rgthree)"
+  - "ModelSamplingSD3"
+  - "BasicScheduler"
+  - "KSamplerSelect"
+  - "SplitSigmas"
+  - "SamplerCustomAdvanced"
+  - "ScheduledCFGGuidance"
+  - "DisableNoise"
+  - "RandomNoise"
+  - "WanImageToVideoSVIPro"
+  - "ImageBatchExtendWithOverlap"
+  - "ImageScaleToTotalPixels"
+  - "RIFE VFI"
+  - "VHS_VideoCombine"
