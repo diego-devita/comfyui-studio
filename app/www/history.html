@@ -399,7 +399,7 @@
   });
   document.body.appendChild($imgOverlay);
 
-  function showImageFullscreen(url) {
+  window.showImageFullscreen = function(url) {
     $imgOverlay.innerHTML = '<img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">';
     $imgOverlay.style.display = 'flex';
   }
