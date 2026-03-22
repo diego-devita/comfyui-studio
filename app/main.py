@@ -490,7 +490,13 @@ def _load_workflow_json(workflow_id: str) -> dict:
 def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     """Assemble a dynamic workflow from block templates based on manifest and runtime params."""
     wf_id = manifest["id"]
-    blocks_dir = _workflows_path(f"{wf_id}/{manifest.get('blocks_dir', 'blocks')}")
+    blocks_subdir = manifest.get("blocks_dir", "blocks")
+    # Check /workspace first, then /app
+    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
+    if not blocks_dir.exists():
+        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+    if not blocks_dir.exists():
+        raise FileNotFoundError(f"Blocks directory not found: tried {WORKFLOWS_DIR / wf_id / blocks_subdir} and {WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir}. Run Check for Updates to download workflow blocks.")
     defaults = manifest.get("defaults", {})
 
     # Load block templates
