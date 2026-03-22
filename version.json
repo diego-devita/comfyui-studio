@@ -4,7 +4,7 @@
   "components": {
     "backend": {"version": "7.6.0", "date": "2026-03-22 21:00", "file": "app/main.py"},
     "frontend": {"version": "7.6.1", "date": "2026-03-22 21:15", "dir": "app/www/"},
-    "models": {"version": 16, "date": "2026-03-22 21:30", "file": "app/models.json"},
+    "models": {"version": 17, "date": "2026-03-22 21:45", "file": "app/models.json"},
     "workflows": {"version": 22, "date": "2026-03-22 20:40", "dir": "workflows/"}
   }
 }
