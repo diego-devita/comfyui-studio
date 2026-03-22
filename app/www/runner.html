@@ -861,7 +861,7 @@
       if (ps.id === 'duration' && ps.default != null) defaultDuration = ps.default;
     });
 
-    function addScene(prompt, duration) {
+    function addScene(prompt, duration, seed) {
       var idx = container.querySelectorAll('.scene-card').length;
       var card = document.createElement('div');
       card.className = 'scene-card';
@@ -908,6 +908,27 @@
       durRow.appendChild(sel);
       card.appendChild(durRow);
 
+      // Seed row
+      var seedRow = document.createElement('div');
+      seedRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;';
+      var seedLabel = document.createElement('span');
+      seedLabel.style.cssText = 'font-size:12px;color:var(--muted);';
+      seedLabel.textContent = 'Seed:';
+      seedRow.appendChild(seedLabel);
+      var seedInput = document.createElement('input');
+      seedInput.type = 'number';
+      seedInput.className = 'scene-seed';
+      seedInput.value = seed != null ? seed : -1;
+      seedInput.style.cssText = 'width:160px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
+      seedRow.appendChild(seedInput);
+      var randBtn = document.createElement('button');
+      randBtn.type = 'button';
+      randBtn.className = 'btn btn--sm';
+      randBtn.textContent = 'Random';
+      randBtn.onclick = function() { seedInput.value = -1; };
+      seedRow.appendChild(randBtn);
+      card.appendChild(seedRow);
+
       container.insertBefore(card, container.querySelector('.scene-add-btn'));
     }
 
@@ -921,11 +942,11 @@
     addBtn.className = 'scene-add-btn';
     addBtn.type = 'button';
     addBtn.textContent = '+ Add Scene';
-    addBtn.onclick = function() { addScene('', defaultDuration); renumber(); };
+    addBtn.onclick = function() { addScene('', defaultDuration, -1); renumber(); };
     container.appendChild(addBtn);
 
     // Start with 1 scene
-    addScene('', defaultDuration);
+    addScene('', defaultDuration, -1);
 
     return container;
   }
@@ -937,7 +958,9 @@
     container.querySelectorAll('.scene-card').forEach(function(card) {
       var prompt = card.querySelector('.scene-prompt').value || '';
       var dur = card.querySelector('.scene-duration');
-      scenes.push({ prompt: prompt, duration: dur ? Number(dur.value) : 5 });
+      var seedEl = card.querySelector('.scene-seed');
+      var seed = seedEl ? Number(seedEl.value) : -1;
+      scenes.push({ prompt: prompt, duration: dur ? Number(dur.value) : 5, seed: seed });
     });
     return scenes;
   }
@@ -1156,19 +1179,36 @@
         throw new Error('No prompt_id returned from server.');
       }
 
-      // Show resolved seeds under their inputs
+      // Show resolved seeds
       if (result.seeds) {
-        for (const [inputId, seedVal] of Object.entries(result.seeds)) {
-          var seedEl = document.querySelector('[data-input-id="' + inputId + '"]');
-          if (seedEl) {
-            var hint = seedEl.parentElement.querySelector('.seed-used');
-            if (!hint) {
-              hint = document.createElement('div');
-              hint.className = 'seed-used';
-              hint.style.cssText = 'font-size:12px;color:var(--muted);margin-top:2px;';
-              seedEl.parentElement.appendChild(hint);
+        for (const [key, seedVal] of Object.entries(result.seeds)) {
+          // Per-scene seeds (scene_1, scene_2, etc.)
+          var match = key.match(/^scene_(\d+)$/);
+          if (match) {
+            var sceneIdx = parseInt(match[1]) - 1;
+            var sceneCards = document.querySelectorAll('.scene-card');
+            if (sceneCards[sceneIdx]) {
+              var seedInput = sceneCards[sceneIdx].querySelector('.scene-seed');
+              if (seedInput && Number(seedInput.value) === -1) {
+                var hint = document.createElement('div');
+                hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:2px;';
+                hint.textContent = 'Used: ' + seedVal;
+                seedInput.parentElement.appendChild(hint);
+              }
             }
-            hint.textContent = 'Used: ' + seedVal;
+          } else {
+            // Static workflow seeds
+            var seedEl = document.querySelector('[data-input-id="' + key + '"]');
+            if (seedEl) {
+              var hint = seedEl.parentElement.querySelector('.seed-used');
+              if (!hint) {
+                hint = document.createElement('div');
+                hint.className = 'seed-used';
+                hint.style.cssText = 'font-size:12px;color:var(--muted);margin-top:2px;';
+                seedEl.parentElement.appendChild(hint);
+              }
+              hint.textContent = 'Used: ' + seedVal;
+            }
           }
         }
       }
