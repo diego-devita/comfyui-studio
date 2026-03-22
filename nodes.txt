@@ -60,6 +60,9 @@ https://github.com/cubiq/ComfyUI_FaceAnalysis.git
 # Requires post-install script
 https://github.com/ltdrdata/ComfyUI-Impact-Pack.git requirements.txt python install.py
 
+# Ultralytics detectors (face_yolov8m etc.) — required by Impact-Pack's FaceDetailer
+https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git requirements.txt
+
 # Regional prompting, wildcards, lora stacking — companion to Impact-Pack
 https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
 
