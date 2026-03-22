@@ -34,7 +34,7 @@
       "inputs": {
         "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
         "lora_1": {"on": true, "lora": "{{lora_accelerator}}", "strength": "{{lora_accelerator_strength_high}}"},
-        "{{lora_slots_high}}": "{{lora_values_high}}",
+        "lora_2": {"on": true, "lora": "{{svi_pro_high}}", "strength": 1},
         "\u27a5 Add Lora": "",
         "model": ["blockswap_high", 0],
         "clip": ["clip", 0]
@@ -46,7 +46,7 @@
       "inputs": {
         "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
         "lora_1": {"on": true, "lora": "{{lora_accelerator}}", "strength": "{{lora_accelerator_strength_low}}"},
-        "{{lora_slots_low}}": "{{lora_values_low}}",
+        "lora_2": {"on": true, "lora": "{{svi_pro_low}}", "strength": 1},
         "\u27a5 Add Lora": "",
         "model": ["blockswap_low", 0],
         "clip": ["clip", 0]

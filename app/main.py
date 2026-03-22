@@ -634,13 +634,15 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
         "lora_accelerator": lora_accelerator,
         "lora_accelerator_strength_high": lora_acc_str_high,
         "lora_accelerator_strength_low": lora_acc_str_low,
+        "svi_pro_high": "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors",
+        "svi_pro_low": "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors",
     }
     setup_tmpl = block_templates["setup"]
 
     # Inject user-selected LoRAs into setup template before instantiation
     import copy
     setup_tmpl = copy.deepcopy(setup_tmpl)
-    lora_idx = 2  # lora_1 is the accelerator
+    lora_idx = 3  # lora_1 = accelerator, lora_2 = SVI Pro (both hardcoded)
     for lora_sel in selected_loras:
         pid = lora_sel["pair_id"]
         strength = lora_sel["strength"]

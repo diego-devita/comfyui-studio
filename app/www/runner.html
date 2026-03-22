@@ -943,7 +943,7 @@
   }
 
   // ── LoRA Picker Builder ──
-  var _loraPairs = []; // cached LoRA pairs from API
+  var _loraPairs = [];
 
   function buildLoraPicker(inputId, input) {
     var container = document.createElement('div');
@@ -959,35 +959,50 @@
     apiFetch('/api/admin/loras/compatible/' + encodeURIComponent(baseModel))
       .then(function(r) { return r.json(); })
       .then(function(pairs) {
-        // Filter out the accelerator (LightX2V unified — pair_role: both)
-        _loraPairs = (pairs || []).filter(function(p) { return p.pair_id !== 'lightx2v-unified'; });
+        // Style LoRAs = everything except lightx2v-unified and svi-v2-pro (those are fixed)
+        _loraPairs = (pairs || []).filter(function(p) {
+          return p.pair_id !== 'lightx2v-unified' && p.pair_id !== 'svi-v2-pro';
+        });
         container.innerHTML = '';
 
+        // Fixed LoRAs info
+        var fixedInfo = document.createElement('div');
+        fixedInfo.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;font-family:var(--mono);';
+        fixedInfo.innerHTML = 'Fixed: <span style="color:var(--text);">LightX2V</span> (accelerator) + <span style="color:var(--text);">SVI v2 PRO</span> (technique)';
+        container.appendChild(fixedInfo);
+
+        // Style LoRAs section
+        var styleLabel = document.createElement('div');
+        styleLabel.style.cssText = 'font-size:12px;color:var(--accent);margin-bottom:6px;font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;';
+        styleLabel.textContent = 'Style LoRAs';
+        container.appendChild(styleLabel);
+
         if (_loraPairs.length === 0) {
-          container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No style LoRAs found. Download them from the Models page.</div>';
+          container.innerHTML += '<div style="color:var(--muted);font-size:12px;">No style LoRAs available. Download them from the Models page.</div>';
           return;
         }
 
-        // Slots container
         var slotsDiv = document.createElement('div');
         slotsDiv.className = 'lora-slots';
         slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
         container.appendChild(slotsDiv);
 
-        function addSlot(defaultPairId) {
+        function addSlot(defaultPairId, isFirst) {
           var slot = document.createElement('div');
           slot.className = 'lora-slot';
-          slot.style.cssText = 'display:flex;gap:8px;align-items:center;';
+          slot.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);';
 
           // Dropdown
           var sel = document.createElement('select');
           sel.className = 'lora-select';
-          sel.style.cssText = 'flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
+          sel.style.cssText = 'flex:1;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
 
-          var noneOpt = document.createElement('option');
-          noneOpt.value = '';
-          noneOpt.textContent = '— None —';
-          sel.appendChild(noneOpt);
+          if (!isFirst) {
+            var noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.textContent = '\u2014 None \u2014';
+            sel.appendChild(noneOpt);
+          }
 
           _loraPairs.forEach(function(pair) {
             var o = document.createElement('option');
@@ -998,50 +1013,67 @@
           });
           slot.appendChild(sel);
 
-          // Strength slider
-          var strLabel = document.createElement('span');
-          strLabel.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;';
-          strLabel.textContent = 'str:';
-          slot.appendChild(strLabel);
+          // Strength controls (disabled by default, toggle to enable)
+          var strToggle = document.createElement('button');
+          strToggle.type = 'button';
+          strToggle.style.cssText = 'background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:4px 8px;white-space:nowrap;';
+          strToggle.textContent = 'str: 1.0';
+          strToggle.title = 'Click to adjust strength';
 
-          var strInput = document.createElement('input');
-          strInput.type = 'range';
-          strInput.className = 'lora-strength';
-          strInput.min = '0';
-          strInput.max = '3';
-          strInput.step = '0.1';
-          strInput.value = '1';
-          strInput.style.cssText = 'width:80px;accent-color:var(--accent);';
-          slot.appendChild(strInput);
+          var strSlider = document.createElement('input');
+          strSlider.type = 'range';
+          strSlider.className = 'lora-strength';
+          strSlider.min = '0';
+          strSlider.max = '3';
+          strSlider.step = '0.1';
+          strSlider.value = '1';
+          strSlider.style.cssText = 'width:80px;accent-color:var(--accent);display:none;';
 
           var strVal = document.createElement('span');
-          strVal.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--text);min-width:28px;';
+          strVal.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--text);min-width:28px;display:none;';
           strVal.textContent = '1.0';
-          strInput.oninput = function() { strVal.textContent = parseFloat(strInput.value).toFixed(1); };
+
+          strSlider.oninput = function() {
+            var v = parseFloat(strSlider.value).toFixed(1);
+            strVal.textContent = v;
+            strToggle.textContent = 'str: ' + v;
+          };
+
+          strToggle.onclick = function() {
+            var show = strSlider.style.display === 'none';
+            strSlider.style.display = show ? '' : 'none';
+            strVal.style.display = show ? '' : 'none';
+          };
+
+          slot.appendChild(strToggle);
+          slot.appendChild(strSlider);
           slot.appendChild(strVal);
 
-          // Remove button
-          var rmBtn = document.createElement('button');
-          rmBtn.type = 'button';
-          rmBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;';
-          rmBtn.innerHTML = '&times;';
-          rmBtn.onclick = function() { slot.remove(); };
-          slot.appendChild(rmBtn);
+          // Remove button (not for first slot)
+          if (!isFirst) {
+            var rmBtn = document.createElement('button');
+            rmBtn.type = 'button';
+            rmBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;';
+            rmBtn.innerHTML = '&times;';
+            rmBtn.onclick = function() { slot.remove(); };
+            slot.appendChild(rmBtn);
+          }
 
           slotsDiv.appendChild(slot);
         }
 
-        // Add LoRA button
         var addBtn = document.createElement('button');
         addBtn.className = 'scene-add-btn';
         addBtn.type = 'button';
-        addBtn.textContent = '+ Add LoRA';
+        addBtn.textContent = '+ Stack another LoRA';
         addBtn.style.marginTop = '4px';
-        addBtn.onclick = function() { addSlot(''); };
+        addBtn.onclick = function() { addSlot('', false); };
         container.appendChild(addBtn);
 
-        // Start with 1 empty slot
-        addSlot('');
+        // First slot defaults to throatv3 if available
+        var defaultLora = _loraPairs.length > 0 ? _loraPairs[0].pair_id : '';
+        _loraPairs.forEach(function(p) { if (p.pair_id === 'throatv3') defaultLora = 'throatv3'; });
+        addSlot(defaultLora, true);
       })
       .catch(function() {
         container.innerHTML = '<div style="color:var(--error);font-size:12px;">Failed to load LoRAs</div>';
