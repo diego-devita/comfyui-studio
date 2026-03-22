@@ -155,6 +155,21 @@
   .dep-action { margin-left: auto; flex-shrink: 0; }
 
   /* ── Card Actions ── */
+  .wf-type-badge {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid;
+  }
+  .wf-type-badge.static { color: var(--muted); border-color: var(--border); background: var(--bg); }
+  .wf-type-badge.dynamic { color: var(--accent); border-color: var(--accent); background: rgba(232,255,71,0.1); }
+
   .wf-card-actions {
     display: flex;
     gap: 8px;
@@ -388,7 +403,7 @@
     card.innerHTML =
       '<div class="wf-card-top">' +
         '<div class="wf-card-info">' +
-          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + (wf.type === 'dynamic' ? ' <span style="display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(232,255,71,0.1);color:var(--accent);border:1px solid var(--accent);vertical-align:middle;">Dynamic</span>' : '') + '</div>' +
+          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + '</div>' +
           '<div class="wf-card-meta">' + escHtml(metaParts) + '</div>' +
         '</div>' +
         (version ? '<span class="wf-card-version">' + escHtml(version) + '</span>' : '') +
@@ -412,7 +427,8 @@
       '<div class="wf-details" data-details-panel="' + escHtml(wf.id) + '">' +
         buildDetailSection('Models', models) +
         buildDetailSection('Nodes', nodes) +
-      '</div>';
+      '</div>' +
+      '<span class="wf-type-badge ' + (wf.type === 'dynamic' ? 'dynamic' : 'static') + '">' + (wf.type === 'dynamic' ? 'Dynamic' : 'Static') + '</span>';
 
     // Event: Install Missing
     const installBtnEl = card.querySelector('[data-install]');

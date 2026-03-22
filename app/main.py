@@ -1783,6 +1783,28 @@ async def list_compatible_loras(base_model: str):
 # ── Assets endpoints ─────────────────────────────────────────────────────────
 
 
+@app.post("/api/admin/assets/upload-inputs")
+async def upload_input_assets(files: list[UploadFile] = File(...)):
+    """Upload one or more images to ComfyUI input directory."""
+    uploaded = []
+    errors = []
+    for f in files:
+        try:
+            image_bytes = await f.read()
+            unique_name = _make_input_filename(f.filename)
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    f"{COMFY_URL}/upload/image",
+                    files={"image": (unique_name, image_bytes, f.content_type or "image/png")},
+                    data={"overwrite": "true"},
+                )
+                r.raise_for_status()
+                uploaded.append(r.json()["name"])
+        except Exception as e:
+            errors.append(f"{f.filename}: {str(e)}")
+    return {"uploaded": uploaded, "errors": errors}
+
+
 @app.get("/api/admin/assets/{asset_type}")
 async def list_assets(asset_type: str):
     """List files in ComfyUI input or output directory."""
@@ -1983,6 +2005,36 @@ async def list_history():
         except Exception:
             pass
     return jobs
+
+
+@app.post("/api/admin/history/delete")
+async def delete_history_jobs(request: Request):
+    """Delete job records and optionally their output files."""
+    body = await request.json()
+    prompt_ids = set(body.get("prompt_ids", []))
+    if not prompt_ids:
+        return {"deleted": []}
+
+    deleted = []
+    if JOBS_DIR.exists():
+        for f in list(JOBS_DIR.glob("*.json")):
+            try:
+                data = json.loads(f.read_text())
+                pid = data.get("prompt_id")
+                if pid in prompt_ids:
+                    # Delete output directory if exists
+                    output_dir_name = data.get("output_dir")
+                    if output_dir_name:
+                        out_dir = Path(COMFYUI_DIR) / "output" / "comfyui-studio" / output_dir_name
+                        if out_dir.exists() and out_dir.is_dir():
+                            shutil.rmtree(out_dir)
+                    # Delete job record
+                    f.unlink()
+                    deleted.append(pid)
+            except Exception:
+                pass
+
+    return {"deleted": deleted}
 
 
 @app.get("/api/admin/history/{prompt_id}/package")

@@ -53,6 +53,21 @@
     color: var(--text);
   }
   .job-card:hover { border-color: var(--accent); }
+  .job-card.selected { border-color: var(--error); background: rgba(255,68,102,0.05); }
+  .job-card { position: relative; }
+  .job-check {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 12px;
+    z-index: 2;
+    accent-color: var(--error);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    display: none;
+  }
+  .job-card .job-check { display: block; }
 
   .job-thumb {
     width: 60px;
@@ -207,6 +222,14 @@
     <p>No jobs found. Run a workflow to see history here.</p>
   </div>
 
+  <div id="historyToolbar" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <label style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" id="histSelectAll" style="accent-color:var(--error);"> Select all
+      </label>
+    </div>
+    <button class="btn btn--danger btn--sm" id="histDeleteBtn" style="visibility:hidden;">Delete selected</button>
+  </div>
   <div class="history-list" id="historyList"></div>
 </main>
 
@@ -266,10 +289,15 @@
       }
 
       $list.innerHTML = '';
+      document.getElementById('historyToolbar').style.display = 'flex';
       jobs.forEach(function(job) {
         var card = document.createElement('div');
         card.className = 'job-card';
-        card.onclick = function() { showDetail(job); };
+        card.onclick = function(e) {
+          if (e.target.classList.contains('job-check')) return;
+          if (e.ctrlKey || e.metaKey) { toggleJobCard(card); return; }
+          showDetail(job);
+        };
 
         var statusCls = job.status === 'completed' ? 'completed' : (job.status === 'error' ? 'error' : 'running');
 
@@ -287,7 +315,12 @@
         }
         if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
 
+        var checkHtml = (job.status === 'completed' || job.status === 'error')
+          ? '<input type="checkbox" class="job-check" data-prompt-id="' + job.prompt_id + '" onclick="event.stopPropagation();">'
+          : '';
+
         card.innerHTML =
+          checkHtml +
           thumbHtml +
           '<div class="job-info">' +
             '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
@@ -300,6 +333,13 @@
           '</div>' +
           '<div class="job-status ' + statusCls + '">' + escHtml(job.status) + '</div>';
 
+        var cb = card.querySelector('.job-check');
+        if (cb) {
+          cb.addEventListener('change', function() {
+            card.classList.toggle('selected', cb.checked);
+            updateHistDeleteBtn();
+          });
+        }
         $list.appendChild(card);
       });
 
@@ -311,6 +351,59 @@
       }
     }
   }
+
+  // Selection helpers
+  var $histSelectAll = document.getElementById('histSelectAll');
+  var $histDeleteBtn = document.getElementById('histDeleteBtn');
+
+  function toggleJobCard(card) {
+    var cb = card.querySelector('.job-check');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    card.classList.toggle('selected', cb.checked);
+    updateHistDeleteBtn();
+  }
+
+  function updateHistDeleteBtn() {
+    var count = $list.querySelectorAll('.job-check:checked').length;
+    $histDeleteBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
+    $histDeleteBtn.textContent = 'Delete ' + count + ' selected';
+  }
+
+  $histSelectAll.addEventListener('change', function() {
+    $list.querySelectorAll('.job-check').forEach(function(cb) {
+      cb.checked = $histSelectAll.checked;
+      cb.closest('.job-card').classList.toggle('selected', $histSelectAll.checked);
+    });
+    updateHistDeleteBtn();
+  });
+
+  $histDeleteBtn.addEventListener('click', function() {
+    var checked = $list.querySelectorAll('.job-check:checked');
+    var ids = [];
+    checked.forEach(function(cb) { ids.push(cb.dataset.promptId); });
+    if (ids.length === 0) return;
+    if (!confirm('Delete ' + ids.length + ' job(s) and their output files? This cannot be undone.')) return;
+
+    $histDeleteBtn.disabled = true;
+    $histDeleteBtn.textContent = 'Deleting...';
+
+    apiFetch('/api/admin/history/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt_ids: ids})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+      $histDeleteBtn.disabled = false;
+      $histSelectAll.checked = false;
+      loadHistory();
+    })
+    .catch(function(e) {
+      $histDeleteBtn.disabled = false;
+      if (e.message !== 'auth') alert('Delete failed: ' + e.message);
+    });
+  });
 
   function showDetail(job) {
     var rows = '';

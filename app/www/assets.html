@@ -201,6 +201,10 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
     <div style="display:flex;gap:12px;align-items:center;">
       <div class="tab-info" id="tabInfo" style="margin-bottom:0;">Loading...</div>
+      <label class="btn btn--sm" id="uploadInputBtn" style="display:none;cursor:pointer;">
+        &#128228; Upload
+        <input type="file" id="uploadInputFile" accept="image/*" multiple style="display:none;">
+      </label>
       <button class="btn btn--sm" id="downloadAllBtn" style="display:none;">Download ZIP</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -271,6 +275,7 @@
       $selectAll.checked = false;
       lastClickedIndex = null;
       $downloadAllBtn.style.display = currentTab === 'outputs' ? '' : 'none';
+      document.getElementById('uploadInputBtn').style.display = currentTab === 'inputs' ? '' : 'none';
       loadAssets();
     });
   });
@@ -336,6 +341,32 @@
       $deleteBtn.disabled = false;
       if (e.message !== 'auth') alert('Delete failed: ' + e.message);
     });
+  });
+
+  document.getElementById('uploadInputFile').addEventListener('change', function(e) {
+    var files = e.target.files;
+    if (!files || files.length === 0) return;
+    var formData = new FormData();
+    for (var i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+    var btn = document.getElementById('uploadInputBtn');
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
+
+    apiFetch('/api/admin/assets/upload-inputs', {method: 'POST', body: formData})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = '';
+        e.target.value = '';
+        loadAssets();
+      })
+      .catch(function(err) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = '';
+        if (err.message !== 'auth') alert('Upload failed: ' + err.message);
+      });
   });
 
   $downloadAllBtn.addEventListener('click', function() {
@@ -485,6 +516,8 @@
     $overlay.classList.add('visible');
   }
 
+  // Initial state
+  document.getElementById('uploadInputBtn').style.display = currentTab === 'inputs' ? '' : 'none';
   loadAssets();
 })();
 </script>
