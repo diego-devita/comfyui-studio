@@ -700,8 +700,21 @@
     </label>
     <button class="btn" id="fetchMetadataBtn">Fetch Civitai Metadata</button>
     <button class="btn" id="globalDlAll">Download All Missing</button>
+    <button class="btn" id="activityLogBtn" style="border-color:var(--border);color:var(--muted);">Activity Log</button>
   </div>
 </header>
+
+<!-- Activity Log Panel -->
+<div id="activityLogPanel" style="display:none;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 40px;max-height:250px;overflow-y:auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Activity Log</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn--sm" id="activityLogRefresh">Refresh</button>
+      <button class="btn btn--sm btn--danger" id="activityLogClear">Clear</button>
+    </div>
+  </div>
+  <div id="activityLogContent" style="font-family:var(--mono);font-size:11px;line-height:1.8;"></div>
+</div>
 
 <!-- Status bar -->
 <div class="status-bar" id="statusBar">
@@ -1484,6 +1497,41 @@
     }
   }
 
+  // ── Activity Log ──
+  var $logPanel = document.getElementById('activityLogPanel');
+  var $logContent = document.getElementById('activityLogContent');
+
+  document.getElementById('activityLogBtn').addEventListener('click', function() {
+    var visible = $logPanel.style.display !== 'none';
+    $logPanel.style.display = visible ? 'none' : 'block';
+    if (!visible) refreshActivityLog();
+  });
+
+  document.getElementById('activityLogRefresh').addEventListener('click', refreshActivityLog);
+
+  document.getElementById('activityLogClear').addEventListener('click', function() {
+    apiFetch('/api/admin/activity-log/clear', {method: 'POST'}).then(function() {
+      $logContent.innerHTML = '<div style="color:var(--muted);">Log cleared.</div>';
+    });
+  });
+
+  function refreshActivityLog() {
+    apiFetch('/api/admin/activity-log')
+      .then(function(r) { return r.json(); })
+      .then(function(entries) {
+        if (!entries || entries.length === 0) {
+          $logContent.innerHTML = '<div style="color:var(--muted);">No activity.</div>';
+          return;
+        }
+        var colorMap = {ok: 'var(--success)', error: 'var(--error)', info: 'var(--muted)'};
+        $logContent.innerHTML = entries.map(function(e) {
+          var color = colorMap[e.level] || 'var(--text)';
+          return '<div><span style="color:var(--muted);">[' + e.time + ']</span> <span style="color:' + color + ';">' + escHtml(e.message) + '</span></div>';
+        }).join('');
+        $logContent.scrollTop = $logContent.scrollHeight;
+      });
+  }
+
   // ── Fetch Civitai Metadata ──
   document.getElementById('fetchMetadataBtn').addEventListener('click', function() {
     var btn = this;
@@ -1494,6 +1542,10 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         btn.textContent = 'Fetching ' + data.queued + ' models...';
+        // Open log panel
+        $logPanel.style.display = 'block';
+        refreshActivityLog();
+
         if (data.queued === 0) {
           btn.textContent = 'Fetch Civitai Metadata';
           btn.disabled = false;
@@ -1508,6 +1560,7 @@
               for (var k in statuses) {
                 if (statuses[k].status === 'queued_metadata' || statuses[k].status === 'fetching_metadata') pending++;
               }
+              refreshActivityLog();
               btn.textContent = pending > 0 ? 'Fetching... (' + pending + ' left)' : 'Fetch Civitai Metadata';
               if (pending === 0) {
                 clearInterval(pollInterval);
