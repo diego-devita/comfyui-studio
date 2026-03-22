@@ -178,5 +178,5 @@ required_nodes:
   - "KSampler"
   - "VAEDecode"
   - "SaveImage"
-  - "UltralyticsDetectorProvider"
+  - "ONNXDetectorProvider"
   - "FaceDetailer"

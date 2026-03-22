@@ -2,15 +2,9 @@
   "nodes": {
     "face_detector": {
       "inputs": {
-        "model_name": "bbox/face_yolov8m.pt",
-        "confidence": 0.5,
-        "dilation": 10,
-        "crop_factor": 3,
-        "drop_size": 10,
-        "labels": "all",
-        "bbox": ["image_in", 0]
+        "model_name": "bbox/face_yolov8m.pt"
       },
-      "class_type": "UltralyticsDetectorProvider",
+      "class_type": "ONNXDetectorProvider",
       "_meta": {"title": "Face Detector"}
     },
     "face_detailer": {
