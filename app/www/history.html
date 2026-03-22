@@ -376,18 +376,69 @@
       }
     }
 
+    // Action buttons
+    var actionsHtml = '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">';
+    if (job.workflow_id) {
+      actionsHtml += '<button class="btn btn--sm" onclick="rerunJob(_detailJob)">&#8635; Re-run</button>';
+    }
+    actionsHtml += '<button class="btn btn--sm" onclick="exportJobJson(_detailJob)">&#128230; Export JSON</button>';
+    actionsHtml += '<button class="btn btn--sm" onclick="downloadJobPackage(_detailJob)">&#128230; Download Package</button>';
+    actionsHtml += '</div>';
+
     $detailBox.innerHTML =
       '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
       '<h2>Job Details</h2>' +
       '<table class="detail-table">' + rows + '</table>' +
-      outputHtml;
+      outputHtml +
+      actionsHtml;
 
+    window._detailJob = job;
     $overlay.classList.add('visible');
   }
 
   $overlay.addEventListener('click', function(e) {
     if (e.target === $overlay) $overlay.classList.remove('visible');
   });
+
+  // Re-run: navigate to runner with pre-filled params
+  window.rerunJob = function(job) {
+    var payload = {params: JSON.parse(JSON.stringify(job.params || {})), input_image: job.input_image || null};
+    // Merge resolved seeds into params
+    if (job.seeds) {
+      if (payload.params.scenes && Array.isArray(payload.params.scenes)) {
+        payload.params.scenes.forEach(function(s, i) {
+          var key = 'scene_' + (i + 1);
+          if (job.seeds[key] != null) s.seed = job.seeds[key];
+        });
+      }
+      for (var sid in job.seeds) {
+        if (/^scene_\d+$/.test(sid)) continue;
+        payload.params[sid] = job.seeds[sid];
+      }
+    }
+    var encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    window.location = '/run/' + encodeURIComponent(job.workflow_id) + '#rerun=' + encoded;
+  };
+
+  // Export JSON: download job record as .json file
+  window.exportJobJson = function(job) {
+    var blob = new Blob([JSON.stringify(job, null, 2)], {type: 'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'job_' + (job.prompt_id || 'unknown').substring(0, 12) + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // Download Package: ZIP with job.json + input + output
+  window.downloadJobPackage = function(job) {
+    var a = document.createElement('a');
+    a.href = '/api/admin/history/' + encodeURIComponent(job.prompt_id) + '/package';
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   // Fullscreen image viewer (sits on top of detail overlay)
   var $imgOverlay = document.createElement('div');

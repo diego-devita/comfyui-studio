@@ -1985,6 +1985,81 @@ async def list_history():
     return jobs
 
 
+@app.get("/api/admin/history/{prompt_id}/package")
+async def download_job_package(prompt_id: str):
+    """Download a ZIP with job.json, input image, and output files."""
+    import zipfile
+    import tempfile
+
+    # Find job record
+    job_data = None
+    if JOBS_DIR.exists():
+        for f in JOBS_DIR.glob("*.json"):
+            try:
+                data = json.loads(f.read_text())
+                if data.get("prompt_id") == prompt_id:
+                    job_data = data
+                    break
+            except Exception:
+                pass
+    if not job_data:
+        raise HTTPException(404, "Job not found")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp_path = tmp.name
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            # Job record
+            zf.writestr("job.json", json.dumps(job_data, indent=2, ensure_ascii=False))
+
+            # Input image
+            input_img = job_data.get("input_image")
+            if input_img:
+                input_path = Path(COMFYUI_DIR) / "input" / input_img
+                if input_path.exists():
+                    zf.write(input_path, f"input/{input_img}")
+
+            # Output files
+            output_dir_name = job_data.get("output_dir")
+            if output_dir_name:
+                output_dir = Path(COMFYUI_DIR) / "output" / "comfyui-studio" / output_dir_name
+                if output_dir.exists():
+                    for of in output_dir.iterdir():
+                        if of.is_file():
+                            zf.write(of, f"output/{of.name}")
+            else:
+                # Legacy: try to get output from job record
+                output = job_data.get("output", {})
+                if output and output.get("filename"):
+                    out_path = Path(COMFYUI_DIR) / "output"
+                    if output.get("subfolder"):
+                        out_path = out_path / output["subfolder"]
+                    out_path = out_path / output["filename"]
+                    if out_path.exists():
+                        zf.write(out_path, f"output/{output['filename']}")
+
+        tmp.close()
+
+        def stream_and_cleanup():
+            try:
+                with open(tmp_path, "rb") as fh:
+                    while chunk := fh.read(1024 * 1024):
+                        yield chunk
+            finally:
+                os.unlink(tmp_path)
+
+        job_name = output_dir_name or prompt_id[:12]
+        return StreamingResponse(
+            stream_and_cleanup(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="job_{job_name}.zip"'},
+        )
+    except Exception:
+        tmp.close()
+        os.unlink(tmp_path)
+        raise
+
+
 # ── Workflow Runner endpoints ────────────────────────────────────────────────
 
 

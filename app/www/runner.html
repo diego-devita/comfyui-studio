@@ -516,9 +516,19 @@
     <!-- Dynamic form -->
     <div class="form-panel" id="formPanel"></div>
 
+    <!-- Rerun banner -->
+    <div id="rerunBanner" style="display:none;background:rgba(232,255,71,0.08);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--accent);display:none;">
+      &#8635; Pre-filled from previous job. Modify any field before generating.
+      <button onclick="this.parentElement.style.display='none'" style="float:right;background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px;">&times;</button>
+    </div>
+
     <!-- Generate -->
-    <div class="generate-row">
+    <div class="generate-row" style="display:flex;gap:12px;align-items:center;">
       <button class="btn-generate" id="generateBtn" disabled>&#9654; Generate</button>
+      <label class="btn btn--sm" style="cursor:pointer;">
+        &#128230; Import JSON
+        <input type="file" id="importJsonInput" accept=".json" style="display:none;">
+      </label>
     </div>
 
     <!-- Execution error -->
@@ -674,6 +684,7 @@
     buildForm(manifest.inputs || []);
     $content.style.display = '';
     $generateBtn.disabled = false;
+    applyRerunData();
   }
 
   function buildForm(inputs) {
@@ -1084,6 +1095,10 @@
     addBtn.onclick = function() { addScene('', defaultDuration, -1); renumber(); };
     container.appendChild(addBtn);
 
+    // Expose for prefill
+    container.addScene = addScene;
+    container.renumber = renumber;
+
     // Start with 1 scene
     addScene('', defaultDuration, -1);
 
@@ -1228,7 +1243,32 @@
         // First slot defaults to throatv3 if available
         var defaultLora = _loraPairs.length > 0 ? _loraPairs[0].pair_id : '';
         _loraPairs.forEach(function(p) { if (p.pair_id === 'throatv3') defaultLora = 'throatv3'; });
-        addSlot(defaultLora, true);
+        // Check for prefill data
+        var prefillRaw = container.dataset.prefillLoras;
+        if (prefillRaw) {
+          try {
+            var prefillLoras = JSON.parse(prefillRaw);
+            slotsDiv.innerHTML = '';
+            prefillLoras.forEach(function(lora, idx) {
+              addSlot(lora.pair_id || '', idx === 0);
+              var slots = slotsDiv.querySelectorAll('.lora-slot');
+              var lastSlot = slots[slots.length - 1];
+              if (lastSlot) {
+                var sh = lastSlot.querySelector('.lora-str-high');
+                var sl = lastSlot.querySelector('.lora-str-low');
+                if (sh && lora.strength_high != null) { sh.value = lora.strength_high; sh.dispatchEvent(new Event('input')); }
+                if (sl && lora.strength_low != null) { sl.value = lora.strength_low; sl.dispatchEvent(new Event('input')); }
+                if (lora.strength_high != 1 || lora.strength_low != 1) {
+                  var panel = lastSlot.querySelector('.lora-str-panel');
+                  if (panel) panel.style.display = 'flex';
+                }
+              }
+            });
+            delete container.dataset.prefillLoras;
+          } catch(e) { console.warn('LoRA prefill error', e); addSlot(defaultLora, true); }
+        } else {
+          addSlot(defaultLora, true);
+        }
       })
       .catch(function() {
         container.innerHTML = '<div style="color:var(--error);font-size:12px;">Failed to load LoRAs</div>';
@@ -1554,6 +1594,123 @@
       });
     };
   }
+
+  // ── Re-run / Import prefill ──
+  function applyRerunData() {
+    var hash = window.location.hash;
+    if (!hash || hash.indexOf('#rerun=') !== 0) return;
+    var encoded = hash.substring(7);
+    try {
+      var json = decodeURIComponent(escape(atob(encoded)));
+      var data = JSON.parse(json);
+    } catch (e) {
+      console.warn('Failed to parse rerun data:', e);
+      return;
+    }
+    history.replaceState(null, '', window.location.pathname);
+    prefillForm(data);
+    document.getElementById('rerunBanner').style.display = 'block';
+  }
+
+  function prefillForm(data) {
+    var params = data.params || {};
+    (manifest.inputs || []).forEach(function(inp) {
+      var id = inp.id;
+      var type = (inp.type || 'text').toLowerCase();
+      var val = params[id];
+      if (type === 'image') {
+        prefillImage(id, data.input_image);
+      } else if (type === 'scene_list') {
+        prefillSceneList(id, inp, val, data);
+      } else if (type === 'lora_picker') {
+        prefillLoraPicker(id, val);
+      } else if (val != null) {
+        prefillSimpleInput(id, type, val);
+      }
+    });
+  }
+
+  function prefillImage(inputId, filename) {
+    if (!filename) return;
+    existingImages[inputId] = filename;
+    $formPanel.querySelectorAll('.dropzone').forEach(function(zone) {
+      var fi = zone.querySelector('input[data-input-id="' + inputId + '"]');
+      if (!fi) return;
+      var preview = zone.querySelector('.dropzone-preview');
+      var fnameEl = zone.querySelector('.dropzone-filename');
+      var viewUrl = '/api/comfyui/view?filename=' + encodeURIComponent(filename) + '&type=input';
+      if (preview) { preview.src = viewUrl; preview.classList.add('visible'); }
+      if (fnameEl) { fnameEl.textContent = filename + ' (existing)'; fnameEl.classList.add('visible'); }
+    });
+  }
+
+  function prefillSceneList(inputId, input, scenes, data) {
+    if (!scenes || !Array.isArray(scenes) || scenes.length === 0) return;
+    var container = document.querySelector('[data-input-id="' + inputId + '"]');
+    if (!container || !container.addScene) return;
+    container.querySelectorAll('.scene-card').forEach(function(c) { c.remove(); });
+    scenes.forEach(function(s, i) {
+      var seed = s.seed;
+      // Use resolved seed from job.seeds if available
+      if (data && data.params && data.params.scenes) {
+        // seeds already merged by rerunJob
+      }
+      container.addScene(s.prompt || '', s.duration || 5, seed != null ? seed : -1);
+    });
+    container.renumber();
+  }
+
+  function prefillLoraPicker(inputId, loras) {
+    if (!loras || !Array.isArray(loras) || loras.length === 0) return;
+    var container = document.querySelector('[data-input-id="' + inputId + '"]');
+    if (!container) return;
+    container.dataset.prefillLoras = JSON.stringify(loras);
+  }
+
+  function prefillSimpleInput(id, type, val) {
+    var el = $formPanel.querySelector('[data-input-id="' + id + '"]');
+    if (!el) return;
+    el.value = val;
+    if (el.type === 'range') {
+      el.dispatchEvent(new Event('input'));
+    }
+  }
+
+  // Import JSON
+  document.getElementById('importJsonInput').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var job = JSON.parse(ev.target.result);
+        // Check if this job matches the current workflow
+        if (job.workflow_id && job.workflow_id !== workflowId) {
+          if (!confirm('This job was for "' + (job.workflow_name || job.workflow_id) + '" but you are on "' + workflowId + '". Pre-fill anyway?')) return;
+        }
+        var data = {params: job.params || {}, input_image: job.input_image || null};
+        // Merge seeds
+        if (job.seeds) {
+          if (data.params.scenes && Array.isArray(data.params.scenes)) {
+            data.params.scenes.forEach(function(s, i) {
+              var key = 'scene_' + (i + 1);
+              if (job.seeds[key] != null) s.seed = job.seeds[key];
+            });
+          }
+          for (var sid in job.seeds) {
+            if (/^scene_\d+$/.test(sid)) continue;
+            data.params[sid] = job.seeds[sid];
+          }
+        }
+        prefillForm(data);
+        document.getElementById('rerunBanner').style.display = 'block';
+      } catch (err) {
+        alert('Invalid JSON file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
 
   // ── Telemetry ──
   const $telemetryPanel = document.getElementById('telemetryPanel');
