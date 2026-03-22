@@ -273,6 +273,22 @@ body::before {
   gap: 16px;
   flex-wrap: wrap;
   padding: 16px 0;
+  position: relative;
+  overflow: hidden;
+}
+.telemetry-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  animation: heartbeat-bar 3s linear infinite;
+}
+@keyframes heartbeat-bar {
+  0% { width: 0%; opacity: 0.4; }
+  90% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
 }
 .gauge-card {
   flex: 1;

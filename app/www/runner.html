@@ -2097,6 +2097,10 @@
       if (!resp.ok) return;
       var d = await resp.json();
 
+      // Heartbeat flash on data received
+      $telemetryPanel.style.background = 'rgba(232, 255, 71, 0.03)';
+      setTimeout(function() { $telemetryPanel.style.background = ''; }, 300);
+
       if (!$telemetryPanel.innerHTML) {
         $telemetryPanel.innerHTML =
           makeGauge('gGpu', 'GPU Load') +
