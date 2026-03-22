@@ -238,6 +238,14 @@
     return ts.replace('T', ' ').substring(0, 19);
   }
 
+  function copyBtn(text) {
+    var escaped = String(text).replace(/'/g, "\\'").replace(/\n/g, '\\n');
+    return ' <span style="cursor:pointer;opacity:0.4;font-size:12px;transition:opacity 0.15s;" ' +
+      'onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" ' +
+      'onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + escaped + '\').then(function(){event.target.style.opacity=1;setTimeout(function(){event.target.style.opacity=0.4},800);})" ' +
+      'title="Copy">&#128203;</span>';
+  }
+
   const $loading = document.getElementById('loadingState');
   const $empty = document.getElementById('emptyState');
   const $list = document.getElementById('historyList');
@@ -328,14 +336,24 @@
       for (var key in job.params) {
         var val = job.params[key];
         if (key === 'positive_prompt' || key === 'negative_prompt') {
-          rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;">' + escHtml(String(val)) + '</td></tr>';
+          rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;">' + escHtml(String(val)) + copyBtn(String(val)) + '</td></tr>';
         } else if (key === 'scenes' && Array.isArray(val)) {
           val.forEach(function(scene, idx) {
             var sceneSeedKey = 'scene_' + (idx+1);
-            var sceneSeed = job.seeds && job.seeds[sceneSeedKey] ? job.seeds[sceneSeedKey] : (scene.seed != null ? scene.seed : '?');
+            var inputSeed = scene.seed != null ? scene.seed : '?';
+            var resolvedSeed = job.seeds && job.seeds[sceneSeedKey] ? job.seeds[sceneSeedKey] : null;
+            var seedDisplay;
+            if (inputSeed == -1 && resolvedSeed) {
+              seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+            } else if (resolvedSeed && resolvedSeed != inputSeed) {
+              seedDisplay = inputSeed + ' (used: ' + resolvedSeed + ')';
+            } else {
+              seedDisplay = String(resolvedSeed || inputSeed);
+            }
+            var seedCopyVal = String(resolvedSeed || inputSeed);
             rows += '<tr><td>Scene ' + (idx+1) + '</td><td style="white-space:pre-wrap;">' +
-              escHtml(scene.prompt || '') +
-              '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's · seed: ' + sceneSeed + '</span></td></tr>';
+              escHtml(scene.prompt || '') + copyBtn(scene.prompt || '') +
+              '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's · seed: ' + seedDisplay + copyBtn(seedCopyVal) + '</span></td></tr>';
           });
         } else if (key === 'loras' && Array.isArray(val)) {
           val.forEach(function(lora, idx) {
@@ -345,19 +363,22 @@
             var strInfo = strH || strL ? ' H:' + (strH||'?') + ' L:' + (strL||'?') : '';
             rows += '<tr><td>LoRA ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
           });
+        } else if (key === 'seed') {
+          // Single seed field (static workflows)
+          var resolvedSeed = job.seeds && job.seeds[key] ? job.seeds[key] : null;
+          var seedDisplay;
+          if (val == -1 && resolvedSeed) {
+            seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+          } else {
+            seedDisplay = String(resolvedSeed || val);
+          }
+          var seedCopyVal = String(resolvedSeed || val);
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + seedDisplay + copyBtn(seedCopyVal) + '</td></tr>';
         } else if (typeof val === 'object') {
           rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;font-size:11px;">' + escHtml(JSON.stringify(val, null, 2)) + '</td></tr>';
         } else {
           rows += '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(String(val)) + '</td></tr>';
         }
-      }
-    }
-
-    // Seeds (skip scene_* keys — those are already shown in the scenes section)
-    if (job.seeds) {
-      for (var sid in job.seeds) {
-        if (/^scene_\d+$/.test(sid)) continue;
-        rows += '<tr><td>seed (' + escHtml(sid) + ')</td><td>' + job.seeds[sid] + '</td></tr>';
       }
     }
 

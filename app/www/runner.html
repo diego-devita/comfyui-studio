@@ -680,7 +680,7 @@
       $wfTitle.appendChild(badge);
     }
     if (manifest.version) {
-      $wfVersion.textContent = manifest.version;
+      $wfVersion.textContent = 'v' + manifest.version;
       $wfVersion.style.display = '';
     }
     $wfDesc.textContent = manifest.description || '';

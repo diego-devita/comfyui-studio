@@ -353,7 +353,7 @@
       card.classList.add('ready');
     }
 
-    const version = wf.version || '';
+    const version = wf.version ? 'v' + wf.version : '';
     const date = wf.updated_at || wf.created_at || '';
     const author = wf.author || 'comfyui-studio';
     const dateStr = date ? date.substring(0, 10) : '';
@@ -397,13 +397,11 @@
       '<div class="wf-deps">' +
         '<div class="dep-row">' +
           '<span class="dep-label">Models</span>' +
-          '<span class="dep-dots">' + modelDotsHtml + '</span>' +
           '<span class="dep-count ' + modelCountClass + '">' + modelsPresent + '/' + modelsTotal + '</span>' +
           installBtn +
         '</div>' +
         '<div class="dep-row">' +
           '<span class="dep-label">Nodes</span>' +
-          '<span class="dep-dots">' + nodeDotsHtml + '</span>' +
           '<span class="dep-count ' + nodeCountClass + '">' + nodesPresent + '/' + nodesTotal + '</span>' +
         '</div>' +
       '</div>' +
