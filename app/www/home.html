@@ -90,6 +90,11 @@
     align-items: flex-end;
     gap: 4px;
   }
+  .header-update .btn {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+  }
   .header-update .header-meta {
     font-family: var(--mono);
     font-size: 11px;
@@ -104,12 +109,14 @@
 
   /* ── Stat Cards ── */
   .stat-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    display: flex;
+    justify-content: center;
     gap: 16px;
     margin-bottom: 32px;
+    flex-wrap: wrap;
   }
   .stat-card {
+    flex: 0 1 240px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
