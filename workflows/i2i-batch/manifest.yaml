@@ -1,0 +1,129 @@
+id: i2i-batch
+name: "Image to Image (Batch)"
+version: 1
+date: "2026-03-22 20:30"
+type: dynamic
+description: "Image-to-image with checkpoint, CLIP skip, LoRA stack, and batch variations. Generates N variations of the input image with different seeds."
+author: ""
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+  - block: generate
+    file: "generate.json"
+    repeat_variable: "batch_count"
+
+inputs:
+  - id: image
+    name: "Input Image"
+    type: image
+    required: true
+
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    required: true
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker_dynamic
+    max_loras: 5
+
+  - id: clip_skip
+    name: "CLIP Skip"
+    type: int
+    min: -12
+    max: -1
+    default: -2
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    required: true
+    default: ""
+    placeholder: "masterpiece, best quality, ..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "bad quality, worst quality, low quality"
+
+  - id: denoise
+    name: "Denoise Strength"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 0.5
+
+  - id: batch_count
+    name: "Batch Count"
+    type: int
+    min: 1
+    max: 50
+    default: 1
+
+  - id: steps
+    name: "Steps"
+    type: int
+    min: 1
+    max: 100
+    default: 19
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 4.0
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    options:
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "Euler", value: "euler"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ 2M Karras", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+      - {label: "UniPC", value: "uni_pc"}
+      - {label: "LMS", value: "lms"}
+    default: "euler_ancestral"
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+      - {label: "SGM Uniform", value: "sgm_uniform"}
+      - {label: "Simple", value: "simple"}
+    default: "normal"
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+
+outputs:
+  - id: image
+    name: "Output Images"
+    type: image
+
+required_models: []
+
+required_nodes:
+  - "CheckpointLoaderSimple"
+  - "CLIPSetLastLayer"
+  - "CLIPTextEncode"
+  - "KSampler"
+  - "VAEDecode"
+  - "VAEEncode"
+  - "LoadImage"
+  - "SaveImage"
