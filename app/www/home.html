@@ -311,7 +311,7 @@
 
     // Date
     const date = data.date || data.updated_at || '2026-03-21';
-    $lastUpdated.textContent = typeof date === 'string' ? date.substring(0, 10) : date;
+    $lastUpdated.textContent = typeof date === 'string' ? date.substring(0, 16) : date;
 
     // Component table
     const compObj = data.components || {};
