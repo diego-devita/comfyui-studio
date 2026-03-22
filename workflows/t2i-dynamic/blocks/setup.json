@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "checkpoint": {
+      "inputs": {"ckpt_name": "{{checkpoint}}"},
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {"title": "Load Checkpoint"}
+    },
+    "pos_prompt": {
+      "inputs": {"text": "{{positive_prompt}}", "clip": ["checkpoint", 1]},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Positive Prompt"}
+    },
+    "neg_prompt": {
+      "inputs": {"text": "{{negative_prompt}}", "clip": ["checkpoint", 1]},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Negative Prompt"}
+    }
+  },
+  "exports": {
+    "model": {"node": "checkpoint", "output": 0},
+    "positive": {"node": "pos_prompt", "output": 0},
+    "negative": {"node": "neg_prompt", "output": 0},
+    "vae": {"node": "checkpoint", "output": 2},
+    "clip": {"node": "checkpoint", "output": 1}
+  }
+}

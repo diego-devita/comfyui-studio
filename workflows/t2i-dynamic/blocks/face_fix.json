@@ -1,0 +1,49 @@
+{
+  "nodes": {
+    "face_detector": {
+      "inputs": {
+        "model_name": "bbox/face_yolov8m.pt",
+        "confidence": 0.5,
+        "dilation": 10,
+        "crop_factor": 3,
+        "drop_size": 10,
+        "labels": "all",
+        "bbox": ["image_in", 0]
+      },
+      "class_type": "UltralyticsDetectorProvider",
+      "_meta": {"title": "Face Detector"}
+    },
+    "face_detailer": {
+      "inputs": {
+        "guide_size": 384,
+        "guide_size_for": true,
+        "max_size": 1024,
+        "seed": "{{seed}}",
+        "steps": "{{facefix_steps}}",
+        "cfg": "{{cfg}}",
+        "sampler_name": "{{sampler_name}}",
+        "scheduler": "{{scheduler}}",
+        "denoise": "{{facefix_denoise}}",
+        "feather": 5,
+        "noise_mask": true,
+        "force_inpaint": true,
+        "wildcard": "",
+        "cycle": 1,
+        "image": "{{image}}",
+        "model": "{{model}}",
+        "clip": "{{clip}}",
+        "vae": "{{vae}}",
+        "positive": "{{positive}}",
+        "negative": "{{negative}}",
+        "bbox_detector": ["face_detector", 0]
+      },
+      "class_type": "FaceDetailer",
+      "_meta": {"title": "Face Detailer"}
+    }
+  },
+  "imports": ["model", "clip", "positive", "negative", "vae", "image"],
+  "exports": {
+    "image": {"node": "face_detailer", "output": 0}
+  },
+  "variables": ["seed", "cfg", "sampler_name", "scheduler", "facefix_steps", "facefix_denoise"]
+}

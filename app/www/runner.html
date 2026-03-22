@@ -757,6 +757,22 @@
           group.appendChild(buildLoraPicker(inputId, input));
           break;
 
+        case 'checkpoint_picker':
+          group.appendChild(buildCheckpointPicker(inputId, input));
+          break;
+
+        case 'lora_picker_dynamic':
+          group.appendChild(buildLoraDynamicPicker(inputId, input));
+          break;
+
+        case 'vae_picker':
+          group.appendChild(buildVaePicker(inputId, input));
+          break;
+
+        case 'resolution_picker':
+          group.appendChild(buildResolutionPicker(inputId, input));
+          break;
+
         case 'boolean':
         case 'bool':
           group.appendChild(buildSelect(inputId, {
@@ -1327,7 +1343,16 @@
         if (el.classList.contains('scene-list')) {
           params[id] = getSceneListValue(id);
         } else if (el.classList.contains('lora-picker')) {
-          params[id] = getLoraPickerValue(id);
+          // Check if it's a dynamic LoRA picker or SVI-style picker
+          if (el.querySelector('.lora-dyn-slot')) {
+            params[id] = getLoraDynamicValue(id);
+          } else {
+            params[id] = getLoraPickerValue(id);
+          }
+        } else if (el.dataset.inputId && el.querySelector && el.querySelector('input[placeholder="W"]')) {
+          // Resolution picker
+          params['width'] = getResolutionValue(id).w;
+          params['height'] = getResolutionValue(id).h;
         } else if (el.type === 'range') {
           params[id] = parseFloat(el.value);
         } else if (el.type === 'number') {
@@ -1596,6 +1621,272 @@
         setTimeout(function() { btn.style.opacity = '0.5'; }, 1000);
       });
     };
+  }
+
+  // ── Checkpoint Picker ──
+  var _selectedCheckpointBase = '';
+
+  function buildCheckpointPicker(inputId, input) {
+    var sel = document.createElement('select');
+    sel.className = 'form-input';
+    sel.dataset.inputId = inputId;
+    sel.innerHTML = '<option value="">Loading checkpoints...</option>';
+
+    apiFetch('/api/admin/models')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        sel.innerHTML = '<option value="">-- Select Checkpoint --</option>';
+        var cats = data.categories || [];
+        cats.forEach(function(cat) {
+          if (cat.id !== 'checkpoints') return;
+          (cat.models || []).forEach(function(m) {
+            var o = document.createElement('option');
+            o.value = m.file;
+            o.textContent = m.name + (m.civitai_base_model ? ' [' + m.civitai_base_model + ']' : '');
+            o.dataset.baseModel = m.civitai_base_model || m.base_model || '';
+            if (m.status !== 'present') { o.textContent += ' (not downloaded)'; o.disabled = true; }
+            sel.appendChild(o);
+          });
+        });
+      });
+
+    sel.addEventListener('change', function() {
+      var opt = sel.options[sel.selectedIndex];
+      _selectedCheckpointBase = opt ? (opt.dataset.baseModel || '') : '';
+      // Trigger LoRA picker update
+      var event = new CustomEvent('checkpoint-changed', {detail: {baseModel: _selectedCheckpointBase}});
+      document.dispatchEvent(event);
+    });
+
+    return sel;
+  }
+
+  // ── LoRA Dynamic Picker (filtered by checkpoint base model) ──
+  function buildLoraDynamicPicker(inputId, input) {
+    var container = document.createElement('div');
+    container.className = 'lora-picker';
+    container.dataset.inputId = inputId;
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Select a checkpoint first</div>';
+
+    var allModels = null;
+    // Fetch all models once
+    apiFetch('/api/admin/models')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { allModels = data; });
+
+    function rebuildPicker(baseModel) {
+      container.innerHTML = '';
+      if (!allModels || !baseModel) {
+        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Select a checkpoint to see compatible LoRAs</div>';
+        return;
+      }
+
+      // Find loras matching base model
+      var loras = [];
+      (allModels.categories || []).forEach(function(cat) {
+        if (cat.id !== 'loras') return;
+        (cat.models || []).forEach(function(m) {
+          var mb = m.civitai_base_model || m.base_model || '';
+          if (mb && baseModel.toLowerCase().indexOf(mb.toLowerCase().split(' ')[0]) >= 0) {
+            if (m.status === 'present') loras.push(m);
+          }
+        });
+      });
+
+      if (loras.length === 0) {
+        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No compatible LoRAs found for ' + baseModel + '</div>';
+        return;
+      }
+
+      var slotsDiv = document.createElement('div');
+      slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+      container.appendChild(slotsDiv);
+
+      function addSlot() {
+        var slot = document.createElement('div');
+        slot.className = 'lora-dyn-slot';
+        slot.style.cssText = 'display:flex;gap:8px;align-items:center;';
+
+        var sel = document.createElement('select');
+        sel.className = 'lora-dyn-select';
+        sel.style.cssText = 'flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
+        sel.innerHTML = '<option value="">\u2014 None \u2014</option>';
+        loras.forEach(function(m) {
+          var o = document.createElement('option');
+          o.value = m.file;
+          o.textContent = m.name;
+          sel.appendChild(o);
+        });
+        slot.appendChild(sel);
+
+        var strLabel = document.createElement('span');
+        strLabel.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--muted);';
+        strLabel.textContent = 'str:';
+        slot.appendChild(strLabel);
+
+        var strSlider = document.createElement('input');
+        strSlider.type = 'range';
+        strSlider.className = 'lora-dyn-strength';
+        strSlider.min = '0'; strSlider.max = '2'; strSlider.step = '0.05'; strSlider.value = '1';
+        strSlider.style.cssText = 'width:70px;accent-color:var(--accent);';
+        slot.appendChild(strSlider);
+
+        var strVal = document.createElement('span');
+        strVal.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--text);min-width:24px;';
+        strVal.textContent = '1.0';
+        strSlider.oninput = function() { strVal.textContent = parseFloat(strSlider.value).toFixed(2); };
+        slot.appendChild(strVal);
+
+        var rmBtn = document.createElement('button');
+        rmBtn.type = 'button';
+        rmBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;';
+        rmBtn.innerHTML = '&times;';
+        rmBtn.onclick = function() { slot.remove(); };
+        slot.appendChild(rmBtn);
+
+        slotsDiv.appendChild(slot);
+      }
+
+      var addBtn = document.createElement('button');
+      addBtn.className = 'scene-add-btn';
+      addBtn.type = 'button';
+      addBtn.textContent = '+ Add LoRA';
+      addBtn.onclick = addSlot;
+      container.appendChild(addBtn);
+
+      addSlot();
+    }
+
+    document.addEventListener('checkpoint-changed', function(e) {
+      rebuildPicker(e.detail.baseModel);
+    });
+
+    return container;
+  }
+
+  function getLoraDynamicValue(inputId) {
+    var container = document.querySelector('[data-input-id="' + inputId + '"]');
+    if (!container) return [];
+    var result = [];
+    container.querySelectorAll('.lora-dyn-slot').forEach(function(slot) {
+      var sel = slot.querySelector('.lora-dyn-select');
+      var str = slot.querySelector('.lora-dyn-strength');
+      if (sel && sel.value) {
+        result.push({file: sel.value, strength: parseFloat(str ? str.value : 1)});
+      }
+    });
+    return result;
+  }
+
+  // ── VAE Picker ──
+  function buildVaePicker(inputId, input) {
+    var sel = document.createElement('select');
+    sel.className = 'form-input';
+    sel.dataset.inputId = inputId;
+    sel.innerHTML = '<option value="">Default (from checkpoint)</option>';
+
+    apiFetch('/api/admin/models')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        (data.categories || []).forEach(function(cat) {
+          if (cat.id !== 'vae') return;
+          (cat.models || []).forEach(function(m) {
+            if (m.status !== 'present') return;
+            var o = document.createElement('option');
+            o.value = m.file;
+            o.textContent = m.name;
+            sel.appendChild(o);
+          });
+        });
+      });
+
+    return sel;
+  }
+
+  // ── Resolution Picker ──
+  function buildResolutionPicker(inputId, input) {
+    var container = document.createElement('div');
+    container.dataset.inputId = inputId;
+    container.style.cssText = 'display:flex;gap:8px;align-items:center;';
+
+    var presets = input.presets || {};
+    var defaultRes = input.default || {w: 1024, h: 1024};
+
+    var presetSel = document.createElement('select');
+    presetSel.className = 'form-input';
+    presetSel.style.cssText = 'flex:1;';
+
+    function populatePresets(baseModel) {
+      presetSel.innerHTML = '';
+      var key = '';
+      var bm = (baseModel || '').toLowerCase();
+      if (bm.indexOf('pony') >= 0) key = 'pony';
+      else if (bm.indexOf('sdxl') >= 0 || bm.indexOf('illustrious') >= 0) key = 'sdxl';
+      else if (bm.indexOf('sd 1') >= 0 || bm.indexOf('sd1') >= 0) key = 'sd15';
+      else if (bm.indexOf('flux') >= 0) key = 'flux';
+      else key = 'sdxl';
+
+      var list = presets[key] || [{label: defaultRes.w + 'x' + defaultRes.h, w: defaultRes.w, h: defaultRes.h}];
+      list.forEach(function(p) {
+        var o = document.createElement('option');
+        o.value = p.w + 'x' + p.h;
+        o.textContent = p.label;
+        o.dataset.w = p.w;
+        o.dataset.h = p.h;
+        presetSel.appendChild(o);
+      });
+      // Custom option
+      var custom = document.createElement('option');
+      custom.value = 'custom';
+      custom.textContent = 'Custom...';
+      presetSel.appendChild(custom);
+    }
+
+    var wInput = document.createElement('input');
+    wInput.type = 'number';
+    wInput.className = 'form-input';
+    wInput.style.cssText = 'width:80px;display:none;';
+    wInput.placeholder = 'W';
+    wInput.value = defaultRes.w;
+
+    var hInput = document.createElement('input');
+    hInput.type = 'number';
+    hInput.className = 'form-input';
+    hInput.style.cssText = 'width:80px;display:none;';
+    hInput.placeholder = 'H';
+    hInput.value = defaultRes.h;
+
+    presetSel.addEventListener('change', function() {
+      if (presetSel.value === 'custom') {
+        wInput.style.display = '';
+        hInput.style.display = '';
+      } else {
+        wInput.style.display = 'none';
+        hInput.style.display = 'none';
+        var opt = presetSel.options[presetSel.selectedIndex];
+        wInput.value = opt.dataset.w;
+        hInput.value = opt.dataset.h;
+      }
+    });
+
+    document.addEventListener('checkpoint-changed', function(e) {
+      populatePresets(e.detail.baseModel);
+    });
+
+    populatePresets('');
+
+    container.appendChild(presetSel);
+    container.appendChild(wInput);
+    container.appendChild(hInput);
+    return container;
+  }
+
+  function getResolutionValue(inputId) {
+    var container = document.querySelector('[data-input-id="' + inputId + '"]');
+    if (!container) return {w: 1024, h: 1024};
+    var w = container.querySelector('input[placeholder="W"]');
+    var h = container.querySelector('input[placeholder="H"]');
+    return {w: parseInt(w ? w.value : 1024), h: parseInt(h ? h.value : 1024)};
   }
 
   // ── Re-run / Import prefill ──

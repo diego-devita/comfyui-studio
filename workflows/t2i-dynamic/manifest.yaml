@@ -1,0 +1,180 @@
+id: t2i-dynamic
+name: "Text to Image"
+version: 1
+date: "2026-03-22 16:30"
+type: dynamic
+description: "Configurable text-to-image with checkpoint selection, LoRA stack, hires fix, face detailer, and batch generation."
+author: ""
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+  - block: generate
+    file: "generate.json"
+    repeat_variable: "batch_count"
+  - block: hires
+    file: "hires.json"
+    optional: true
+    condition: "hires_enabled"
+  - block: face_fix
+    file: "face_fix.json"
+    optional: true
+    condition: "facefix_enabled"
+  - block: output
+    file: "output.json"
+
+inputs:
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    required: true
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker_dynamic
+    max_loras: 5
+
+  - id: vae_override
+    name: "VAE Override"
+    type: vae_picker
+    required: false
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    required: true
+    default: ""
+    placeholder: "Describe what you want to generate..."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "ugly, deformed, noisy, blurry, low quality, worst quality, bad anatomy, bad hands, missing fingers, extra fingers"
+
+  - id: resolution
+    name: "Resolution"
+    type: resolution_picker
+    presets:
+      sd15: [{label: "512x512", w: 512, h: 512}, {label: "512x768", w: 512, h: 768}, {label: "768x512", w: 768, h: 512}]
+      sdxl: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      pony: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      flux: [{label: "1024x1024", w: 1024, h: 1024}, {label: "768x1344", w: 768, h: 1344}, {label: "1344x768", w: 1344, h: 768}]
+    default: {w: 1024, h: 1024}
+
+  - id: steps
+    name: "Steps"
+    type: int
+    min: 1
+    max: 100
+    default: 25
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 7.0
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    options:
+      - {label: "Euler", value: "euler"}
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ 2M Karras", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+      - {label: "UniPC", value: "uni_pc"}
+      - {label: "LMS", value: "lms"}
+    default: "euler"
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+      - {label: "SGM Uniform", value: "sgm_uniform"}
+      - {label: "Simple", value: "simple"}
+    default: "normal"
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+
+  - id: batch_count
+    name: "Batch Count"
+    type: int
+    min: 1
+    max: 10
+    default: 1
+
+  - id: hires_enabled
+    name: "Hires Fix"
+    type: boolean
+    default: false
+
+  - id: hires_scale
+    name: "Hires Scale"
+    type: float
+    min: 1.0
+    max: 2.5
+    step: 0.1
+    default: 1.5
+
+  - id: hires_steps
+    name: "Hires Steps"
+    type: int
+    min: 1
+    max: 50
+    default: 15
+
+  - id: hires_denoise
+    name: "Hires Denoise"
+    type: float
+    min: 0.1
+    max: 1.0
+    step: 0.05
+    default: 0.5
+
+  - id: facefix_enabled
+    name: "Face Fix"
+    type: boolean
+    default: false
+
+  - id: facefix_steps
+    name: "Face Fix Steps"
+    type: int
+    min: 1
+    max: 50
+    default: 20
+
+  - id: facefix_denoise
+    name: "Face Fix Denoise"
+    type: float
+    min: 0.1
+    max: 1.0
+    step: 0.05
+    default: 0.4
+
+outputs:
+  - id: image
+    name: "Output Image"
+    type: image
+
+required_models: []
+
+required_nodes:
+  - "CheckpointLoaderSimple"
+  - "CLIPTextEncode"
+  - "EmptyLatentImage"
+  - "KSampler"
+  - "VAEDecode"
+  - "SaveImage"

@@ -1,0 +1,52 @@
+{
+  "nodes": {
+    "upscale": {
+      "inputs": {
+        "upscale_method": "lanczos",
+        "width": "{{hires_width}}",
+        "height": "{{hires_height}}",
+        "crop": "disabled",
+        "image": "{{image}}"
+      },
+      "class_type": "ImageScale",
+      "_meta": {"title": "Hires Upscale ({{hires_width}}x{{hires_height}})"}
+    },
+    "vae_encode": {
+      "inputs": {
+        "pixels": ["upscale", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEEncode",
+      "_meta": {"title": "VAE Encode (Hires)"}
+    },
+    "sampler": {
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{hires_steps}}",
+        "cfg": "{{cfg}}",
+        "sampler_name": "{{sampler_name}}",
+        "scheduler": "{{scheduler}}",
+        "denoise": "{{hires_denoise}}",
+        "model": "{{model}}",
+        "positive": "{{positive}}",
+        "negative": "{{negative}}",
+        "latent_image": ["vae_encode", 0]
+      },
+      "class_type": "KSampler",
+      "_meta": {"title": "Hires KSampler"}
+    },
+    "vae_decode": {
+      "inputs": {
+        "samples": ["sampler", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEDecode",
+      "_meta": {"title": "Hires VAE Decode"}
+    }
+  },
+  "imports": ["model", "positive", "negative", "vae", "image"],
+  "exports": {
+    "image": {"node": "vae_decode", "output": 0}
+  },
+  "variables": ["hires_width", "hires_height", "hires_steps", "hires_denoise", "seed", "cfg", "sampler_name", "scheduler"]
+}

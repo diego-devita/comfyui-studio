@@ -1,0 +1,43 @@
+{
+  "nodes": {
+    "empty_latent": {
+      "inputs": {
+        "width": "{{width}}",
+        "height": "{{height}}",
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {"title": "Empty Latent ({{width}}x{{height}})"}
+    },
+    "sampler": {
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{steps}}",
+        "cfg": "{{cfg}}",
+        "sampler_name": "{{sampler_name}}",
+        "scheduler": "{{scheduler}}",
+        "denoise": 1,
+        "model": "{{model}}",
+        "positive": "{{positive}}",
+        "negative": "{{negative}}",
+        "latent_image": ["empty_latent", 0]
+      },
+      "class_type": "KSampler",
+      "_meta": {"title": "KSampler (Batch {{batch_num}})"}
+    },
+    "vae_decode": {
+      "inputs": {
+        "samples": ["sampler", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEDecode",
+      "_meta": {"title": "VAE Decode (Batch {{batch_num}})"}
+    }
+  },
+  "imports": ["model", "positive", "negative", "vae"],
+  "exports": {
+    "image": {"node": "vae_decode", "output": 0},
+    "latent": {"node": "sampler", "output": 0}
+  },
+  "variables": ["width", "height", "seed", "steps", "cfg", "sampler_name", "scheduler", "batch_num"]
+}
