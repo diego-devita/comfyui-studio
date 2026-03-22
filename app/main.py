@@ -1685,13 +1685,13 @@ async def list_compatible_loras(base_model: str):
             if m.get("base_model") == base_model and m.get("pair_id"):
                 pid = m["pair_id"]
                 if pid not in pairs:
-                    pairs[pid] = {"pair_id": pid, "name": m["name"].rsplit(" ", 2)[0], "high": None, "low": None, "both": None}
+                    pairs[pid] = {"pair_id": pid, "name": "", "high": None, "low": None, "both": None}
                 role = m.get("pair_role", "both")
                 pairs[pid][role] = m["file"]
-                if not pairs[pid]["name"] or pairs[pid]["name"] == m["name"]:
-                    # Clean up name: remove "High Noise" / "Low Noise" suffix
+                # Build clean display name from first model seen
+                if not pairs[pid]["name"]:
                     name = m["name"]
-                    for suffix in [" High Noise", " Low Noise", " LoRA", " (Kijai)"]:
+                    for suffix in [" High Noise", " Low Noise", " LoRA", " (Kijai)", " (WAN 2.1 I2V 14B)"]:
                         name = name.replace(suffix, "")
                     pairs[pid]["name"] = name.strip()
     return list(pairs.values())
@@ -1781,7 +1781,10 @@ async def execute_workflow(
             form_params["scenes"] = json.loads(form_params["scenes"])
         if isinstance(form_params.get("loras"), str):
             form_params["loras"] = json.loads(form_params["loras"])
-        workflow = _assemble_dynamic_workflow(manifest, form_params)
+        try:
+            workflow = _assemble_dynamic_workflow(manifest, form_params)
+        except Exception as e:
+            raise HTTPException(500, f"Workflow assembly failed: {str(e)}")
     else:
         workflow = _load_workflow_json(workflow_id)
         if not workflow:
