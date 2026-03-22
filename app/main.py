@@ -2031,6 +2031,14 @@ async def execute_workflow(
                 if node_id in workflow:
                     used_seeds[inp["id"]] = workflow[node_id]["inputs"].get(field)
 
+    # Set output directory per job
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=1)))
+    output_dir = now.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    for _nid, _node in workflow.items():
+        if _node.get("class_type") == "VHS_VideoCombine" and _node.get("inputs", {}).get("save_output") is True:
+            _node["inputs"]["filename_prefix"] = f"comfyui-studio/{output_dir}/video"
+
     # Send to ComfyUI
     client_id = uuid.uuid4().hex
     try:
@@ -2080,6 +2088,7 @@ async def execute_workflow(
         "prompt_id": prompt_id,
         "workflow_id": workflow_id,
         "workflow_name": manifest.get("name", workflow_id),
+        "output_dir": output_dir,
         "status": "running",
         "started_at": now.strftime("%Y-%m-%dT%H:%M:%S"),
         "finished_at": None,

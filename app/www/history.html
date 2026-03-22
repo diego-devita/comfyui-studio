@@ -309,6 +309,7 @@
     rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
     rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
+    if (job.output_dir) rows += '<tr><td>Output Dir</td><td>comfyui-studio/' + escHtml(job.output_dir) + '/</td></tr>';
     rows += '<tr><td>Status</td><td>' + escHtml(job.status) + '</td></tr>';
     if (job.input_image) {
       var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
