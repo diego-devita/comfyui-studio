@@ -1459,10 +1459,24 @@ async def sync_workflows():
                     mr.raise_for_status()
                     (wf_dir / "manifest.yaml").write_text(mr.text)
 
-                    # Download workflow.json
-                    wr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/workflow.json")
-                    if wr.status_code == 200:
-                        (wf_dir / "workflow.json").write_text(wr.text)
+                    # Check if dynamic workflow (has blocks)
+                    manifest_data = yaml.safe_load(mr.text) if mr.text else {}
+                    if manifest_data.get("type") == "dynamic":
+                        blocks_dir_name = manifest_data.get("blocks_dir", "blocks")
+                        blocks_dir = wf_dir / blocks_dir_name
+                        blocks_dir.mkdir(parents=True, exist_ok=True)
+                        # Download block files from pipeline definition
+                        for stage in manifest_data.get("pipeline", []):
+                            block_file = stage.get("file", "")
+                            if block_file:
+                                br = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/{blocks_dir_name}/{block_file}")
+                                if br.status_code == 200:
+                                    (blocks_dir / block_file).write_text(br.text)
+                    else:
+                        # Static workflow: download workflow.json
+                        wr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/workflow.json")
+                        if wr.status_code == 200:
+                            (wf_dir / "workflow.json").write_text(wr.text)
 
                     updated.append(wf_id)
 
