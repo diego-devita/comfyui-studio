@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Assets</title>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
+
+  main { padding: 32px 40px 64px; }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .tab {
+    padding: 10px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-info {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .asset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .asset-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .asset-card:hover { border-color: var(--accent); }
+
+  .asset-thumb {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: var(--bg);
+    display: block;
+  }
+  .asset-thumb-video {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 32px;
+  }
+
+  .asset-info {
+    padding: 8px 10px;
+  }
+  .asset-name {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .asset-meta {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .asset-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 20000;
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .asset-overlay.visible { display: flex; }
+  .asset-overlay img, .asset-overlay video {
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .asset-overlay-info {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link active">Assets</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Assets</small></div>
+</header>
+
+<!-- Main content -->
+<main>
+  <div class="tabs">
+    <button class="tab active" data-tab="inputs">Inputs</button>
+    <button class="tab" data-tab="outputs">Outputs</button>
+  </div>
+
+  <div class="tab-info" id="tabInfo">Loading...</div>
+
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading assets...
+  </div>
+
+  <div class="asset-grid" id="assetGrid"></div>
+</main>
+
+<!-- Fullscreen overlay -->
+<div class="asset-overlay" id="assetOverlay">
+  <div id="assetOverlayContent"></div>
+  <div class="asset-overlay-info" id="assetOverlayInfo"></div>
+</div>
+
+<script>
+(function() {
+  var API_KEY = localStorage.getItem('api_key') || '';
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (API_KEY) opts.headers['Authorization'] = 'Bearer ' + API_KEY;
+    return fetch(url, opts).then(function(r) {
+      if (r.status === 401 || r.status === 403) { window.location = '/login'; throw new Error('auth'); }
+      return r;
+    });
+  }
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(1) + ' GB';
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return '';
+    var d = new Date(ts * 1000);
+    return d.toISOString().replace('T', ' ').substring(0, 16);
+  }
+
+  var $tabs = document.querySelectorAll('.tab');
+  var $tabInfo = document.getElementById('tabInfo');
+  var $loading = document.getElementById('loadingState');
+  var $grid = document.getElementById('assetGrid');
+  var $overlay = document.getElementById('assetOverlay');
+  var $overlayContent = document.getElementById('assetOverlayContent');
+  var $overlayInfo = document.getElementById('assetOverlayInfo');
+
+  var currentTab = 'inputs';
+
+  $tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      $tabs.forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      currentTab = tab.dataset.tab;
+      loadAssets();
+    });
+  });
+
+  $overlay.addEventListener('click', function() {
+    $overlay.classList.remove('visible');
+    // Stop video if playing
+    var vid = $overlay.querySelector('video');
+    if (vid) vid.pause();
+  });
+
+  function loadAssets() {
+    $loading.style.display = '';
+    $grid.innerHTML = '';
+    $tabInfo.textContent = 'Loading...';
+
+    apiFetch('/api/admin/assets/' + currentTab)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        $loading.style.display = 'none';
+        var files = data.files || [];
+        var comfyType = currentTab === 'inputs' ? 'input' : 'output';
+
+        $tabInfo.textContent = files.length + ' files \u00b7 ' + fmtSize(data.total_size || 0);
+
+        if (files.length === 0) {
+          $grid.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1;">No files found.</div>';
+          return;
+        }
+
+        files.forEach(function(f) {
+          var card = document.createElement('div');
+          card.className = 'asset-card';
+
+          var viewUrl = '/api/comfyui/view?filename=' + encodeURIComponent(f.filename) +
+            '&type=' + comfyType +
+            (f.subfolder ? '&subfolder=' + encodeURIComponent(f.subfolder) : '');
+
+          if (f.type === 'image') {
+            card.innerHTML =
+              '<img class="asset-thumb" src="' + viewUrl + '" loading="lazy">' +
+              '<div class="asset-info">' +
+                '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
+                '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
+              '</div>';
+          } else {
+            card.innerHTML =
+              '<div class="asset-thumb-video">&#9654;</div>' +
+              '<div class="asset-info">' +
+                '<div class="asset-name" title="' + f.path + '">' + f.filename + '</div>' +
+                '<div class="asset-meta">' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified) + '</div>' +
+              '</div>';
+          }
+
+          card.onclick = function() { showAsset(f, viewUrl); };
+          $grid.appendChild(card);
+        });
+      })
+      .catch(function(e) {
+        $loading.style.display = 'none';
+        if (e.message !== 'auth') {
+          $tabInfo.textContent = 'Error loading assets';
+        }
+      });
+  }
+
+  function showAsset(f, url) {
+    if (f.type === 'video') {
+      $overlayContent.innerHTML = '<video controls autoplay loop src="' + url + '"></video>';
+    } else {
+      $overlayContent.innerHTML = '<img src="' + url + '">';
+    }
+    $overlayInfo.textContent = f.path + ' \u00b7 ' + fmtSize(f.size) + ' \u00b7 ' + fmtDate(f.modified);
+    $overlay.classList.add('visible');
+  }
+
+  loadAssets();
+})();
+</script>
+</body>
+</html>
