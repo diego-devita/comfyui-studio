@@ -217,12 +217,8 @@
 
 <script>
 (function() {
-  const API_KEY = localStorage.getItem('api_key') || '';
-
   async function apiFetch(url, opts) {
     opts = opts || {};
-    opts.headers = opts.headers || {};
-    if (API_KEY) opts.headers['Authorization'] = 'Bearer ' + API_KEY;
     const resp = await fetch(url, opts);
     if (resp.status === 401 || resp.status === 403) {
       window.location = '/login';

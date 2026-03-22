@@ -188,13 +188,10 @@
 
 <script>
 (function() {
-  var API_KEY = localStorage.getItem('api_key') || '';
-
   function apiFetch(url, opts) {
     opts = opts || {};
-    opts.headers = opts.headers || {};
-    if (API_KEY) opts.headers['Authorization'] = 'Bearer ' + API_KEY;
-    return fetch(url, opts).then(function(r) {
+    var resp = fetch(url, opts);
+    return resp.then(function(r) {
       if (r.status === 401 || r.status === 403) { window.location = '/login'; throw new Error('auth'); }
       return r;
     });
