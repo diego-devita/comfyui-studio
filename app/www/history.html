@@ -44,7 +44,7 @@
     border-radius: var(--radius-card);
     padding: 16px 20px;
     display: grid;
-    grid-template-columns: 60px 1fr auto;
+    grid-template-columns: 20px 60px 1fr auto;
     gap: 16px;
     align-items: center;
     transition: border-color 0.15s;
@@ -54,20 +54,13 @@
   }
   .job-card:hover { border-color: var(--accent); }
   .job-card.selected { border-color: var(--error); background: rgba(255,68,102,0.05); }
-  .job-card { position: relative; }
   .job-check {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    right: 12px;
-    z-index: 2;
     accent-color: var(--error);
     width: 16px;
     height: 16px;
     cursor: pointer;
-    display: none;
   }
-  .job-card .job-check { display: block; }
+  .job-check-placeholder { width: 16px; }
 
   .job-thumb {
     width: 60px;
@@ -276,6 +269,8 @@
   const $detailBox = document.getElementById('detailBox');
 
   async function loadHistory() {
+    $list.innerHTML = '';
+    $empty.style.display = 'none';
     try {
       const resp = await apiFetch('/api/admin/history');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -290,12 +285,27 @@
 
       $list.innerHTML = '';
       document.getElementById('historyToolbar').style.display = 'flex';
-      jobs.forEach(function(job) {
+      var lastClickedIdx = null;
+      jobs.forEach(function(job, idx) {
         var card = document.createElement('div');
         card.className = 'job-card';
+        card.dataset.index = idx;
         card.onclick = function(e) {
           if (e.target.classList.contains('job-check')) return;
           if (e.ctrlKey || e.metaKey) { toggleJobCard(card); return; }
+          if (e.shiftKey && lastClickedIdx !== null) {
+            var from = Math.min(lastClickedIdx, idx);
+            var to = Math.max(lastClickedIdx, idx);
+            $list.querySelectorAll('.job-card').forEach(function(c) {
+              var ci = parseInt(c.dataset.index);
+              if (ci >= from && ci <= to) {
+                var cb = c.querySelector('.job-check');
+                if (cb) { cb.checked = true; c.classList.add('selected'); }
+              }
+            });
+            updateHistDeleteBtn();
+            return;
+          }
           showDetail(job);
         };
 
@@ -317,7 +327,7 @@
 
         var checkHtml = (job.status === 'completed' || job.status === 'error')
           ? '<input type="checkbox" class="job-check" data-prompt-id="' + job.prompt_id + '" onclick="event.stopPropagation();">'
-          : '';
+          : '<div class="job-check-placeholder"></div>';
 
         card.innerHTML =
           checkHtml +
@@ -337,6 +347,7 @@
         if (cb) {
           cb.addEventListener('change', function() {
             card.classList.toggle('selected', cb.checked);
+            lastClickedIdx = parseInt(card.dataset.index);
             updateHistDeleteBtn();
           });
         }
@@ -363,6 +374,9 @@
     card.classList.toggle('selected', cb.checked);
     updateHistDeleteBtn();
   }
+
+  // Track last clicked for shift-select (updated in checkbox change)
+  var lastClickedIdx = null;
 
   function updateHistDeleteBtn() {
     var count = $list.querySelectorAll('.job-check:checked').length;
