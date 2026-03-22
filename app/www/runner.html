@@ -1860,7 +1860,8 @@
       var key = '';
       var bm = (baseModel || '').toLowerCase();
       if (bm.indexOf('pony') >= 0) key = 'pony';
-      else if (bm.indexOf('sdxl') >= 0 || bm.indexOf('illustrious') >= 0) key = 'sdxl';
+      else if (bm.indexOf('illustrious') >= 0) key = presets['illustrious'] ? 'illustrious' : 'sdxl';
+      else if (bm.indexOf('sdxl') >= 0) key = 'sdxl';
       else if (bm.indexOf('sd 1') >= 0 || bm.indexOf('sd1') >= 0) key = 'sd15';
       else if (bm.indexOf('flux') >= 0) key = 'flux';
       else key = 'sdxl';
