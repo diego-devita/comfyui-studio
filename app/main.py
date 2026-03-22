@@ -1923,7 +1923,11 @@ async def execute_workflow(
         # Dynamic workflow: assemble from blocks
         # Handle image upload first so we can pass the filename
         uploaded_name = None
-        if input_image:
+        # Check for existing image first
+        existing_img = form_params.get("_existing_input_image")
+        if existing_img:
+            uploaded_name = existing_img
+        elif input_image:
             image_bytes = await input_image.read()
             unique_name = _make_input_filename(input_image.filename)
             async with httpx.AsyncClient(timeout=30) as client:
@@ -1951,27 +1955,37 @@ async def execute_workflow(
         if not workflow:
             raise HTTPException(404, "Workflow JSON not found")
 
-    # Static workflow: upload image and apply params
-    if not is_dynamic and input_image:
-        image_bytes = await input_image.read()
-        unique_name = _make_input_filename(input_image.filename)
+    # Static workflow: upload image or use existing
+    if not is_dynamic:
+        existing_img = form_params.get("_existing_input_image")
+        if existing_img:
+            # Use existing image — set directly in workflow
+            for inp in manifest.get("inputs", []):
+                if inp["type"] == "image":
+                    node_id = str(inp["node_id"])
+                    field = inp["field"]
+                    if node_id in workflow:
+                        workflow[node_id]["inputs"][field] = existing_img
+        elif input_image:
+            image_bytes = await input_image.read()
+            unique_name = _make_input_filename(input_image.filename)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                f"{COMFY_URL}/upload/image",
-                files={"image": (unique_name, image_bytes, input_image.content_type or "image/png")},
-                data={"overwrite": "true"},
-            )
-            r.raise_for_status()
-            uploaded_name = r.json()["name"]
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    f"{COMFY_URL}/upload/image",
+                    files={"image": (unique_name, image_bytes, input_image.content_type or "image/png")},
+                    data={"overwrite": "true"},
+                )
+                r.raise_for_status()
+                uploaded_name = r.json()["name"]
 
-        # Find image input in manifest and set it
-        for inp in manifest.get("inputs", []):
-            if inp["type"] == "image":
-                node_id = str(inp["node_id"])
-                field = inp["field"]
-                if node_id in workflow:
-                    workflow[node_id]["inputs"][field] = uploaded_name
+            # Find image input in manifest and set it
+            for inp in manifest.get("inputs", []):
+                if inp["type"] == "image":
+                    node_id = str(inp["node_id"])
+                    field = inp["field"]
+                    if node_id in workflow:
+                        workflow[node_id]["inputs"][field] = uploaded_name
 
     if not is_dynamic:
         # Apply form parameters (static workflows only)
