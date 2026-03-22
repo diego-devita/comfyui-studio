@@ -698,6 +698,7 @@
       &#128203; Import JSON
       <input type="file" id="importModelsFile" accept=".json" style="display:none;">
     </label>
+    <button class="btn" id="fetchMetadataBtn">Fetch Civitai Metadata</button>
     <button class="btn" id="globalDlAll">Download All Missing</button>
   </div>
 </header>
@@ -824,11 +825,17 @@
     return resp;
   }
 
-  function makeSourceLink(url) {
+  function makeSourceLink(url, model) {
     if (!url) return '';
     if (url.includes('civitai.com/api/download/models/')) {
+      // Use civitai_model_id if available (correct), otherwise extract version ID
+      if (model && model.civitai_model_id) {
+        const match = url.match(/models\/(\d+)/);
+        var vid = match ? match[1] : '';
+        return 'https://civitai.com/models/' + model.civitai_model_id + (vid ? '?modelVersionId=' + vid : '');
+      }
       const match = url.match(/models\/(\d+)/);
-      if (match) return 'https://civitai.com/models/' + match[1];
+      if (match) return 'https://civitai.com/models/?modelVersionId=' + match[1];
     }
     return url;
   }
@@ -1200,7 +1207,7 @@
     card.dataset.file = m.file;
     card.dataset.category = catId;
 
-    const sourceUrl = makeSourceLink(m.url);
+    const sourceUrl = makeSourceLink(m.url, m);
     const linkHtml = sourceUrl
       ? '<a class="source-link" href="' + escHtml(sourceUrl) + '" target="_blank" rel="noopener" title="Open source page">\u2197</a>'
       : '';
@@ -1241,8 +1248,11 @@
     const sourceClass = (m.source || '').toLowerCase();
     const sourceName = escHtml(m.source || 'unknown');
     const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
+    var versionHtml = m.civitai_version ? ' <span style="font-family:var(--mono);font-size:10px;color:var(--muted);">' + escHtml(m.civitai_version) + '</span>' : '';
+    var baseModelHtml = m.civitai_base_model ? ' <span class="tag-pill">' + escHtml(m.civitai_base_model) + '</span>' : '';
     refs.meta.innerHTML = '<span>' + escHtml(sizeStr) + '</span>' +
       '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>' +
+      versionHtml + baseModelHtml +
       linkHtml;
 
     // Compact-mode columns
@@ -1473,6 +1483,46 @@
       }
     }
   }
+
+  // ── Fetch Civitai Metadata ──
+  document.getElementById('fetchMetadataBtn').addEventListener('click', function() {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+
+    apiFetch('/api/admin/models/fetch-metadata', {method: 'POST'})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.textContent = 'Fetching ' + data.queued + ' models...';
+        if (data.queued === 0) {
+          btn.textContent = 'Fetch Civitai Metadata';
+          btn.disabled = false;
+          return;
+        }
+        // Poll status
+        var pollInterval = setInterval(function() {
+          apiFetch('/api/admin/models/metadata-status')
+            .then(function(r) { return r.json(); })
+            .then(function(statuses) {
+              var pending = 0;
+              for (var k in statuses) {
+                if (statuses[k].status === 'queued_metadata' || statuses[k].status === 'fetching_metadata') pending++;
+              }
+              btn.textContent = pending > 0 ? 'Fetching... (' + pending + ' left)' : 'Fetch Civitai Metadata';
+              if (pending === 0) {
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                initialLoad(); // Refresh to show new metadata
+              }
+            });
+        }, 2000);
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = 'Fetch Civitai Metadata';
+        if (e.message !== 'auth') alert('Failed: ' + e.message);
+      });
+  });
 
   // ── Import Models JSON ──
   document.getElementById('importModelsFile').addEventListener('change', function(e) {
