@@ -851,7 +851,6 @@
       const data = await resp.json();
       handleModelData(data);
       $loading.style.display = 'none';
-      startPolling();
     } catch (e) {
       if (e.message !== 'auth') {
         console.error('Initial load error:', e);
@@ -1020,6 +1019,7 @@
     }
 
     applyFiltersAndSort();
+    _autoPoll(data.stats);
   }
 
   function mergeModelData(data) {
@@ -1050,6 +1050,19 @@
     }
 
     applyFiltersAndSort();
+
+    // Auto-manage polling: only poll when something is active
+    _autoPoll(data.stats);
+  }
+
+  function _autoPoll(stats) {
+    const st = stats || {};
+    const busy = (st.downloading_count || 0) + (st.queued_count || 0) + (st.fetching_count || 0);
+    if (busy > 0) {
+      if (!pollTimer) startPolling();
+    } else {
+      stopPolling();
+    }
   }
 
   // ── Status bar ──
@@ -1420,6 +1433,8 @@
           alert('Download error: ' + (err.detail || err.error || resp.status));
           btn.disabled = false;
           btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        } else {
+          startPolling();
         }
       } catch (e) {
         if (e.message !== 'auth') {
@@ -1461,6 +1476,8 @@
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         alert('Batch download error: ' + (err.detail || err.error || resp.status));
+      } else {
+        startPolling();
       }
     } catch (e) {
       if (e.message !== 'auth') {
@@ -1552,6 +1569,7 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         btn.textContent = 'Fetching ' + data.queued + ' models...';
+        if (data.queued > 0) startPolling();
         // Open log panel
         $logPanel.style.display = 'block';
         refreshActivityLog();
