@@ -70,17 +70,16 @@ inputs:
           - {label: "8 seconds", value: 8}
           - {label: "10 seconds", value: 10}
         default: 5
+      - id: seed
+        name: "Seed"
+        type: seed
+        default: -1
 
   - id: loras
     name: "LoRAs"
     type: lora_picker
     base_model: "wan-i2v-14b"
     max_loras: 3
-
-  - id: seed
-    name: "Seed"
-    type: seed
-    default: -1
 
 outputs:
   - id: video

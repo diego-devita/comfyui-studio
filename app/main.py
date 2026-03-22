@@ -676,14 +676,16 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     # --- Instantiate scenes ---
     prev_scene_exports = None
     last_scene_exports = None
+    resolved_seeds = {}
 
     for i in range(num_scenes):
         scene = scenes[i] if i < len(scenes) else {"prompt": "", "duration": 5}
         duration_sec = int(scene.get("duration", 5))
         duration_frames = duration_sec * 16 + 1
-        scene_seed = int(params.get("seed", -1))
+        scene_seed = int(scene.get("seed", params.get("seed", -1)))
         if scene_seed == -1:
             scene_seed = random.randint(0, 2**53)
+        resolved_seeds[f"scene_{i+1}"] = scene_seed
 
         scene_vars = {
             "prompt": scene.get("prompt", ""),
@@ -724,7 +726,7 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     output_imports = {"final_images": final_images}
     instantiate_block("output", output_tmpl, {}, output_imports)
 
-    return workflow
+    return workflow, resolved_seeds
 
 
 def _load_workflows_index_raw() -> dict:
@@ -1807,6 +1809,7 @@ async def execute_workflow(
 
     form_params = json.loads(params)
     is_dynamic = manifest.get("type") == "dynamic"
+    dynamic_seeds = {}
 
     if is_dynamic:
         # Dynamic workflow: assemble from blocks
@@ -1833,7 +1836,7 @@ async def execute_workflow(
         if isinstance(form_params.get("loras"), str):
             form_params["loras"] = json.loads(form_params["loras"])
         try:
-            workflow = _assemble_dynamic_workflow(manifest, form_params)
+            workflow, dynamic_seeds = _assemble_dynamic_workflow(manifest, form_params)
         except Exception as e:
             raise HTTPException(500, f"Workflow assembly failed: {str(e)}")
     else:
@@ -1898,12 +1901,15 @@ async def execute_workflow(
 
     # Collect resolved seed values
     used_seeds = {}
-    for inp in manifest.get("inputs", []):
-        if inp["type"] == "seed" and inp.get("node_id"):
-            node_id = str(inp["node_id"])
-            field = inp["field"]
-            if node_id in workflow:
-                used_seeds[inp["id"]] = workflow[node_id]["inputs"].get(field)
+    if is_dynamic:
+        used_seeds = dynamic_seeds
+    else:
+        for inp in manifest.get("inputs", []):
+            if inp["type"] == "seed" and inp.get("node_id"):
+                node_id = str(inp["node_id"])
+                field = inp["field"]
+                if node_id in workflow:
+                    used_seeds[inp["id"]] = workflow[node_id]["inputs"].get(field)
 
     # Send to ComfyUI
     client_id = uuid.uuid4().hex
