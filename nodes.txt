@@ -75,6 +75,12 @@ https://github.com/huchenlei/ComfyUI-layerdiffuse.git
 # Background removal (BRIA RMBG-2.0)
 https://github.com/ZHO-ZHO-ZHO/ComfyUI-BRIA_AI-RMBG.git
 
+# GGUF model loader — load quantized GGUF models (UNet, CLIP)
+https://github.com/city96/ComfyUI-GGUF.git
+
+# Slider widgets and utilities
+https://github.com/Franck-Paute/ComfyUI-mxToolkit.git
+
 # ── Video Generation ────────────────────────────────────────
 
 # Load/save video, VHS_VideoCombine — required for any video workflow
