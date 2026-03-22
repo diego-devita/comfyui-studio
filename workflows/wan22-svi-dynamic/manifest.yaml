@@ -1,8 +1,8 @@
 id: wan22-svi-dynamic
 category: i2v
 name: "WAN 2.2 SVI Pro Multi-Scene"
-version: 6
-date: "2026-03-22 10:12"
+version: 8
+date: "2026-03-23 00:49"
 type: dynamic
 description: "Multi-scene I2V using SVI Pro technique. Configurable scene count, per-scene prompts, durations and seeds, LoRA picker. GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""

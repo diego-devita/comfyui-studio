@@ -1,8 +1,8 @@
 id: wan22-svi-pro
 category: i2v
 name: "WAN 2.2 SVI Pro 5 Scenes"
-version: 1
-date: "2026-03-22 01:25"
+version: 3
+date: "2026-03-23 00:49"
 description: "Multi-scene I2V using SVI Pro technique. 5 concatenated clips with per-scene prompts, overlap blending, GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""
 

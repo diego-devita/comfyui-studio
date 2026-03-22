@@ -1,8 +1,8 @@
 id: t2i-dynamic
 category: t2i
 name: "Text to Image"
-version: 2
-date: "2026-03-22 20:05"
+version: 3
+date: "2026-03-23 00:49"
 type: dynamic
 description: "Configurable text-to-image with checkpoint selection, LoRA stack, hires fix, face detailer, and batch generation."
 author: ""

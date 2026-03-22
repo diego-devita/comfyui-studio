@@ -1,56 +1,56 @@
 {
-  "version": 25,
-  "date": "2026-03-23 00:43",
+  "version": 26,
+  "date": "2026-03-23 00:49",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
-      "version": 5,
-      "date": "2026-03-21 23:59"
+      "version": 6,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "wan22-i2v-fp8",
-      "version": 2,
-      "date": "2026-03-21 22:14"
+      "version": 3,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "wan22-i2v-kijai",
-      "version": 6,
-      "date": "2026-03-22 15:52"
+      "version": 7,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "wan22-svi-pro",
-      "version": 2,
-      "date": "2026-03-22 15:52"
+      "version": 3,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "wan22-svi-dynamic",
-      "version": 7,
-      "date": "2026-03-22 15:52"
+      "version": 8,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "t2i-dynamic",
-      "version": 2,
-      "date": "2026-03-22 20:05"
+      "version": 3,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "t2i-batch",
-      "version": 1,
-      "date": "2026-03-22 20:15"
+      "version": 2,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "i2i-batch",
-      "version": 1,
-      "date": "2026-03-22 20:30"
+      "version": 2,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "ipa-batch",
-      "version": 2,
-      "date": "2026-03-23 00:43"
+      "version": 3,
+      "date": "2026-03-23 00:49"
     },
     {
       "id": "faceid-batch",
-      "version": 1,
-      "date": "2026-03-22 22:00"
+      "version": 2,
+      "date": "2026-03-23 00:49"
     }
   ]
 }

@@ -1,8 +1,8 @@
 id: i2i-batch
 category: i2i
 name: "Image to Image (Batch)"
-version: 1
-date: "2026-03-22 20:30"
+version: 2
+date: "2026-03-23 00:49"
 type: dynamic
 description: "Image-to-image with checkpoint, CLIP skip, LoRA stack, and batch variations. Generates N variations of the input image with different seeds."
 author: ""

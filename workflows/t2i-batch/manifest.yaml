@@ -1,8 +1,8 @@
 id: t2i-batch
 category: t2i
 name: "Text to Image (Batch)"
-version: 1
-date: "2026-03-22 20:15"
+version: 2
+date: "2026-03-23 00:49"
 type: dynamic
 description: "Simple text-to-image with checkpoint, CLIP skip, LoRA stack, and native batch support. Generates N images in one pass."
 author: ""

@@ -1,8 +1,8 @@
 id: ipa-batch
 category: ipa
 name: "IP-Adapter (Batch)"
-version: 2
-date: "2026-03-23 00:15"
+version: 3
+date: "2026-03-23 00:49"
 type: dynamic
 description: "IP-Adapter reference image + LoRA stack + prompt. The reference image provides the subject, the LoRA and prompt define the scenario. Generates from empty latent."
 author: ""
