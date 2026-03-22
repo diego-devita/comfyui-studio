@@ -514,6 +514,14 @@
     </div>
 
     <!-- Dynamic form -->
+    <!-- Import JSON -->
+    <div style="margin-bottom:16px;">
+      <label class="btn btn--sm" style="cursor:pointer;">
+        &#128203; Import Job JSON
+        <input type="file" id="importJsonInput" accept=".json" style="display:none;">
+      </label>
+    </div>
+
     <div class="form-panel" id="formPanel"></div>
 
     <!-- Rerun banner -->
@@ -523,12 +531,8 @@
     </div>
 
     <!-- Generate -->
-    <div class="generate-row" style="display:flex;gap:12px;align-items:center;">
+    <div class="generate-row">
       <button class="btn-generate" id="generateBtn" disabled>&#9654; Generate</button>
-      <label class="btn btn--sm" style="cursor:pointer;">
-        &#128230; Import JSON
-        <input type="file" id="importJsonInput" accept=".json" style="display:none;">
-      </label>
     </div>
 
     <!-- Execution error -->
