@@ -5,6 +5,6 @@
     "backend": {"version": "7.2.0", "date": "2026-03-22 19:44", "file": "app/main.py"},
     "frontend": {"version": "7.2.2", "date": "2026-03-22 20:00", "dir": "app/www/"},
     "models": {"version": 15, "date": "2026-03-22 19:50", "file": "app/models.json"},
-    "workflows": {"version": 18, "date": "2026-03-22 16:30", "dir": "workflows/"}
+    "workflows": {"version": 19, "date": "2026-03-22 20:05", "dir": "workflows/"}
   }
 }
