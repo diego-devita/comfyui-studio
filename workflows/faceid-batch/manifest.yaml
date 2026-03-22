@@ -1,4 +1,5 @@
 id: faceid-batch
+category: ipa
 name: "FaceID (Batch)"
 version: 1
 date: "2026-03-22 22:00"

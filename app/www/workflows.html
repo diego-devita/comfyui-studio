@@ -78,6 +78,23 @@
   }
   .wf-card-info { flex: 1; min-width: 0; }
 
+  .wf-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 12px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .wf-badge.t2i { background: #e8ff47; color: #0a0a0f; }
+  .wf-badge.i2v { background: #47c8ff; color: #0a0a0f; }
+  .wf-badge.i2i { background: #ff8f47; color: #0a0a0f; }
+  .wf-badge.ipa { background: #c47aff; color: #0a0a0f; }
+
   .wf-card-name {
     font-family: var(--display);
     font-weight: 700;
@@ -402,7 +419,8 @@
     card.innerHTML =
       '<div class="wf-card-top">' +
         '<div class="wf-card-info">' +
-          '<div class="wf-card-name">' + escHtml(wf.name || wf.id) + '</div>' +
+          (wf.category ? '<span class="wf-badge ' + escHtml(wf.category) + '">' + escHtml(wf.category) + '</span>' : '') +
+          '<div class="wf-card-name" style="display:inline;">' + escHtml(wf.name || wf.id) + '</div>' +
           '<div class="wf-card-meta">' + escHtml(metaParts) + '</div>' +
         '</div>' +
         (version ? '<span class="wf-card-version">' + escHtml(version) + '</span>' : '') +

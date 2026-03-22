@@ -1,4 +1,5 @@
 id: i2i-batch
+category: i2i
 name: "Image to Image (Batch)"
 version: 1
 date: "2026-03-22 20:30"

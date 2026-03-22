@@ -672,7 +672,17 @@
     manifest = data;
     document.title = 'ComfyUI Studio \u2014 ' + (manifest.name || workflowId);
 
-    $wfTitle.textContent = manifest.name || workflowId;
+    $wfTitle.innerHTML = '';
+    if (manifest.category) {
+      var catBadge = document.createElement('span');
+      catBadge.style.cssText = 'display:inline-block;font-family:var(--mono);font-weight:700;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:12px;margin-right:8px;vertical-align:middle;';
+      var colors = {t2i:'#e8ff47',i2v:'#47c8ff',i2i:'#ff8f47',ipa:'#c47aff'};
+      catBadge.style.background = colors[manifest.category] || '#888';
+      catBadge.style.color = '#0a0a0f';
+      catBadge.textContent = manifest.category;
+      $wfTitle.appendChild(catBadge);
+    }
+    $wfTitle.appendChild(document.createTextNode(manifest.name || workflowId));
     if (manifest.type === 'dynamic') {
       var badge = document.createElement('span');
       badge.className = 'badge-dynamic';
