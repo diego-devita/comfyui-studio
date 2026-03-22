@@ -1,0 +1,792 @@
+{
+  "84": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Load CLIP"}
+  },
+  "90": {
+    "inputs": {
+      "vae_name": "wanvideo/Wan2_1_VAE_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {"title": "Load VAE"}
+  },
+  "97": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {"title": "Load Image"}
+  },
+  "104": {
+    "inputs": {
+      "shift": 8,
+      "model": ["217", 0]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {"title": "ModelSamplingSD3 High"}
+  },
+  "122": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 6,
+      "denoise": 1,
+      "model": ["104", 0]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {"title": "BasicScheduler"}
+  },
+  "127": {
+    "inputs": {
+      "sampler_name": "euler_ancestral"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {"title": "KSamplerSelect"}
+  },
+  "128": {
+    "inputs": {
+      "step": 3,
+      "sigmas": ["122", 0]
+    },
+    "class_type": "SplitSigmas",
+    "_meta": {"title": "SplitSigmas"}
+  },
+  "135": {
+    "inputs": {
+      "pixels": ["221", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {"title": "VAE Encode"}
+  },
+  "182": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "RandomNoise Clip 2"}
+  },
+  "189": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "RandomNoise Clip 1"}
+  },
+  "199": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "RandomNoise Clip 3"}
+  },
+  "206": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_high_noise_14B_Q8_0.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {"title": "UNET High Noise (GGUF Q8)"}
+  },
+  "207": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_low_noise_14B_Q8_0.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {"title": "UNET Low Noise (GGUF Q8)"}
+  },
+  "211": {
+    "inputs": {
+      "model": ["206", 0]
+    },
+    "class_type": "wanBlockSwap",
+    "_meta": {"title": "BlockSwap High Noise"}
+  },
+  "212": {
+    "inputs": {
+      "model": ["207", 0]
+    },
+    "class_type": "wanBlockSwap",
+    "_meta": {"title": "BlockSwap Low Noise"}
+  },
+  "213": {
+    "inputs": {
+      "ckpt_name": "rife49.pth",
+      "clear_cache_after_n_frames": 16,
+      "multiplier": 2,
+      "fast_mode": false,
+      "ensemble": true,
+      "scale_factor": 1,
+      "dtype": "float32",
+      "torch_compile": false,
+      "batch_size": 1,
+      "frames": ["250:291", 2]
+    },
+    "class_type": "RIFE VFI",
+    "_meta": {"title": "RIFE 2x (16fps to 32fps)"}
+  },
+  "214": {
+    "inputs": {
+      "frame_rate": 32,
+      "loop_count": 0,
+      "filename_prefix": "comfyui-studio/svi-pro",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": ["213", 0]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {"title": "Export 32fps MP4"}
+  },
+  "215": {
+    "inputs": {
+      "expression": "a*16+1",
+      "a": ["216", 0]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {"title": "Clip 1 Frames"}
+  },
+  "216": {
+    "inputs": {
+      "Xi": 3,
+      "Xf": 3,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {"title": "Clip 1 Length (seconds)"}
+  },
+  "217": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+      "lora_1": {
+        "on": true,
+        "lora": "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors",
+        "strength": 3
+      },
+      "lora_2": {
+        "on": true,
+        "lora": "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors",
+        "strength": 1
+      },
+      "lora_3": {
+        "on": true,
+        "lora": "",
+        "strength": 1
+      },
+      "\u27a5 Add Lora": "",
+      "model": ["211", 0],
+      "clip": ["84", 0]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {"title": "LoRAs High Pass"}
+  },
+  "218": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+      "lora_1": {
+        "on": true,
+        "lora": "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors",
+        "strength": 1.5
+      },
+      "lora_2": {
+        "on": true,
+        "lora": "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors",
+        "strength": 1
+      },
+      "lora_3": {
+        "on": true,
+        "lora": "",
+        "strength": 1
+      },
+      "\u27a5 Add Lora": "",
+      "model": ["212", 0],
+      "clip": ["84", 0]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {"title": "LoRAs Low Pass"}
+  },
+  "220": {
+    "inputs": {
+      "Number": "40"
+    },
+    "class_type": "Int",
+    "_meta": {"title": "BlocksToSwap"}
+  },
+  "221": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.7,
+      "resolution_steps": 1,
+      "image": ["97", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "ImageScaleToTotalPixels"}
+  },
+  "223": {
+    "inputs": {
+      "Xi": 5,
+      "Xf": 5,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {"title": "Clip 2 Length (seconds)"}
+  },
+  "224": {
+    "inputs": {
+      "expression": "a*16+1",
+      "a": ["223", 0]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {"title": "Clip 2 Frames"}
+  },
+  "225": {
+    "inputs": {
+      "Xi": 6,
+      "Xf": 6,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {"title": "Clip 3 Length (seconds)"}
+  },
+  "226": {
+    "inputs": {
+      "expression": "a*16+1",
+      "a": ["225", 0]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {"title": "Clip 3 Frames"}
+  },
+  "232": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "RandomNoise Clip 4"}
+  },
+  "237": {
+    "inputs": {
+      "expression": "a*16+1",
+      "a": ["238", 0]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {"title": "Clip 4 Frames"}
+  },
+  "238": {
+    "inputs": {
+      "Xi": 6,
+      "Xf": 6,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {"title": "Clip 4 Length (seconds)"}
+  },
+  "244": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "RandomNoise Clip 5"}
+  },
+  "248": {
+    "inputs": {
+      "expression": "a*16+1",
+      "a": ["249", 0]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {"title": "Clip 5 Frames"}
+  },
+  "249": {
+    "inputs": {
+      "Xi": 6,
+      "Xf": 6,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {"title": "Clip 5 Length (seconds)"}
+  },
+  "193:254": {
+    "inputs": {
+      "text": "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Prompt (Clip 1)"}
+  },
+  "193:255": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["218", 0],
+      "positive": ["193:258", 0],
+      "negative": ["193:258", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance Low (Clip 1)"}
+  },
+  "193:256": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {"title": "DisableNoise (Clip 1)"}
+  },
+  "193:257": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["217", 0],
+      "positive": ["193:258", 0],
+      "negative": ["193:258", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance High (Clip 1)"}
+  },
+  "193:258": {
+    "inputs": {
+      "length": ["215", 0],
+      "motion_latent_count": 0,
+      "positive": ["193:262", 0],
+      "negative": ["193:254", 0],
+      "anchor_samples": ["135", 0]
+    },
+    "class_type": "WanImageToVideoSVIPro",
+    "_meta": {"title": "SVI Pro (Clip 1)"}
+  },
+  "193:259": {
+    "inputs": {
+      "samples": ["193:261", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode (Clip 1)"}
+  },
+  "193:260": {
+    "inputs": {
+      "noise": ["189", 0],
+      "guider": ["193:257", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 0],
+      "latent_image": ["193:258", 2]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler High Pass (Clip 1)"}
+  },
+  "193:261": {
+    "inputs": {
+      "noise": ["193:256", 0],
+      "guider": ["193:255", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 1],
+      "latent_image": ["193:260", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler Low Pass (Clip 1)"}
+  },
+  "193:262": {
+    "inputs": {
+      "text": "",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive Prompt (Clip 1)"}
+  },
+  "181:162": {
+    "inputs": {
+      "samples": ["181:253", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode (Clip 2)"}
+  },
+  "181:160": {
+    "inputs": {
+      "length": ["224", 0],
+      "motion_latent_count": 1,
+      "positive": ["181:152", 0],
+      "negative": ["181:251", 0],
+      "anchor_samples": ["135", 0],
+      "prev_samples": ["193:261", 0]
+    },
+    "class_type": "WanImageToVideoSVIPro",
+    "_meta": {"title": "SVI Pro (Clip 2)"}
+  },
+  "181:251": {
+    "inputs": {
+      "text": "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Prompt (Clip 2)"}
+  },
+  "181:159": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["218", 0],
+      "positive": ["181:160", 0],
+      "negative": ["181:160", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance Low (Clip 2)"}
+  },
+  "181:183": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {"title": "DisableNoise (Clip 2)"}
+  },
+  "181:158": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["217", 0],
+      "positive": ["181:160", 0],
+      "negative": ["181:160", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance High (Clip 2)"}
+  },
+  "181:252": {
+    "inputs": {
+      "noise": ["182", 0],
+      "guider": ["181:158", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 0],
+      "latent_image": ["181:160", 2]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler High Pass (Clip 2)"}
+  },
+  "181:253": {
+    "inputs": {
+      "noise": ["181:183", 0],
+      "guider": ["181:159", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 1],
+      "latent_image": ["181:252", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler Low Pass (Clip 2)"}
+  },
+  "181:168": {
+    "inputs": {
+      "overlap": 5,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend",
+      "source_images": ["193:259", 0],
+      "new_images": ["181:162", 0]
+    },
+    "class_type": "ImageBatchExtendWithOverlap",
+    "_meta": {"title": "Concat Clip 1+2"}
+  },
+  "181:152": {
+    "inputs": {
+      "text": "",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive Prompt (Clip 2)"}
+  },
+  "203:263": {
+    "inputs": {
+      "samples": ["203:270", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode (Clip 3)"}
+  },
+  "203:264": {
+    "inputs": {
+      "length": ["226", 0],
+      "motion_latent_count": 1,
+      "positive": ["203:272", 0],
+      "negative": ["203:265", 0],
+      "anchor_samples": ["135", 0],
+      "prev_samples": ["181:253", 0]
+    },
+    "class_type": "WanImageToVideoSVIPro",
+    "_meta": {"title": "SVI Pro (Clip 3)"}
+  },
+  "203:265": {
+    "inputs": {
+      "text": "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Prompt (Clip 3)"}
+  },
+  "203:266": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["218", 0],
+      "positive": ["203:264", 0],
+      "negative": ["203:264", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance Low (Clip 3)"}
+  },
+  "203:267": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {"title": "DisableNoise (Clip 3)"}
+  },
+  "203:268": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["217", 0],
+      "positive": ["203:264", 0],
+      "negative": ["203:264", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance High (Clip 3)"}
+  },
+  "203:269": {
+    "inputs": {
+      "noise": ["199", 0],
+      "guider": ["203:268", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 0],
+      "latent_image": ["203:264", 2]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler High Pass (Clip 3)"}
+  },
+  "203:270": {
+    "inputs": {
+      "noise": ["203:267", 0],
+      "guider": ["203:266", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 1],
+      "latent_image": ["203:269", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler Low Pass (Clip 3)"}
+  },
+  "203:271": {
+    "inputs": {
+      "overlap": 5,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend",
+      "source_images": ["181:168", 2],
+      "new_images": ["203:263", 0]
+    },
+    "class_type": "ImageBatchExtendWithOverlap",
+    "_meta": {"title": "Concat Clips 1-3"}
+  },
+  "203:272": {
+    "inputs": {
+      "text": "",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive Prompt (Clip 3)"}
+  },
+  "236:273": {
+    "inputs": {
+      "samples": ["236:280", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode (Clip 4)"}
+  },
+  "236:274": {
+    "inputs": {
+      "length": ["237", 0],
+      "motion_latent_count": 1,
+      "positive": ["236:282", 0],
+      "negative": ["236:275", 0],
+      "anchor_samples": ["135", 0],
+      "prev_samples": ["203:270", 0]
+    },
+    "class_type": "WanImageToVideoSVIPro",
+    "_meta": {"title": "SVI Pro (Clip 4)"}
+  },
+  "236:275": {
+    "inputs": {
+      "text": "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Prompt (Clip 4)"}
+  },
+  "236:276": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["218", 0],
+      "positive": ["236:274", 0],
+      "negative": ["236:274", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance Low (Clip 4)"}
+  },
+  "236:277": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {"title": "DisableNoise (Clip 4)"}
+  },
+  "236:278": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["217", 0],
+      "positive": ["236:274", 0],
+      "negative": ["236:274", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance High (Clip 4)"}
+  },
+  "236:279": {
+    "inputs": {
+      "noise": ["232", 0],
+      "guider": ["236:278", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 0],
+      "latent_image": ["236:274", 2]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler High Pass (Clip 4)"}
+  },
+  "236:280": {
+    "inputs": {
+      "noise": ["236:277", 0],
+      "guider": ["236:276", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 1],
+      "latent_image": ["236:279", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler Low Pass (Clip 4)"}
+  },
+  "236:281": {
+    "inputs": {
+      "overlap": 5,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend",
+      "source_images": ["203:271", 2],
+      "new_images": ["236:273", 0]
+    },
+    "class_type": "ImageBatchExtendWithOverlap",
+    "_meta": {"title": "Concat Clips 1-4"}
+  },
+  "236:282": {
+    "inputs": {
+      "text": "",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive Prompt (Clip 4)"}
+  },
+  "250:283": {
+    "inputs": {
+      "samples": ["250:290", 0],
+      "vae": ["90", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode (Clip 5)"}
+  },
+  "250:284": {
+    "inputs": {
+      "length": ["248", 0],
+      "motion_latent_count": 1,
+      "positive": ["250:292", 0],
+      "negative": ["250:285", 0],
+      "anchor_samples": ["135", 0],
+      "prev_samples": ["236:280", 0]
+    },
+    "class_type": "WanImageToVideoSVIPro",
+    "_meta": {"title": "SVI Pro (Clip 5)"}
+  },
+  "250:285": {
+    "inputs": {
+      "text": "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Prompt (Clip 5)"}
+  },
+  "250:286": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["218", 0],
+      "positive": ["250:284", 0],
+      "negative": ["250:284", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance Low (Clip 5)"}
+  },
+  "250:287": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {"title": "DisableNoise (Clip 5)"}
+  },
+  "250:288": {
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": ["217", 0],
+      "positive": ["250:284", 0],
+      "negative": ["250:284", 1]
+    },
+    "class_type": "ScheduledCFGGuidance",
+    "_meta": {"title": "CFG Guidance High (Clip 5)"}
+  },
+  "250:289": {
+    "inputs": {
+      "noise": ["244", 0],
+      "guider": ["250:288", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 0],
+      "latent_image": ["250:284", 2]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler High Pass (Clip 5)"}
+  },
+  "250:290": {
+    "inputs": {
+      "noise": ["250:287", 0],
+      "guider": ["250:286", 0],
+      "sampler": ["127", 0],
+      "sigmas": ["128", 1],
+      "latent_image": ["250:289", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "Sampler Low Pass (Clip 5)"}
+  },
+  "250:291": {
+    "inputs": {
+      "overlap": 5,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend",
+      "source_images": ["236:281", 2],
+      "new_images": ["250:283", 0]
+    },
+    "class_type": "ImageBatchExtendWithOverlap",
+    "_meta": {"title": "Concat All Clips"}
+  },
+  "250:292": {
+    "inputs": {
+      "text": "",
+      "clip": ["84", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive Prompt (Clip 5)"}
+  }
+}

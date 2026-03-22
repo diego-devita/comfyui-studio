@@ -1,0 +1,111 @@
+id: wan22-svi-pro
+name: "WAN 2.2 SVI Pro Multi-Scene (GGUF)"
+version: 1
+date: "2026-03-22 01:25"
+description: "Multi-scene I2V using SVI Pro technique. 5 concatenated clips with per-scene prompts, overlap blending, GGUF Q8 models, LightX2V + SVI Pro +  LoRAs, RIFE 2x interpolation to 32fps. Best run from ComfyUI directly for full multi-scene control."
+author: "comfyui-studio (based on Civitai SVI Pro workflow)"
+
+workflow_file: "workflow.json"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    node_id: "97"
+    field: "image"
+    required: true
+
+  - id: prompt_clip1
+    name: "Prompt (Clip 1)"
+    type: text
+    node_id: "193:262"
+    field: "text"
+    required: true
+    default: ""
+    placeholder: "Describe clip 1..."
+
+  - id: prompt_clip2
+    name: "Prompt (Clip 2)"
+    type: text
+    node_id: "181:152"
+    field: "text"
+    required: false
+    default: ""
+    placeholder: "Describe clip 2..."
+
+  - id: prompt_clip3
+    name: "Prompt (Clip 3)"
+    type: text
+    node_id: "203:272"
+    field: "text"
+    required: false
+    default: ""
+    placeholder: "Describe clip 3..."
+
+  - id: prompt_clip4
+    name: "Prompt (Clip 4)"
+    type: text
+    node_id: "236:282"
+    field: "text"
+    required: false
+    default: ""
+    placeholder: "Describe clip 4..."
+
+  - id: prompt_clip5
+    name: "Prompt (Clip 5)"
+    type: text
+    node_id: "250:292"
+    field: "text"
+    required: false
+    default: ""
+    placeholder: "Describe clip 5..."
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    node_id: "189"
+    field: "noise_seed"
+    default: -1
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+    node_id: "214"
+
+required_models:
+  - "wan2.2_i2v_high_noise_14B_Q8_0.gguf"
+  - "wan2.2_i2v_low_noise_14B_Q8_0.gguf"
+  - "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+  - "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+  - "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
+  - ""
+  - ""
+
+required_nodes:
+  - "CLIPLoader"
+  - "VAELoader"
+  - "VAEEncode"
+  - "VAEDecode"
+  - "LoadImage"
+  - "CLIPTextEncode"
+  - "UnetLoaderGGUF"
+  - "wanBlockSwap"
+  - "Power Lora Loader (rgthree)"
+  - "ModelSamplingSD3"
+  - "BasicScheduler"
+  - "KSamplerSelect"
+  - "SplitSigmas"
+  - "SamplerCustomAdvanced"
+  - "ScheduledCFGGuidance"
+  - "DisableNoise"
+  - "RandomNoise"
+  - "WanImageToVideoSVIPro"
+  - "ImageBatchExtendWithOverlap"
+  - "ImageScaleToTotalPixels"
+  - "MathExpression|pysssss"
+  - "mxSlider"
+  - "RIFE VFI"
+  - "VHS_VideoCombine"
+  - "Int"
