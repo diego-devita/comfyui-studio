@@ -236,8 +236,11 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
+    position: relative;
+    z-index: 2;
   }
   .pick-existing-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .dropzone-or { position: relative; z-index: 2; }
   .image-picker-overlay {
     display: none;
     position: fixed;
