@@ -682,7 +682,7 @@
       &#128203; Import JSON
       <input type="file" id="importModelsFile" accept=".json" style="display:none;">
     </label>
-    <button class="btn" id="fetchMetadataBtn">Fetch Civitai Metadata</button>
+    <button class="btn" id="fetchMetadataBtn">Fetch Metadata</button>
     <button class="btn" id="globalDlAll">Download All Missing</button>
     <button class="btn" id="activityLogBtn" style="border-color:var(--border);color:var(--muted);">Activity Log</button>
   </div>
@@ -1559,7 +1559,7 @@
       });
   }
 
-  // ── Fetch Civitai Metadata ──
+  // ── Fetch Metadata ──
   document.getElementById('fetchMetadataBtn').addEventListener('click', function() {
     var btn = this;
     btn.disabled = true;
@@ -1575,7 +1575,7 @@
         refreshActivityLog();
 
         if (data.queued === 0) {
-          btn.textContent = 'Fetch Civitai Metadata';
+          btn.textContent = 'Fetch Metadata';
           btn.disabled = false;
           return;
         }
@@ -1589,7 +1589,7 @@
                 if (statuses[k].status === 'queued_metadata' || statuses[k].status === 'fetching_metadata') pending++;
               }
               refreshActivityLog();
-              btn.textContent = pending > 0 ? 'Fetching... (' + pending + ' left)' : 'Fetch Civitai Metadata';
+              btn.textContent = pending > 0 ? 'Fetching... (' + pending + ' left)' : 'Fetch Metadata';
               if (pending === 0) {
                 clearInterval(pollInterval);
                 btn.disabled = false;
@@ -1600,7 +1600,7 @@
       })
       .catch(function(e) {
         btn.disabled = false;
-        btn.textContent = 'Fetch Civitai Metadata';
+        btn.textContent = 'Fetch Metadata';
         if (e.message !== 'auth') alert('Failed: ' + e.message);
       });
   });
