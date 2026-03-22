@@ -521,9 +521,12 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     selected_loras = []
     for item in raw_loras:
         if isinstance(item, str):
-            selected_loras.append({"pair_id": item, "strength": 1.0})
+            selected_loras.append({"pair_id": item, "strength_high": 1.0, "strength_low": 1.0})
         elif isinstance(item, dict):
-            selected_loras.append({"pair_id": item.get("pair_id", ""), "strength": float(item.get("strength", 1.0))})
+            # Support both single strength and separate H/L
+            sh = float(item.get("strength_high", item.get("strength", 1.0)))
+            sl = float(item.get("strength_low", item.get("strength", 1.0)))
+            selected_loras.append({"pair_id": item.get("pair_id", ""), "strength_high": sh, "strength_low": sl})
 
     # Resolve pair_ids to high/low files from models catalog
     _reload_models()
@@ -644,14 +647,15 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     lora_idx = 3  # lora_1 = accelerator, lora_2 = SVI Pro (both hardcoded)
     for lora_sel in selected_loras:
         pid = lora_sel["pair_id"]
-        strength = lora_sel["strength"]
+        str_h = lora_sel["strength_high"]
+        str_l = lora_sel["strength_low"]
         pair = lora_file_map.get(pid, {})
         high_file = pair.get("high", pair.get("both", ""))
         low_file = pair.get("low", pair.get("both", ""))
         if high_file:
             slot = f"lora_{lora_idx}"
-            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": strength}
-            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": strength}
+            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": str_h}
+            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": str_l}
             lora_idx += 1
 
     # Remove template placeholders

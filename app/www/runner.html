@@ -965,20 +965,8 @@
         });
         container.innerHTML = '';
 
-        // Fixed LoRAs info
-        var fixedInfo = document.createElement('div');
-        fixedInfo.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;font-family:var(--mono);';
-        fixedInfo.innerHTML = 'Fixed: <span style="color:var(--text);">LightX2V</span> (accelerator) + <span style="color:var(--text);">SVI v2 PRO</span> (technique)';
-        container.appendChild(fixedInfo);
-
-        // Style LoRAs section
-        var styleLabel = document.createElement('div');
-        styleLabel.style.cssText = 'font-size:12px;color:var(--accent);margin-bottom:6px;font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;';
-        styleLabel.textContent = 'Style LoRAs';
-        container.appendChild(styleLabel);
-
         if (_loraPairs.length === 0) {
-          container.innerHTML += '<div style="color:var(--muted);font-size:12px;">No style LoRAs available. Download them from the Models page.</div>';
+          container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No style LoRAs available. Download them from the Models page.</div>';
           return;
         }
 
@@ -1013,41 +1001,46 @@
           });
           slot.appendChild(sel);
 
-          // Strength controls (disabled by default, toggle to enable)
+          // Strength controls (H and L, hidden by default)
+          var strPanel = document.createElement('div');
+          strPanel.className = 'lora-str-panel';
+          strPanel.style.cssText = 'display:none;flex-direction:column;gap:4px;min-width:120px;';
+
+          function makeStrRow(label, cls) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:4px;';
+            var lbl = document.createElement('span');
+            lbl.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--muted);width:14px;';
+            lbl.textContent = label;
+            row.appendChild(lbl);
+            var slider = document.createElement('input');
+            slider.type = 'range';
+            slider.className = cls;
+            slider.min = '0'; slider.max = '3'; slider.step = '0.1'; slider.value = '1';
+            slider.style.cssText = 'width:70px;accent-color:var(--accent);';
+            row.appendChild(slider);
+            var val = document.createElement('span');
+            val.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--text);min-width:24px;';
+            val.textContent = '1.0';
+            slider.oninput = function() { val.textContent = parseFloat(slider.value).toFixed(1); };
+            row.appendChild(val);
+            return row;
+          }
+          strPanel.appendChild(makeStrRow('H', 'lora-str-high'));
+          strPanel.appendChild(makeStrRow('L', 'lora-str-low'));
+
           var strToggle = document.createElement('button');
           strToggle.type = 'button';
           strToggle.style.cssText = 'background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:4px 8px;white-space:nowrap;';
-          strToggle.textContent = 'str: 1.0';
-          strToggle.title = 'Click to adjust strength';
-
-          var strSlider = document.createElement('input');
-          strSlider.type = 'range';
-          strSlider.className = 'lora-strength';
-          strSlider.min = '0';
-          strSlider.max = '3';
-          strSlider.step = '0.1';
-          strSlider.value = '1';
-          strSlider.style.cssText = 'width:80px;accent-color:var(--accent);display:none;';
-
-          var strVal = document.createElement('span');
-          strVal.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--text);min-width:28px;display:none;';
-          strVal.textContent = '1.0';
-
-          strSlider.oninput = function() {
-            var v = parseFloat(strSlider.value).toFixed(1);
-            strVal.textContent = v;
-            strToggle.textContent = 'str: ' + v;
-          };
-
+          strToggle.textContent = 'str';
+          strToggle.title = 'Adjust H/L strength';
           strToggle.onclick = function() {
-            var show = strSlider.style.display === 'none';
-            strSlider.style.display = show ? '' : 'none';
-            strVal.style.display = show ? '' : 'none';
+            var show = strPanel.style.display === 'none';
+            strPanel.style.display = show ? 'flex' : 'none';
           };
 
           slot.appendChild(strToggle);
-          slot.appendChild(strSlider);
-          slot.appendChild(strVal);
+          slot.appendChild(strPanel);
 
           // Remove button (not for first slot)
           if (!isFirst) {
@@ -1088,9 +1081,14 @@
     var result = [];
     container.querySelectorAll('.lora-slot').forEach(function(slot) {
       var sel = slot.querySelector('.lora-select');
-      var str = slot.querySelector('.lora-strength');
+      var strH = slot.querySelector('.lora-str-high');
+      var strL = slot.querySelector('.lora-str-low');
       if (sel && sel.value) {
-        result.push({pair_id: sel.value, strength: parseFloat(str ? str.value : 1)});
+        result.push({
+          pair_id: sel.value,
+          strength_high: parseFloat(strH ? strH.value : 1),
+          strength_low: parseFloat(strL ? strL.value : 1)
+        });
       }
     });
     return result;
