@@ -1173,6 +1173,7 @@
         container.appendChild(slotsDiv);
 
         function addSlot(defaultPairId, isFirst) {
+          isFirst = false; // all slots are removable
           var slot = document.createElement('div');
           slot.className = 'lora-slot';
           slot.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);';
@@ -1269,7 +1270,7 @@
             var prefillLoras = JSON.parse(prefillRaw);
             slotsDiv.innerHTML = '';
             prefillLoras.forEach(function(lora, idx) {
-              addSlot(lora.pair_id || '', idx === 0);
+              addSlot(lora.pair_id || '', false);
               var slots = slotsDiv.querySelectorAll('.lora-slot');
               var lastSlot = slots[slots.length - 1];
               if (lastSlot) {
@@ -1284,10 +1285,9 @@
               }
             });
             delete container.dataset.prefillLoras;
-          } catch(e) { console.warn('LoRA prefill error', e); addSlot(defaultLora, true); }
-        } else {
-          addSlot(defaultLora, true);
+          } catch(e) { console.warn('LoRA prefill error', e); }
         }
+        // No default slot — user adds LoRAs via "+ Add LoRA" button
       })
       .catch(function() {
         container.innerHTML = '<div style="color:var(--error);font-size:12px;">Failed to load LoRAs</div>';
@@ -2049,7 +2049,8 @@
           makeGauge('gGpu', 'GPU Load') +
           makeGauge('gVram', 'VRAM') +
           makeGauge('gRam', 'System RAM') +
-          makeGauge('gCpu', 'CPU');
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
       }
 
       if (d.gpu) {
@@ -2058,6 +2059,9 @@
       }
       updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
       updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
     } catch (_) {}
   }
 

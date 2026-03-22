@@ -194,26 +194,6 @@
     <!-- Telemetry -->
     <div class="telemetry-panel" id="telemetryPanel"></div>
 
-    <!-- Component Table -->
-    <table class="comp-table" id="compTable">
-      <thead>
-        <tr>
-          <th>Component</th>
-          <th>Version</th>
-          <th>Date</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="compBody">
-      </tbody>
-    </table>
-
-    <!-- Update Button -->
-    <div class="update-row">
-      <button class="btn" id="updateBtn">Check for Updates</button>
-      <span class="update-result" id="updateResult"></span>
-    </div>
-
     <!-- Stat Cards -->
     <div class="stat-cards" id="statCards">
       <div class="stat-card">
@@ -234,6 +214,26 @@
         <div class="stat-sub" id="nodesSub">packages</div>
         <a href="/admin/nodes" class="stat-link">&#8594; View</a>
       </div>
+    </div>
+
+    <!-- Component Table -->
+    <table class="comp-table" id="compTable">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="compBody">
+      </tbody>
+    </table>
+
+    <!-- Update Button -->
+    <div class="update-row">
+      <button class="btn" id="updateBtn">Check for Updates</button>
+      <span class="update-result" id="updateResult"></span>
     </div>
 
     <!-- System Info -->
@@ -491,7 +491,8 @@
           makeGauge('gGpu', 'GPU Load') +
           makeGauge('gVram', 'VRAM') +
           makeGauge('gRam', 'System RAM') +
-          makeGauge('gCpu', 'CPU');
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
       }
 
       if (d.gpu) {
@@ -500,6 +501,9 @@
       }
       updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
       updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
     } catch (_) {}
   }
 
