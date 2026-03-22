@@ -1363,16 +1363,19 @@
       });
 
       // Add existing image references to params
+      // Backend expects '_existing_input_image' key
       for (const [id, filename] of Object.entries(existingImages)) {
-        params['_existing_' + id] = filename;
+        var paramKey = id === 'image' ? '_existing_input_image' : '_existing_' + id;
+        params[paramKey] = filename;
       }
 
       formData.append('params', JSON.stringify(params));
 
       // Append file inputs (skip if using existing image)
+      // Backend expects 'input_image' as the form field name
       for (const [id, file] of Object.entries(inputFiles)) {
         if (!existingImages[id]) {
-          formData.append(id, file);
+          formData.append(id === 'image' ? 'input_image' : id, file);
         }
       }
 

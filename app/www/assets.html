@@ -96,6 +96,7 @@
   .asset-card { position: relative; }
 
   .studio-badge {
+    font-weight: 600;
     position: absolute;
     top: 6px;
     right: 6px;
@@ -106,9 +107,9 @@
     text-transform: uppercase;
     padding: 2px 6px;
     border-radius: 10px;
-    background: rgba(232,255,71,0.15);
-    color: var(--accent);
-    border: 1px solid rgba(232,255,71,0.3);
+    background: rgba(232, 255, 71, 0.85);
+    color: black;
+    border: 1px solid rgba(232, 255, 71, 0.3);
   }
 
   .asset-thumb {
@@ -461,7 +462,7 @@
             var sj = item.data;
             var checkPath = sj.folder_path;
             var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + checkPath + '" onclick="event.stopPropagation();">';
-            var badgeHtml = '<span class="studio-badge">Studio</span>';
+            var badgeHtml = '<span class="studio-badge">Video</span>';
 
             if (sj.thumbnail) {
               var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.thumbnail.filename) +
@@ -553,39 +554,84 @@
     var images = sjData.images || [];
     if (images.length === 0) return;
     var currentIdx = 0;
+    var mode = 'grid'; // 'grid' or 'single'
+    var thumbSize = 150;
 
-    function render() {
-      var img = images[currentIdx];
-      var url = '/api/comfyui/view?filename=' + encodeURIComponent(img.filename) +
+    function imgUrl(img) {
+      return '/api/comfyui/view?filename=' + encodeURIComponent(img.filename) +
         '&type=output&subfolder=' + encodeURIComponent(img.subfolder);
-      $overlayContent.innerHTML =
-        '<div style="position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;">' +
-          '<button id="galPrev" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:28px;cursor:pointer;padding:8px 14px;border-radius:8px;z-index:10;">&lsaquo;</button>' +
-          '<img src="' + url + '" style="max-width:90%;max-height:90%;object-fit:contain;">' +
-          '<button id="galNext" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:28px;cursor:pointer;padding:8px 14px;border-radius:8px;z-index:10;">&rsaquo;</button>' +
-        '</div>';
-      $overlayInfo.textContent = sjData.folder + ' \u00b7 ' + (currentIdx + 1) + '/' + images.length +
-        ' \u00b7 ' + img.filename + ' \u00b7 ' + fmtSize(sjData.total_size);
-
-      document.getElementById('galPrev').onclick = function(e) {
-        e.stopPropagation();
-        currentIdx = (currentIdx - 1 + images.length) % images.length;
-        render();
-      };
-      document.getElementById('galNext').onclick = function(e) {
-        e.stopPropagation();
-        currentIdx = (currentIdx + 1) % images.length;
-        render();
-      };
     }
 
-    render();
+    function renderGrid() {
+      mode = 'grid';
+      $overlayContent.innerHTML =
+        '<div style="display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;" onclick="event.stopPropagation();">' +
+          '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;flex-shrink:0;">' +
+            '<span style="font-size:11px;color:var(--muted);font-family:var(--mono);">Size</span>' +
+            '<input type="range" id="galSizeSlider" min="80" max="400" value="' + thumbSize + '" style="width:140px;accent-color:var(--accent);">' +
+            '<span id="galSizeVal" style="font-size:11px;color:var(--muted);font-family:var(--mono);min-width:32px;">' + thumbSize + 'px</span>' +
+          '</div>' +
+          '<div id="galGrid" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;overflow-y:auto;flex:1;align-content:flex-start;"></div>' +
+        '</div>';
+
+      var $grid = document.getElementById('galGrid');
+      var $slider = document.getElementById('galSizeSlider');
+      var $sizeVal = document.getElementById('galSizeVal');
+
+      function fillGrid() {
+        $grid.innerHTML = '';
+        images.forEach(function(img, idx) {
+          var thumb = document.createElement('img');
+          thumb.src = imgUrl(img);
+          thumb.loading = 'lazy';
+          thumb.style.cssText = 'width:' + thumbSize + 'px;height:' + thumbSize + 'px;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s;';
+          thumb.onmouseenter = function() { this.style.borderColor = 'var(--accent)'; };
+          thumb.onmouseleave = function() { this.style.borderColor = 'transparent'; };
+          thumb.onclick = function(e) { e.stopPropagation(); currentIdx = idx; renderSingle(); };
+          $grid.appendChild(thumb);
+        });
+      }
+      fillGrid();
+
+      $slider.oninput = function() {
+        thumbSize = parseInt(this.value);
+        $sizeVal.textContent = thumbSize + 'px';
+        $grid.querySelectorAll('img').forEach(function(img) {
+          img.style.width = thumbSize + 'px';
+          img.style.height = thumbSize + 'px';
+        });
+      };
+
+      $overlayInfo.textContent = sjData.folder + ' \u00b7 ' + images.length + ' images \u00b7 ' + fmtSize(sjData.total_size);
+    }
+
+    function renderSingle() {
+      mode = 'single';
+      var img = images[currentIdx];
+      $overlayContent.innerHTML =
+        '<div style="position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;" onclick="event.stopPropagation();">' +
+          '<button id="galBack" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:13px;cursor:pointer;padding:6px 14px;border-radius:6px;z-index:10;font-family:var(--mono);">&larr; Grid</button>' +
+          '<button id="galPrev" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:28px;cursor:pointer;padding:8px 14px;border-radius:8px;z-index:10;">&lsaquo;</button>' +
+          '<img src="' + imgUrl(img) + '" style="max-width:90%;max-height:90%;object-fit:contain;">' +
+          '<button id="galNext" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:28px;cursor:pointer;padding:8px 14px;border-radius:8px;z-index:10;">&rsaquo;</button>' +
+        '</div>';
+      $overlayInfo.textContent = sjData.folder + ' \u00b7 ' + (currentIdx + 1) + '/' + images.length + ' \u00b7 ' + img.filename;
+
+      document.getElementById('galBack').onclick = function(e) { e.stopPropagation(); renderGrid(); };
+      document.getElementById('galPrev').onclick = function(e) { e.stopPropagation(); currentIdx = (currentIdx - 1 + images.length) % images.length; renderSingle(); };
+      document.getElementById('galNext').onclick = function(e) { e.stopPropagation(); currentIdx = (currentIdx + 1) % images.length; renderSingle(); };
+    }
+
+    renderGrid();
     $overlay.classList.add('visible');
 
     function onKey(e) {
       if (!$overlay.classList.contains('visible')) { document.removeEventListener('keydown', onKey); return; }
-      if (e.key === 'ArrowLeft') { currentIdx = (currentIdx - 1 + images.length) % images.length; render(); }
-      else if (e.key === 'ArrowRight') { currentIdx = (currentIdx + 1) % images.length; render(); }
+      if (mode === 'single') {
+        if (e.key === 'ArrowLeft') { currentIdx = (currentIdx - 1 + images.length) % images.length; renderSingle(); }
+        else if (e.key === 'ArrowRight') { currentIdx = (currentIdx + 1) % images.length; renderSingle(); }
+        else if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); renderGrid(); }
+      }
     }
     document.addEventListener('keydown', onKey);
   }
