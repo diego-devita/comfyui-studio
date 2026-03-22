@@ -694,6 +694,10 @@
 <header>
   <div class="logo">ComfyUI <span>Studio</span> <small>Model Manager</small></div>
   <div class="header-actions">
+    <label class="btn" style="cursor:pointer;">
+      &#128203; Import JSON
+      <input type="file" id="importModelsFile" accept=".json" style="display:none;">
+    </label>
     <button class="btn" id="globalDlAll">Download All Missing</button>
   </div>
 </header>
@@ -1469,6 +1473,37 @@
       }
     }
   }
+
+  // ── Import Models JSON ──
+  document.getElementById('importModelsFile').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var formData = new FormData();
+    formData.append('file', file);
+
+    var btn = e.target.closest('label');
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
+
+    apiFetch('/api/admin/models/import', {method: 'POST', body: formData})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = '';
+        e.target.value = '';
+        var msg = 'Added: ' + data.total_added + ' model(s)';
+        if (data.skipped && data.skipped.length > 0) {
+          msg += '\nSkipped (already exist): ' + data.skipped.length;
+        }
+        alert(msg);
+        if (data.total_added > 0) initialLoad();
+      })
+      .catch(function(err) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = '';
+        if (err.message !== 'auth') alert('Import failed: ' + err.message);
+      });
+  });
 
   // ── Boot ──
   initialLoad();

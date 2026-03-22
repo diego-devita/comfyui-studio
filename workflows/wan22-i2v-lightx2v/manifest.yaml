@@ -3,7 +3,7 @@ name: "WAN 2.2 Image to Video (LightX2V)"
 version: 5
 date: "2026-03-21 23:59"
 description: "Image to video with WAN 2.2 14B LightX2V models, dual-pass sampling (high+low noise), 20 steps, Lanczos upscale 1.5x, RIFE 4x frame interpolation to 60fps. Proven workflow from wan22-b200."
-author: "comfyui-studio"
+author: ""
 
 workflow_file: "workflow.json"
 

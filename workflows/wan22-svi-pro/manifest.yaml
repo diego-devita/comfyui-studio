@@ -1,9 +1,9 @@
 id: wan22-svi-pro
-name: "WAN 2.2 SVI Pro Multi-Scene (GGUF)"
+name: "WAN 2.2 SVI Pro 5 Scenes"
 version: 1
 date: "2026-03-22 01:25"
-description: "Multi-scene I2V using SVI Pro technique. 5 concatenated clips with per-scene prompts, overlap blending, GGUF Q8 models, LightX2V + SVI Pro +  LoRAs, RIFE 2x interpolation to 32fps. Best run from ComfyUI directly for full multi-scene control."
-author: "comfyui-studio (based on Civitai SVI Pro workflow)"
+description: "Multi-scene I2V using SVI Pro technique. 5 concatenated clips with per-scene prompts, overlap blending, GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
+author: ""
 
 workflow_file: "workflow.json"
 
@@ -77,6 +77,7 @@ required_models:
   - "wan2.2_i2v_high_noise_14B_Q8_0.gguf"
   - "wan2.2_i2v_low_noise_14B_Q8_0.gguf"
   - "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - "wanvideo/Wan2_1_VAE_bf16.safetensors"
   - "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
   - "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
   - "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"

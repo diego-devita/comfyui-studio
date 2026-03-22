@@ -1244,9 +1244,8 @@
         addBtn.onclick = function() { addSlot('', false); };
         container.appendChild(addBtn);
 
-        // First slot defaults to throatv3 if available
-        var defaultLora = _loraPairs.length > 0 ? _loraPairs[0].pair_id : '';
-        _loraPairs.forEach(function(p) { if (p.pair_id === 'throatv3') defaultLora = 'throatv3'; });
+        // First slot starts empty — user chooses
+        var defaultLora = '';
         // Check for prefill data
         var prefillRaw = container.dataset.prefillLoras;
         if (prefillRaw) {

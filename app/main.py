@@ -1087,6 +1087,68 @@ async def models_delete(filename: str):
     return JSONResponse({"status": "deleted", "file": filename})
 
 
+@app.post("/api/admin/models/import")
+async def import_models(file: UploadFile = File(...)):
+    """Import models from a JSON file. Adds new models with 'imported' tag."""
+    try:
+        content = await file.read()
+        imported_data = json.loads(content)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid JSON: {str(e)}")
+
+    _reload_models()
+
+    # Build set of existing filenames for fast lookup
+    existing_files = set()
+    for cat in _models_data.get("categories", []):
+        for m in cat.get("models", []):
+            existing_files.add(m.get("file", ""))
+
+    # Build map of existing categories by id
+    cat_map = {cat["id"]: cat for cat in _models_data.get("categories", [])}
+
+    added = []
+    skipped = []
+
+    for imp_cat in imported_data.get("categories", []):
+        cat_id = imp_cat.get("id", "")
+        for m in imp_cat.get("models", []):
+            fname = m.get("file", "")
+            if not fname or fname in existing_files:
+                skipped.append(fname)
+                continue
+
+            # Add 'imported' tag
+            tags = m.get("tags", [])
+            if "imported" not in tags:
+                tags.append("imported")
+            m["tags"] = tags
+
+            # Add to existing category or create new one
+            if cat_id in cat_map:
+                cat_map[cat_id]["models"].append(m)
+            else:
+                new_cat = {"id": cat_id, "name": imp_cat.get("name", cat_id), "models": [m]}
+                _models_data["categories"].append(new_cat)
+                cat_map[cat_id] = new_cat
+
+            existing_files.add(fname)
+            added.append(fname)
+
+    if added:
+        # Bump version
+        _models_data["version"] = _models_data.get("version", 0) + 1
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=1)))
+        _models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
+
+        # Save
+        MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
+        MODELS_JSON.write_text(json.dumps(_models_data, indent=2, ensure_ascii=False))
+
+    return {"added": added, "skipped": skipped, "total_added": len(added)}
+
+
 # ── Settings endpoints ───────────────────────────────────────────────────────
 
 
@@ -1395,6 +1457,7 @@ async def list_workflows():
         result.append({
             "id": manifest["id"],
             "name": manifest["name"],
+            "type": manifest.get("type", "static"),
             "version": manifest.get("version", 0),
             "date": manifest.get("date", ""),
             "description": manifest.get("description", ""),

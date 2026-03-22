@@ -370,9 +370,9 @@
 
     const version = wf.version ? 'v' + wf.version : '';
     const date = wf.updated_at || wf.created_at || '';
-    const author = wf.author || 'comfyui-studio';
+    const author = wf.author || '';
     const dateStr = date ? date.substring(0, 10) : '';
-    const metaParts = [dateStr, 'by ' + author].filter(Boolean).join(' \u00b7 ');
+    const metaParts = [dateStr, author ? 'by ' + author : ''].filter(Boolean).join(' \u00b7 ');
     const desc = wf.description || '';
 
     // Model dots (max 12 displayed)
@@ -445,10 +445,14 @@
     // Event: Details toggle
     const detailsBtnEl = card.querySelector('[data-details]');
     const detailsPanel = card.querySelector('[data-details-panel]');
-    detailsBtnEl.addEventListener('click', () => {
+    detailsBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
       const isVisible = detailsPanel.classList.contains('visible');
       detailsPanel.classList.toggle('visible');
       detailsBtnEl.textContent = isVisible ? 'Details' : 'Hide';
+    });
+    detailsPanel.addEventListener('click', (e) => {
+      e.stopPropagation();
     });
 
     return card;
