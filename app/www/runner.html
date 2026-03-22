@@ -1661,42 +1661,55 @@
     return sel;
   }
 
-  // ── LoRA Dynamic Picker (filtered by checkpoint base model) ──
+  // ── LoRA Dynamic Picker (all LoRAs, grouped by base_model) ──
   function buildLoraDynamicPicker(inputId, input) {
     var container = document.createElement('div');
     container.className = 'lora-picker';
     container.dataset.inputId = inputId;
-    container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Select a checkpoint first</div>';
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Loading LoRAs...</div>';
 
     var allModels = null;
-    // Fetch all models once
+    var currentBase = '';
+
     apiFetch('/api/admin/models')
       .then(function(r) { return r.json(); })
-      .then(function(data) { allModels = data; });
+      .then(function(data) { allModels = data; rebuildPicker(); });
 
-    function rebuildPicker(baseModel) {
+    function baseMatches(loraBase) {
+      if (!currentBase || !loraBase) return false;
+      var cb = currentBase.toLowerCase();
+      var lb = loraBase.toLowerCase().split(' ')[0];
+      return cb.indexOf(lb) >= 0;
+    }
+
+    function rebuildPicker() {
       container.innerHTML = '';
-      if (!allModels || !baseModel) {
-        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Select a checkpoint to see compatible LoRAs</div>';
-        return;
-      }
+      if (!allModels) return;
 
-      // Find loras matching base model
-      var loras = [];
+      // Collect all present LoRAs grouped by base_model
+      var groups = {};
       (allModels.categories || []).forEach(function(cat) {
         if (cat.id !== 'loras') return;
         (cat.models || []).forEach(function(m) {
-          var mb = m.civitai_base_model || m.base_model || '';
-          if (mb && baseModel.toLowerCase().indexOf(mb.toLowerCase().split(' ')[0]) >= 0) {
-            if (m.status === 'present') loras.push(m);
-          }
+          if (m.status !== 'present') return;
+          var mb = m.civitai_base_model || m.base_model || 'Other';
+          if (!groups[mb]) groups[mb] = [];
+          groups[mb].push(m);
         });
       });
 
-      if (loras.length === 0) {
-        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No compatible LoRAs found for ' + baseModel + '</div>';
+      if (Object.keys(groups).length === 0) {
+        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No LoRAs installed</div>';
         return;
       }
+
+      // Sort: matching group first, then alphabetical
+      var sortedBases = Object.keys(groups).sort(function(a, b) {
+        var am = baseMatches(a) ? 0 : 1;
+        var bm = baseMatches(b) ? 0 : 1;
+        if (am !== bm) return am - bm;
+        return a.localeCompare(b);
+      });
 
       var slotsDiv = document.createElement('div');
       slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
@@ -1705,18 +1718,28 @@
       function addSlot() {
         var slot = document.createElement('div');
         slot.className = 'lora-dyn-slot';
-        slot.style.cssText = 'display:flex;gap:8px;align-items:center;';
+        slot.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
 
         var sel = document.createElement('select');
         sel.className = 'lora-dyn-select';
-        sel.style.cssText = 'flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
+        sel.style.cssText = 'flex:1;min-width:200px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;';
         sel.innerHTML = '<option value="">\u2014 None \u2014</option>';
-        loras.forEach(function(m) {
-          var o = document.createElement('option');
-          o.value = m.file;
-          o.textContent = m.name;
-          sel.appendChild(o);
+
+        sortedBases.forEach(function(groupBase) {
+          var label = groupBase;
+          if (baseMatches(groupBase)) label += ' (selected)';
+          var optgroup = document.createElement('optgroup');
+          optgroup.label = label;
+          groups[groupBase].forEach(function(m) {
+            var o = document.createElement('option');
+            o.value = m.file;
+            o.textContent = m.name;
+            o.dataset.loraBase = m.civitai_base_model || m.base_model || '';
+            sel.appendChild(o);
+          });
+          sel.appendChild(optgroup);
         });
+
         slot.appendChild(sel);
 
         var strLabel = document.createElement('span');
@@ -1744,6 +1767,21 @@
         rmBtn.onclick = function() { slot.remove(); };
         slot.appendChild(rmBtn);
 
+        // Warning for mismatched base_model
+        var warn = document.createElement('div');
+        warn.style.cssText = 'display:none;width:100%;font-size:11px;color:#ffaa33;padding:2px 0;';
+        warn.textContent = 'This LoRA may not be compatible with the selected checkpoint';
+        slot.appendChild(warn);
+
+        sel.addEventListener('change', function() {
+          var opt = sel.options[sel.selectedIndex];
+          if (opt && opt.value && opt.dataset.loraBase) {
+            warn.style.display = baseMatches(opt.dataset.loraBase) ? 'none' : 'block';
+          } else {
+            warn.style.display = 'none';
+          }
+        });
+
         slotsDiv.appendChild(slot);
       }
 
@@ -1758,7 +1796,8 @@
     }
 
     document.addEventListener('checkpoint-changed', function(e) {
-      rebuildPicker(e.detail.baseModel);
+      currentBase = e.detail.baseModel || '';
+      rebuildPicker();
     });
 
     return container;
