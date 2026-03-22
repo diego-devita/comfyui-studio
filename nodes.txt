@@ -79,7 +79,7 @@ https://github.com/ZHO-ZHO-ZHO/ComfyUI-BRIA_AI-RMBG.git
 https://github.com/city96/ComfyUI-GGUF.git
 
 # Slider widgets and utilities
-https://github.com/Franck-Paute/ComfyUI-mxToolkit.git
+https://github.com/Smirnov75/ComfyUI-mxToolkit.git
 
 # ── Video Generation ────────────────────────────────────────
 
