@@ -733,6 +733,10 @@
     <div id="tagFilters" class="tag-group"></div>
   </div>
   <div class="filter-row">
+    <span class="filter-label">Base Model</span>
+    <div id="baseModelFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
     <span class="filter-label">Status</span>
     <div id="statusFilters" class="tag-group">
       <button class="filter-tag active" data-status="present">present</button>
@@ -777,6 +781,7 @@
   let activeCategories = new Set();
   let activeTags = new Set();
   let activeStatuses = new Set(['present', 'missing', 'queued', 'downloading', 'error']);
+  let activeBaseModels = new Set();
   let currentSort = 'name';
   let sortAscending = true;
   let currentView = 'extended';
@@ -906,6 +911,36 @@
     });
   }
 
+  function buildBaseModelFilters(cats) {
+    var $el = document.getElementById('baseModelFilters');
+    $el.innerHTML = '';
+    var bms = new Set();
+    cats.forEach(function(cat) {
+      cat.models.forEach(function(m) {
+        var bm = m.base_model || m.civitai_base_model || '';
+        bms.add(bm || '(none)');
+      });
+    });
+    Array.from(bms).sort().forEach(function(bm) {
+      var btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.baseModel = bm;
+      btn.textContent = bm;
+      if (activeBaseModels.has(bm)) btn.classList.add('active');
+      btn.addEventListener('click', function() {
+        if (activeBaseModels.has(bm)) {
+          activeBaseModels.delete(bm);
+          btn.classList.remove('active');
+        } else {
+          activeBaseModels.add(bm);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $el.appendChild(btn);
+    });
+  }
+
   function buildTagFilters(tags) {
     $tagFilters.innerHTML = '';
     const top20 = tags.slice(0, 20);
@@ -1017,6 +1052,7 @@
 
     allTags = extractAllTags(cats);
     buildCategoryFilters(cats);
+    buildBaseModelFilters(cats);
     buildTagFilters(allTags);
     cats.forEach(buildSection);
     cats.forEach(cat => {
@@ -1150,6 +1186,10 @@
       }
     }
     if (activeStatuses.size > 0 && !activeStatuses.has(model.status)) return false;
+    if (activeBaseModels.size > 0) {
+      var bm = model.base_model || model.civitai_base_model || '(none)';
+      if (!activeBaseModels.has(bm)) return false;
+    }
     if (searchQuery && !model._searchText.includes(searchQuery)) return false;
     return true;
   }

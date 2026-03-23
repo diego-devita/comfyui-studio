@@ -99,45 +99,57 @@
     font-size: 11px;
     color: var(--muted);
   }
-  .update-result {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 16px;
-    text-align: center;
-    padding: 1em;
-    border: solid;
-    border-radius: var(--radius-card);
-    display: none;
-    animation: flashResult 5s ease-in-out forwards;
+  /* ── Update button bar ── */
+  .header-update .btn {
+    position: relative;
+    overflow: hidden;
   }
-  @keyframes flashResult {
-    0% { opacity: 1; }
-    70% { opacity: 1; }
-    85% { opacity: 0.3; }
-    92% { opacity: 0.8; }
-    100% { opacity: 0; display: none; }
-  }
-
-  /* ── Update polling bar ── */
-  .update-poll-bar {
+  .update-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
     height: 3px;
     width: 0%;
     background: var(--accent);
-    border-radius: 2px;
-    margin-top: 4px;
     transition: none;
   }
-  .update-poll-bar.animating {
+  .update-bar.animating {
     transition: width 15s linear;
     width: 100%;
   }
-  .update-poll-info {
-    font-family: var(--mono);
+  .update-badge {
     font-size: 10px;
-    color: var(--muted);
+    margin-left: 6px;
+    opacity: 0.7;
+  }
+
+  /* ── Update overlay ── */
+  .update-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .update-overlay.visible { opacity: 1; pointer-events: auto; }
+  .update-overlay-box {
+    font-family: var(--mono);
+    font-size: 14px;
     text-align: center;
-    margin-top: 2px;
+    padding: 1em 2em;
+    border: solid 1px;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    animation: overlayFlash 1s ease;
+  }
+  @keyframes overlayFlash {
+    0% { background: rgba(232,255,71,0.15); }
+    100% { background: var(--surface); }
   }
 
   /* ── Stat Cards ── */
@@ -228,9 +240,7 @@
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
-    <button class="btn" id="updateBtn">Check for Updates</button>
-    <div class="update-poll-bar" id="updatePollBar"></div>
-    <div class="update-poll-info" id="updatePollInfo" style="display:none;"></div>
+    <button class="btn" id="updateBtn">Check for Updates<div class="update-bar" id="updateBar"></div></button>
     <div class="header-meta">Last updated: <span id="lastUpdated">--</span> <a href="https://github.com/diego-devita/comfyui-studio/blob/main/version.json" target="_blank" style="text-decoration:none;margin-left:4px;" title="View version.json">&#8599;</a></div>
   </div>
 </header>
@@ -243,9 +253,6 @@
   </div>
 
   <div id="dashContent" style="display:none;">
-    <!-- Update Result (shown after check) -->
-    <div class="update-result" id="updateResult"></div>
-
     <!-- Stat Cards -->
     <div class="stat-cards" id="statCards">
       <div class="stat-card">
@@ -293,6 +300,11 @@
   </div>
 </main>
 
+<!-- Update Overlay -->
+<div class="update-overlay" id="updateOverlay">
+  <div class="update-overlay-box" id="updateOverlayBox"></div>
+</div>
+
 <script>
 (function() {
   'use strict';
@@ -329,7 +341,9 @@
   const $versionTag   = document.getElementById('versionTag');
   const $lastUpdated  = document.getElementById('lastUpdated');
   const $updateBtn    = document.getElementById('updateBtn');
-  const $updateResult = document.getElementById('updateResult');
+  const $updateBar    = document.getElementById('updateBar');
+  const $updateOverlay = document.getElementById('updateOverlay');
+  const $updateOverlayBox = document.getElementById('updateOverlayBox');
   const $modelsCount  = document.getElementById('modelsCount');
   const $modelsSub    = document.getElementById('modelsSub');
   const $workflowsCount = document.getElementById('workflowsCount');
@@ -430,21 +444,6 @@
     }
   }
 
-  var _resultTimer = null;
-  function showUpdateResult(text, color) {
-    if (_resultTimer) { clearTimeout(_resultTimer); _resultTimer = null; }
-    $updateResult.textContent = text;
-    $updateResult.style.color = color || 'var(--muted)';
-    $updateResult.style.borderColor = color || 'var(--border)';
-    $updateResult.style.display = '';
-    $updateResult.style.animation = 'none';
-    $updateResult.offsetHeight; // reflow
-    $updateResult.style.animation = 'flashResult 5s ease-in-out forwards';
-    _resultTimer = setTimeout(function() {
-      $updateResult.style.display = 'none';
-    }, 5000);
-  }
-
   // ── Initial load ──
   async function initialLoad() {
     try {
@@ -462,89 +461,109 @@
     }
   }
 
+  // ── Overlay ──
+  var _overlayTimer = null;
+  function showOverlay(text, color, duration) {
+    if (_overlayTimer) { clearTimeout(_overlayTimer); _overlayTimer = null; }
+    $updateOverlayBox.textContent = text;
+    $updateOverlayBox.style.color = color || 'var(--text)';
+    $updateOverlayBox.style.borderColor = color || 'var(--border)';
+    $updateOverlayBox.style.animation = 'none';
+    $updateOverlayBox.offsetHeight;
+    $updateOverlayBox.style.animation = 'overlayFlash 1s ease';
+    $updateOverlay.classList.add('visible');
+    if (duration) {
+      _overlayTimer = setTimeout(function() {
+        $updateOverlay.classList.remove('visible');
+      }, duration);
+    }
+  }
+  function hideOverlay() {
+    if (_overlayTimer) { clearTimeout(_overlayTimer); _overlayTimer = null; }
+    $updateOverlay.classList.remove('visible');
+  }
+
   // ── Check for Updates (with auto-retry polling) ──
-  var $pollBar = document.getElementById('updatePollBar');
-  var $pollInfo = document.getElementById('updatePollInfo');
   var _updatePolling = false;
   var _updatePollTimer = null;
   var MAX_ATTEMPTS = 20;
-  var POLL_INTERVAL = 15; // seconds
+  var POLL_INTERVAL = 15;
 
   function stopUpdatePolling() {
     _updatePolling = false;
     if (_updatePollTimer) { clearTimeout(_updatePollTimer); _updatePollTimer = null; }
-    $pollBar.classList.remove('animating');
-    $pollBar.style.width = '0%';
-    $pollInfo.style.display = 'none';
+    $updateBar.classList.remove('animating');
+    $updateBar.style.width = '0%';
     $updateBtn.disabled = false;
-    $updateBtn.textContent = 'Check for Updates';
+    $updateBtn.innerHTML = 'Check for Updates<div class="update-bar" id="updateBar"></div>';
   }
 
-  function startPollBar() {
-    $pollBar.classList.remove('animating');
-    $pollBar.style.width = '0%';
-    $pollBar.offsetHeight; // reflow
-    $pollBar.classList.add('animating');
+  function startBar() {
+    $updateBar.classList.remove('animating');
+    $updateBar.style.width = '0%';
+    $updateBar.offsetHeight;
+    $updateBar.classList.add('animating');
+  }
+
+  function setBtnWaiting(attempt) {
+    $updateBtn.disabled = false;
+    $updateBtn.innerHTML = 'Stop <span class="update-badge">' + attempt + '/' + MAX_ATTEMPTS + '</span><div class="update-bar" id="updateBar"></div>';
+    // Re-ref since we replaced innerHTML
+    return document.getElementById('updateBar');
   }
 
   async function doUpdateCheck(attempt) {
     if (!_updatePolling) return;
 
     $updateBtn.disabled = true;
-    $updateBtn.innerHTML = '<span class="spinner sm"></span> Checking...';
-    $updateResult.style.display = 'none';
+    $updateBtn.innerHTML = '<span class="spinner sm"></span> Checking...<div class="update-bar" id="updateBar"></div>';
 
     try {
-      const resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
+      var resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        showUpdateResult('Error: ' + (err.detail || err.error || resp.status), 'var(--error)');
+        var err = await resp.json().catch(function() { return {}; });
+        showOverlay('Error: ' + (err.detail || err.error || resp.status), 'var(--error)', 5000);
         stopUpdatePolling();
         return;
       }
 
-      const data = await resp.json();
+      var data = await resp.json();
       if (data.updated && data.updated.length > 0) {
-        // Found updates!
         stopUpdatePolling();
-        $updateBtn.style.background = 'var(--success)';
-        $updateBtn.style.color = '#000';
-        setTimeout(function() { $updateBtn.style.background = ''; $updateBtn.style.color = ''; }, 2000);
-
         if (data.restart_needed) {
-          showUpdateResult('Updated: ' + data.updated.join(', ') + ' — restarting...', 'var(--success)');
+          showOverlay('Updated: ' + data.updated.join(', ') + ' — restarting...', 'var(--success)', null);
           $updateBtn.disabled = true;
           $updateBtn.innerHTML = '<span class="spinner sm"></span> Restarting...';
-          for (let i = 0; i < 30; i++) {
-            await new Promise(r => setTimeout(r, 2000));
+          for (var i = 0; i < 30; i++) {
+            await new Promise(function(r) { setTimeout(r, 2000); });
             try {
-              const check = await apiFetch('/api/admin/system/status');
+              var check = await apiFetch('/api/admin/system/status');
               if (check.ok) { location.reload(); return; }
             } catch (_) {}
           }
-          showUpdateResult('Backend did not come back. Try refreshing manually.', 'var(--error)');
+          showOverlay('Backend did not come back. Try refreshing manually.', 'var(--error)', null);
           $updateBtn.disabled = false;
-          $updateBtn.textContent = 'Check for Updates';
+          $updateBtn.innerHTML = 'Check for Updates<div class="update-bar" id="updateBar"></div>';
           return;
         }
-        showUpdateResult('Updated: ' + data.updated.join(', '), 'var(--success)');
+        showOverlay('Updated: ' + data.updated.join(', '), 'var(--success)', 5000);
         initialLoad();
         return;
       }
 
-      // No updates found — schedule retry if under max attempts
+      // No updates — retry or stop
       if (attempt >= MAX_ATTEMPTS) {
-        showUpdateResult('No updates found after ' + MAX_ATTEMPTS + ' attempts.', 'var(--muted)');
+        showOverlay('No updates found after ' + MAX_ATTEMPTS + ' attempts.', 'var(--muted)', 5000);
         stopUpdatePolling();
         return;
       }
 
-      // Show retry state
-      $updateBtn.disabled = false;
-      $updateBtn.textContent = 'Stop polling';
-      $pollInfo.textContent = 'Attempt ' + attempt + '/' + MAX_ATTEMPTS + ' — retrying in ' + POLL_INTERVAL + 's...';
-      $pollInfo.style.display = '';
-      startPollBar();
+      // Wait state: badge in button, bar animating
+      var bar = setBtnWaiting(attempt);
+      bar.classList.remove('animating');
+      bar.style.width = '0%';
+      bar.offsetHeight;
+      bar.classList.add('animating');
 
       _updatePollTimer = setTimeout(function() {
         if (_updatePolling) doUpdateCheck(attempt + 1);
@@ -552,7 +571,7 @@
 
     } catch (e) {
       if (e.message !== 'auth') {
-        showUpdateResult('Error: ' + e.message, 'var(--error)');
+        showOverlay('Error: ' + e.message, 'var(--error)', 5000);
       }
       stopUpdatePolling();
     }
@@ -560,11 +579,8 @@
 
   $updateBtn.addEventListener('click', function() {
     if (_updatePolling) {
-      // Stop polling
-      showUpdateResult('Polling stopped.', 'var(--muted)');
       stopUpdatePolling();
     } else {
-      // Start polling
       _updatePolling = true;
       doUpdateCheck(1);
     }
