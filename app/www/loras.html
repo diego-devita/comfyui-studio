@@ -6,6 +6,11 @@
 <title>ComfyUI Studio — LoRAs</title>
 <link rel="stylesheet" href="/static/styles.css">
 <style>
+  :root {
+    --status-bar-h: 38px;
+  }
+
+  /* ── Header ── */
   header {
     padding: 24px 40px;
     border-bottom: 1px solid var(--border);
@@ -15,6 +20,7 @@
     gap: 24px;
     flex-wrap: wrap;
   }
+
   .logo {
     font-family: var(--display);
     font-weight: 800;
@@ -34,8 +40,9 @@
     font-weight: 400;
   }
 
-  main { padding: 32px 40px 64px; max-width: 960px; margin: 0 auto; }
+  .header-actions { display: flex; gap: 12px; align-items: center; }
 
+  /* ── Buttons ── */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -59,117 +66,615 @@
   .btn--danger:hover:not(:disabled) { border-color: var(--error); background: var(--error); color: #fff; }
   .btn--sm { padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }
 
-  .spinner {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255,255,255,0.2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Category ── */
-  .cat-title {
+  /* ── Status bar ── */
+  .status-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #0e0e18;
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    height: var(--status-bar-h);
+    display: flex;
+    align-items: center;
+    gap: 0;
     font-family: var(--mono);
     font-size: 11px;
+    color: var(--muted);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .status-bar::-webkit-scrollbar { display: none; }
+
+  .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 0 16px;
+  }
+  .stat:not(:last-child) {
+    border-right: 1px solid var(--border);
+  }
+  .stat--downloading { color: var(--accent); }
+  .stat--queued { color: var(--queued); }
+  .stat--present { color: var(--success); }
+  .stat--disk { color: var(--muted); }
+  .stat--concurrent { color: var(--muted); }
+  .stat--concurrent select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    outline: none;
+  }
+  .stat--concurrent select:focus { border-color: var(--accent); }
+
+  /* ── Filter panel ── */
+  .filter-panel {
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+  }
+
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    flex-wrap: wrap;
+  }
+  .filter-row:not(:last-child) {
+    border-bottom: 1px solid rgba(42, 42, 58, 0.4);
+  }
+
+  .filter-label {
+    font-family: var(--mono);
+    font-size: 10px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     color: var(--muted);
-    margin: 32px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 80px;
   }
-  .cat-title:first-child { margin-top: 0; }
 
-  /* ── Model Card ── */
-  .model-card {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 12px;
+  .tag-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filter-tag {
+    display: inline-flex;
     align-items: center;
-    padding: 14px 16px;
+    padding: 3px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .filter-tag:hover {
+    border-color: #4a4a5a;
+    color: var(--text);
+  }
+
+  /* Category filter tags */
+  .filter-tag.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+
+  /* Status-specific filter tags when active */
+  .filter-tag[data-status="present"].active {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(68, 255, 136, 0.06);
+  }
+  .filter-tag[data-status="missing"].active {
+    border-color: var(--muted);
+    color: var(--text);
+    background: rgba(136, 136, 160, 0.08);
+  }
+  .filter-tag[data-status="queued"].active {
+    border-color: var(--queued);
+    color: var(--queued);
+    background: rgba(255, 170, 68, 0.06);
+  }
+  .filter-tag[data-status="downloading"].active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .filter-tag[data-status="error"].active {
+    border-color: var(--error);
+    color: var(--error);
+    background: rgba(255, 68, 102, 0.06);
+  }
+
+  /* Tag filter pills (model tags) */
+  .filter-tag[data-tag] {
+    border-color: #2a2a3a;
+    color: var(--muted);
+  }
+  .filter-tag[data-tag].active {
+    border-color: #7a7a9a;
+    color: var(--text);
+    background: rgba(224, 224, 232, 0.06);
+  }
+
+  /* Sort + View buttons */
+  .sort-group, .view-group {
+    display: flex;
+    gap: 4px;
+  }
+
+  .sort-btn, .view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .sort-btn:hover, .view-btn:hover {
+    border-color: #4a4a5a;
+    color: var(--text);
+  }
+  .sort-btn.active, .view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .sort-btn .sort-arrow {
+    font-size: 10px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .sort-btn .sort-arrow.desc {
+    transform: rotate(180deg);
+  }
+
+  /* Search input */
+  .search-input {
+    flex: 1;
+    padding: 10px 16px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    margin-bottom: 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
   }
-  .model-name {
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); }
+
+  /* ── Main content ── */
+  main { padding: 32px 40px 64px; }
+
+  /* ── Category sections ── */
+  .category-section {
+    margin-bottom: 36px;
+    transition: opacity 0.2s ease;
+  }
+  .category-section.section-hidden { display: none; }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
     font-family: var(--display);
     font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 2px;
+    font-size: 16px;
+    text-transform: capitalize;
   }
-  .model-meta {
+  .section-count {
     font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
+  }
+
+  /* ── Card grid: extended ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+  }
+
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
     display: flex;
+    flex-direction: column;
     gap: 12px;
-    flex-wrap: wrap;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
   }
-  .model-tags {
+  .model-card.status-downloading {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(232, 255, 71, 0.06);
+  }
+  .model-card.status-error {
+    border-color: var(--error);
+    box-shadow: 0 0 20px rgba(255, 68, 102, 0.06);
+  }
+  .model-card.card-hidden { display: none; }
+
+  .card-top {
     display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-    margin-top: 4px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
   }
-  .model-tag {
+
+  .card-info { flex: 1; min-width: 0; }
+
+  .card-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 6px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .source-badge.civitai { background: #2a1f3a; color: #c0a0ff; }
+  .source-badge.huggingface { background: #1f2a1f; color: #a0d0a0; }
+  .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
+
+  .model-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .model-link {
+    display: inline-block;
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.5px;
-    padding: 2px 8px;
-    border-radius: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg);
     border: 1px solid var(--border);
     color: var(--muted);
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .model-link:hover { border-color: var(--accent); color: var(--accent); }
+
+  .source-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    opacity: 0.6;
+    transition: opacity 0.15s, color 0.15s;
+    line-height: 1;
+  }
+  .source-link:hover {
+    opacity: 1;
+    color: var(--accent);
   }
 
-  .model-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
+  /* ── Tags ── */
+  .card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    padding: 2px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-radius: 12px;
+    background: #1e1e2e;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .base-model-pill {
+    padding: 2px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border-radius: 12px;
+    background: brown;
+    color: white;
+    border: none;
   }
 
+  /* ── Status badge ── */
   .status-badge {
     font-family: var(--mono);
     font-size: 10px;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 12px;
+    padding: 4px 10px;
     border: 1px solid;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: flex-start;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
-  .status-badge.present { color: var(--success); border-color: var(--success); }
-  .status-badge.missing { color: var(--error); border-color: var(--error); }
-  .status-badge.downloading { color: var(--accent); border-color: var(--accent); }
-  .status-badge.queued { color: var(--queued, #ffaa33); border-color: var(--queued, #ffaa33); }
+  .status-badge.present     { color: var(--success); border-color: var(--success); }
+  .status-badge.missing     { color: var(--muted);   border-color: var(--border);  }
+  .status-badge.queued      { color: var(--queued);  border-color: var(--queued);  animation: pulse 2s ease-in-out infinite; }
+  .status-badge.downloading { color: var(--accent);  border-color: var(--accent);  }
+  .status-badge.error       { color: var(--error);   border-color: var(--error);   }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .progress-wrap.visible { display: flex; }
 
   .progress-bar {
-    width: 120px;
-    height: 4px;
-    background: rgba(255,255,255,0.06);
+    height: 3px;
+    background: var(--border);
     border-radius: 2px;
     overflow: hidden;
   }
-  .progress-bar-fill {
+  .progress-fill {
     height: 100%;
     background: var(--accent);
+    width: 0%;
     border-radius: 2px;
-    transition: width 0.4s ease;
+    transition: width 0.8s linear;
+  }
+  .progress-fill.indeterminate {
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
   }
 
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── Error message ── */
+  .card-error {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--error);
+    padding: 8px 12px;
+    background: rgba(255, 68, 102, 0.08);
+    border-radius: var(--radius-sm);
+    word-break: break-word;
+    display: none;
+  }
+  .card-error.visible { display: block; }
+
+  /* ── Card actions ── */
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: auto;
+  }
+
+  /* ── Compact view ── */
+  .card-grid.compact {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .card-grid.compact .model-card {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 12px;
+    border-radius: 0;
+    position: relative;
+  }
+  .card-grid.compact .model-card:first-child {
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+  .card-grid.compact .model-card:last-child {
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
+  }
+
+  .card-grid.compact .card-top {
+    display: contents;
+  }
+  .card-grid.compact .card-info {
+    min-width: 0;
+  }
+  .card-grid.compact .card-name {
+    font-size: 13px;
+    margin-bottom: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-grid.compact .card-meta {
+    display: none;
+  }
+  .card-grid.compact .card-compact-size {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .card-grid.compact .card-compact-source {
+    display: block;
+  }
+  .card-grid.compact .card-tags,
+  .card-grid.compact .progress-wrap,
+  .card-grid.compact .card-error,
+  .card-grid.compact .source-link {
+    display: none !important;
+  }
+  .card-grid.compact .card-actions {
+    margin-top: 0;
+  }
+  .card-grid.compact .card-actions .btn {
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+
+  /* Compact: thin progress underline for downloading */
+  .card-grid.compact .model-card.status-downloading::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 0 0 0 var(--radius-card);
+    transition: width 0.8s linear;
+    width: var(--compact-progress, 0%);
+  }
+
+  /* Hide compact-only elements in extended mode */
+  .card-compact-size { display: none; }
+  .card-compact-source { display: none; }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .spinner.sm { width: 8px; height: 8px; border-width: 1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
   .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--muted);
+  }
+  .empty-state p { font-size: 14px; margin-top: 8px; }
+
+  /* ── Loading state ── */
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 24px;
+    gap: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .loading-state .spinner { border-color: var(--muted); border-top-color: transparent; width: 16px; height: 16px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    header { padding: 20px 20px; }
+    .status-bar { padding: 0 20px; }
+    .filter-panel { padding: 0 20px; }
+    main { padding: 20px 20px 48px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .card-grid.compact .model-card {
+      grid-template-columns: 1fr auto auto;
+    }
+    .card-grid.compact .card-compact-size,
+    .card-grid.compact .card-compact-source { display: none !important; }
+    .logo { font-size: 18px; }
+    .logo small { display: block; margin-left: 0; margin-top: 4px; }
+    .filter-label { min-width: 60px; }
+  }
+
+  /* Navigation bar */
+  .main-nav {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+  .nav-link {
+    padding: 12px 24px;
+    color: var(--muted);
+    text-decoration: none;
     font-family: var(--mono);
     font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    padding: 48px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
   }
+  .nav-link:hover { color: var(--text); }
+  .nav-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .nav-logout { margin-left: auto; color: var(--error); }
+  .nav-logout:hover { color: #ff6688; }
 </style>
 </head>
 <body>
 
+<!-- Navigation -->
 <nav class="main-nav">
   <a href="/home" class="nav-link">Home</a>
   <a href="/admin/nodes" class="nav-link">Nodes</a>
@@ -182,148 +687,916 @@
   <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
 </nav>
 
+<!-- Header -->
 <header>
-  <div class="logo">ComfyUI <span>Studio</span> <small>LoRAs</small></div>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>LoRAs</small></div>
+  <div class="header-actions">
+    <button class="btn" id="syncBtn">Sync LoRAs</button>
+  </div>
 </header>
 
-<main>
-  <div id="lorasList"></div>
-  <div class="empty-state" id="emptyState" style="display:none;">No LoRAs in catalog</div>
+<!-- Status bar -->
+<div class="status-bar" id="statusBar">
+  <span class="stat stat--downloading" id="statDownloading">0 downloading</span>
+  <span class="stat stat--queued" id="statQueued">0 queued</span>
+  <span class="stat stat--present" id="statPresent">0 / 0 present</span>
+  <span class="stat stat--disk" id="statDisk">--</span>
+  <span class="stat stat--concurrent">
+    Parallel: <select id="maxConcurrent"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
+  </span>
+</div>
+
+<!-- Filter panel -->
+<div class="filter-panel">
+  <div class="filter-row">
+    <span class="filter-label">Categories</span>
+    <div id="categoryFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row" style="display:none;">
+    <span class="filter-label">Tags</span>
+    <div id="tagFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Base Model</span>
+    <div id="baseModelFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Status</span>
+    <div id="statusFilters" class="tag-group">
+      <button class="filter-tag active" data-status="present">present</button>
+      <button class="filter-tag active" data-status="missing">missing</button>
+      <button class="filter-tag active" data-status="queued">queued</button>
+      <button class="filter-tag active" data-status="downloading">downloading</button>
+      <button class="filter-tag active" data-status="error">error</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Sort</span>
+    <div class="sort-group" id="sortGroup">
+      <button class="sort-btn active" data-sort="name">Name <span class="sort-arrow">&#9650;</span></button>
+      <button class="sort-btn" data-sort="size">Size</button>
+      <button class="sort-btn" data-sort="status">Status</button>
+    </div>
+    <span class="filter-label" style="margin-left:auto">View</span>
+    <div class="view-group" id="viewGroup">
+      <button class="view-btn active" data-view="extended">Extended</button>
+      <button class="view-btn" data-view="compact">Compact</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search LoRAs...">
+  </div>
+</div>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading LoRAs...
+  </div>
 </main>
 
 <script>
 (function() {
   'use strict';
 
+  // ── State ──
+  let categories = [];
+  let activeCategories = new Set();
+  let activeTags = new Set();
+  let activeStatuses = new Set(['present', 'missing', 'queued', 'downloading', 'error']);
+  let activeBaseModels = new Set();
+  let currentSort = 'name';
+  let sortAscending = true;
+  let currentView = 'extended';
+  let searchQuery = '';
+  let pollTimer = null;
+  const cardMap = {};
+  const sectionMap = {};
+  let allTags = [];
+
+  // ── DOM refs ──
+  const $searchInput  = document.getElementById('searchInput');
+  const $main         = document.getElementById('mainContent');
+  const $loading      = document.getElementById('loadingState');
+  const $categoryFilters = document.getElementById('categoryFilters');
+  const $tagFilters   = document.getElementById('tagFilters');
+  const $statusFilters = document.getElementById('statusFilters');
+  const $sortGroup    = document.getElementById('sortGroup');
+  const $viewGroup    = document.getElementById('viewGroup');
+  const $statDownloading = document.getElementById('statDownloading');
+  const $statQueued   = document.getElementById('statQueued');
+  const $statPresent  = document.getElementById('statPresent');
+  const $statDisk     = document.getElementById('statDisk');
+  const $maxConcurrent = document.getElementById('maxConcurrent');
+
+  // ── Utilities ──
+  function fmtBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024)        return bytes + ' B';
+    if (bytes < 1024 ** 2)   return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 ** 3)   return (bytes / 1024 ** 2).toFixed(1) + ' MB';
+    return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+  }
+
+  function fmtSize(gb) {
+    if (!gb) return '--';
+    if (gb < 0.01) return (gb * 1024).toFixed(0) + ' MB';
+    return gb + ' GB';
+  }
+
   function escHtml(str) {
-    var d = document.createElement('div');
+    const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
   }
 
-  function fmtGB(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
-
-  function apiFetch(url, opts) {
-    opts = opts || {};
-    opts.credentials = 'include';
+  async function apiFetch(url, opts = {}) {
     if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
-      opts.headers = Object.assign({'Content-Type': 'application/json'}, opts.headers || {});
+      opts.headers = {...(opts.headers||{}), 'Content-Type': 'application/json'};
       opts.body = JSON.stringify(opts.body);
     }
-    return fetch(url, opts).then(function(r) {
-      if (r.status === 401 || r.status === 403) {
-        window.location = '/login';
-        throw new Error('auth');
+    const resp = await fetch(url, opts);
+    if (resp.status === 401) { window.location = '/login'; throw new Error('auth'); }
+    return resp;
+  }
+
+  function makeSourceLink(url, model) {
+    if (!url) return '';
+    if (url.includes('civitai.com/api/download/models/')) {
+      // Use civitai_model_id if available (correct), otherwise extract version ID
+      if (model && model.civitai_model_id) {
+        const match = url.match(/models\/(\d+)/);
+        var vid = match ? match[1] : '';
+        return 'https://civitai.com/models/' + model.civitai_model_id + (vid ? '?modelVersionId=' + vid : '');
       }
-      return r;
+      const match = url.match(/models\/(\d+)/);
+      if (match) return 'https://civitai.com/models/?modelVersionId=' + match[1];
+    }
+    return url;
+  }
+
+  function statusOrder(status) {
+    const order = { downloading: 0, queued: 1, error: 2, missing: 3, present: 4 };
+    return order[status] !== undefined ? order[status] : 5;
+  }
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await apiFetch('/api/admin/loras');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      handleModelData(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Initial load error:', e);
+      }
+    }
+  }
+
+  // Make loadModels an alias for initialLoad (used by sync handler)
+  var loadModels = initialLoad;
+
+  // ── Tag extraction ──
+  function extractAllTags(cats) {
+    const freq = {};
+    for (const cat of cats) {
+      for (const m of cat.models) {
+        for (const t of (m.tags || [])) {
+          freq[t] = (freq[t] || 0) + 1;
+        }
+      }
+    }
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .map(e => e[0]);
+  }
+
+  // ── Build filter UI ──
+  function buildCategoryFilters(cats) {
+    $categoryFilters.innerHTML = '';
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.category = cat.id;
+      btn.textContent = cat.name;
+      if (activeCategories.has(cat.id)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeCategories.has(cat.id)) {
+          activeCategories.delete(cat.id);
+          btn.classList.remove('active');
+        } else {
+          activeCategories.add(cat.id);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $categoryFilters.appendChild(btn);
     });
   }
 
-  var $list = document.getElementById('lorasList');
-  var $empty = document.getElementById('emptyState');
-  var _pollTimer = null;
-
-  async function loadLoras() {
-    try {
-      var resp = await apiFetch('/api/admin/loras');
-      if (!resp.ok) return;
-      var data = await resp.json();
-      renderLoras(data);
-    } catch (e) {
-      if (e.message !== 'auth') console.error('LoRAs load error:', e);
-    }
-  }
-
-  function renderLoras(data) {
-    var cats = data.categories || [];
-    if (cats.length === 0 || cats.every(function(c) { return c.models.length === 0; })) {
-      $list.innerHTML = '';
-      $empty.style.display = '';
-      return;
-    }
-    $empty.style.display = 'none';
-
-    var hasDownloading = false;
-    var html = '';
+  function buildBaseModelFilters(cats) {
+    var $el = document.getElementById('baseModelFilters');
+    $el.innerHTML = '';
+    var bms = new Set();
     cats.forEach(function(cat) {
-      html += '<div class="cat-title">' + escHtml(cat.name) + ' (' + cat.models.length + ')</div>';
       cat.models.forEach(function(m) {
-        var statusCls = m.status;
-        var statusText = m.status;
-        if (m.status === 'downloading') hasDownloading = true;
-
-        var meta = [];
-        if (m.size_gb) meta.push(m.size_gb.toFixed(1) + ' GB');
-        if (m.source) meta.push(m.source);
-        if (m.base_model) meta.push(m.base_model);
-
-        var tags = '';
-        if (m.tags && m.tags.length) {
-          tags = '<div class="model-tags">' + m.tags.map(function(t) {
-            return '<span class="model-tag">' + escHtml(t) + '</span>';
-          }).join('') + '</div>';
-        }
-
-        var actions = '';
-        if (m.status === 'present') {
-          actions = '<span class="status-badge present">installed</span>' +
-            '<button class="btn btn--danger btn--sm" onclick="deleteLora(\'' + escHtml(m.file) + '\')">Delete</button>';
-        } else if (m.status === 'downloading') {
-          var pct = m.progress != null ? m.progress.toFixed(0) + '%' : '';
-          actions = '<span class="status-badge downloading">downloading ' + pct + '</span>' +
-            '<div class="progress-bar"><div class="progress-bar-fill" style="width:' + (m.progress || 0) + '%"></div></div>';
-        } else if (m.status === 'queued') {
-          actions = '<span class="status-badge queued">queued</span>';
-        } else if (m.status === 'error') {
-          actions = '<span class="status-badge missing">error</span>' +
-            '<button class="btn btn--sm" onclick="downloadLora(\'' + escHtml(m.file) + '\',this)">Retry</button>';
-        } else {
-          actions = '<span class="status-badge missing">missing</span>' +
-            '<button class="btn btn--sm" onclick="downloadLora(\'' + escHtml(m.file) + '\',this)">Download</button>';
-        }
-
-        html += '<div class="model-card">' +
-          '<div>' +
-            '<div class="model-name">' + escHtml(m.name) + '</div>' +
-            '<div class="model-meta">' + meta.map(function(s) { return '<span>' + escHtml(s) + '</span>'; }).join('') + '</div>' +
-            tags +
-          '</div>' +
-          '<div class="model-actions">' + actions + '</div>' +
-        '</div>';
+        var bm = m.base_model || m.civitai_base_model || '';
+        bms.add(bm || '(none)');
       });
     });
-    $list.innerHTML = html;
+    Array.from(bms).sort().forEach(function(bm) {
+      var btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.baseModel = bm;
+      btn.textContent = bm;
+      if (activeBaseModels.has(bm)) btn.classList.add('active');
+      btn.addEventListener('click', function() {
+        if (activeBaseModels.has(bm)) {
+          activeBaseModels.delete(bm);
+          btn.classList.remove('active');
+        } else {
+          activeBaseModels.add(bm);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $el.appendChild(btn);
+    });
+  }
 
-    // Poll faster while downloads are active
-    if (hasDownloading && !_pollTimer) {
-      _pollTimer = setInterval(loadLoras, 2000);
-    } else if (!hasDownloading && _pollTimer) {
-      clearInterval(_pollTimer);
-      _pollTimer = null;
+  function buildTagFilters(tags) {
+    $tagFilters.innerHTML = '';
+    const top20 = tags.slice(0, 20);
+    top20.forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.tag = tag;
+      btn.textContent = tag;
+      if (activeTags.has(tag)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeTags.has(tag)) {
+          activeTags.delete(tag);
+          btn.classList.remove('active');
+        } else {
+          activeTags.add(tag);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $tagFilters.appendChild(btn);
+    });
+  }
+
+  // Status filter click handlers
+  $statusFilters.querySelectorAll('.filter-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const status = btn.dataset.status;
+      if (activeStatuses.has(status)) {
+        activeStatuses.delete(status);
+        btn.classList.remove('active');
+      } else {
+        activeStatuses.add(status);
+        btn.classList.add('active');
+      }
+      applyFiltersAndSort();
+    });
+  });
+
+  // Sort button click handlers
+  $sortGroup.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sort = btn.dataset.sort;
+      if (currentSort === sort) {
+        sortAscending = !sortAscending;
+      } else {
+        currentSort = sort;
+        sortAscending = true;
+      }
+      // Update active states
+      $sortGroup.querySelectorAll('.sort-btn').forEach(b => {
+        b.classList.remove('active');
+        const arrow = b.querySelector('.sort-arrow');
+        if (arrow) arrow.remove();
+      });
+      btn.classList.add('active');
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow' + (sortAscending ? '' : ' desc');
+      arrow.innerHTML = '&#9650;';
+      btn.appendChild(arrow);
+      sortCards();
+    });
+  });
+
+  // View toggle click handlers
+  $viewGroup.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (currentView === view) return;
+      currentView = view;
+      $viewGroup.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyView();
+    });
+  });
+
+  // Search handler
+  $searchInput.addEventListener('input', () => {
+    searchQuery = $searchInput.value.trim().toLowerCase();
+    applyFiltersAndSort();
+  });
+
+  // Concurrent downloads handler
+  $maxConcurrent.addEventListener('change', async () => {
+    const val = parseInt($maxConcurrent.value, 10);
+    try {
+      await apiFetch('/api/admin/settings', {
+        method: 'PUT',
+        body: { max_concurrent_downloads: val }
+      });
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Failed to update concurrent setting:', e);
+      }
+    }
+  });
+
+  // ── Data handling ──
+  function handleModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+
+    // Attach _category and _searchText to each model
+    cats.forEach(cat => {
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    allTags = extractAllTags(cats);
+    buildCategoryFilters(cats);
+    buildBaseModelFilters(cats);
+    buildTagFilters(allTags);
+    cats.forEach(buildSection);
+    cats.forEach(cat => {
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
+    }
+
+    applyFiltersAndSort();
+    _autoPoll(data.stats);
+  }
+
+  function mergeModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+
+    cats.forEach(cat => {
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    const newTags = extractAllTags(cats);
+    if (newTags.join(',') !== allTags.join(',')) {
+      allTags = newTags;
+      buildTagFilters(allTags);
+    }
+
+    cats.forEach(cat => {
+      if (!sectionMap[cat.id]) buildSection(cat);
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
+    }
+
+    applyFiltersAndSort();
+
+    // Auto-manage polling: only poll when something is active
+    _autoPoll(data.stats);
+  }
+
+  function _autoPoll(stats) {
+    const st = stats || {};
+    const busy = (st.downloading_count || 0) + (st.queued_count || 0);
+    if (busy > 0) {
+      if (!pollTimer) startPolling();
+    } else {
+      stopPolling();
     }
   }
 
-  window.downloadLora = async function(filename, btn) {
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
-    try {
-      await apiFetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
-      setTimeout(loadLoras, 500);
-      if (!_pollTimer) _pollTimer = setInterval(loadLoras, 2000);
-    } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Download'; }
+  // ── Status bar ──
+  function updateStatusBar(stats) {
+    if (!stats) return;
+
+    const dlCount = stats.downloading_count || 0;
+    const dlSpeed = stats.total_speed_bytes || 0;
+    if (dlCount > 0 && dlSpeed > 0) {
+      $statDownloading.textContent = dlCount + ' downloading @ ' + fmtBytes(dlSpeed) + '/s';
+    } else if (dlCount > 0) {
+      $statDownloading.textContent = dlCount + ' downloading';
+    } else {
+      $statDownloading.textContent = '0 downloading';
     }
-  };
 
-  window.deleteLora = async function(filename) {
-    if (!confirm('Delete ' + filename + '?')) return;
+    const queuedCount = stats.queued_count || 0;
+    $statQueued.textContent = queuedCount + ' queued';
+
+    const presentCount = stats.present_count || 0;
+    const totalCount = stats.total_count || 0;
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
+
+    const modelBytes = stats.models_bytes;
+    const freeBytes = stats.free_bytes;
+    if (modelBytes != null && freeBytes != null) {
+      $statDisk.textContent = 'LoRAs: ' + fmtBytes(modelBytes) + ' \u00b7 Free: ' + fmtBytes(freeBytes);
+    }
+  }
+
+  function computeStatusBarFromData() {
+    let dlCount = 0, queuedCount = 0, presentCount = 0, totalCount = 0;
+    categories.forEach(cat => {
+      cat.models.forEach(m => {
+        totalCount++;
+        if (m.status === 'downloading') dlCount++;
+        else if (m.status === 'queued') queuedCount++;
+        else if (m.status === 'present') presentCount++;
+      });
+    });
+    $statDownloading.textContent = dlCount + ' downloading';
+    $statQueued.textContent = queuedCount + ' queued';
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
+  }
+
+  // ── Sections ──
+  function buildSection(cat) {
+    if (sectionMap[cat.id]) return;
+
+    const section = document.createElement('section');
+    section.className = 'category-section';
+    section.dataset.category = cat.id;
+
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = '<h2 class="section-title">' + escHtml(cat.name) + '</h2><span class="section-count"></span>';
+    section.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+    grid.dataset.grid = cat.id;
+    section.appendChild(grid);
+
+    $main.appendChild(section);
+    sectionMap[cat.id] = section;
+  }
+
+  // ── Filter logic ──
+  function isCardVisible(model) {
+    if (activeCategories.size > 0 && !activeCategories.has(model._category)) return false;
+    if (activeTags.size > 0) {
+      const modelTags = new Set(model.tags || []);
+      for (const t of activeTags) {
+        if (!modelTags.has(t)) return false;
+      }
+    }
+    if (activeStatuses.size > 0 && !activeStatuses.has(model.status)) return false;
+    if (activeBaseModels.size > 0) {
+      var bm = model.base_model || model.civitai_base_model || '(none)';
+      if (!activeBaseModels.has(bm)) return false;
+    }
+    if (searchQuery && !model._searchText.includes(searchQuery)) return false;
+    return true;
+  }
+
+  function applyFiltersAndSort() {
+    // Apply visibility
+    Object.values(cardMap).forEach(entry => {
+      const visible = isCardVisible(entry.model);
+      if (visible) {
+        entry.el.classList.remove('card-hidden');
+      } else {
+        entry.el.classList.add('card-hidden');
+      }
+    });
+
+    // Sort cards
+    sortCards();
+
+    // Update section visibility and counts
+    updateSectionVisibility();
+  }
+
+  function sortCards() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const cards = [...grid.children].sort((a, b) => {
+        const entryA = cardMap[a.dataset.file];
+        const entryB = cardMap[b.dataset.file];
+        if (!entryA || !entryB) return 0;
+        const ma = entryA.model;
+        const mb = entryB.model;
+        let cmp = 0;
+        if (currentSort === 'name') cmp = ma.name.localeCompare(mb.name);
+        else if (currentSort === 'size') cmp = (ma.size_gb || 0) - (mb.size_gb || 0);
+        else if (currentSort === 'status') cmp = statusOrder(ma.status) - statusOrder(mb.status);
+        return sortAscending ? cmp : -cmp;
+      });
+      cards.forEach(c => grid.appendChild(c));
+    }
+  }
+
+  function updateSectionVisibility() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const visibleCards = grid.querySelectorAll('.model-card:not(.card-hidden)');
+      const count = visibleCards.length;
+      const countEl = section.querySelector('.section-count');
+      if (countEl) countEl.textContent = '(' + count + ' shown)';
+      if (count === 0) {
+        section.classList.add('section-hidden');
+      } else {
+        section.classList.remove('section-hidden');
+      }
+    }
+  }
+
+  function applyView() {
+    Object.values(sectionMap).forEach(section => {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) return;
+      if (currentView === 'compact') {
+        grid.classList.add('compact');
+      } else {
+        grid.classList.remove('compact');
+      }
+    });
+  }
+
+  // ── Cards ──
+  function createCard(catId, m) {
+    const card = document.createElement('div');
+    card.className = 'model-card';
+    card.dataset.file = m.file;
+    card.dataset.category = catId;
+
+    const sourceUrl = makeSourceLink(m.url, m);
+    // Old source link replaced by model-links badges
+
+    card.innerHTML =
+      '<div class="card-top">' +
+        '<div class="card-info">' +
+          '<div class="card-name" data-ref="name"></div>' +
+          '<div class="card-meta" data-ref="meta"></div>' +
+        '</div>' +
+        '<span class="card-compact-size" data-ref="compactSize"></span>' +
+        '<span class="card-compact-source" data-ref="compactSource"></span>' +
+        '<div class="status-badge missing" data-ref="badge">MISSING</div>' +
+      '</div>' +
+      '<div class="card-tags" data-ref="tags"></div>' +
+      '<div class="progress-wrap" data-ref="progress">' +
+        '<div class="progress-bar"><div class="progress-fill" data-ref="fill"></div></div>' +
+        '<div class="progress-meta">' +
+          '<span data-ref="pct">&mdash;</span>' +
+          '<span data-ref="pbytes">&mdash;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-error" data-ref="error"></div>' +
+      '<div class="card-actions">' +
+        '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
+      '</div>';
+
+    // Cache refs
+    const refs = {};
+    card.querySelectorAll('[data-ref]').forEach(el => {
+      refs[el.dataset.ref] = el;
+    });
+
+    // Set static content
+    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON">&#128203;</span>';
+
+    const sizeStr = fmtSize(m.size_gb);
+    const sourceClass = (m.source || '').toLowerCase();
+    const sourceName = escHtml(m.source || 'unknown');
+    const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
+    var baseModelHtml = (m.base_model || m.civitai_base_model) ? ' <span class="base-model-pill">' + escHtml(m.base_model || m.civitai_base_model) + '</span>' : '';
+
+    // Build model links
+    var linksHtml = '<div class="model-links">';
+    if (m.civitai_version_id) {
+      var vid = m.civitai_version_id;
+      var mid = m.civitai_model_id;
+      linksHtml += '<a class="model-link" href="https://civitai.com/api/download/models/' + vid + '" target="_blank">download</a>';
+      if (mid) {
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '?modelVersionId=' + vid + '" target="_blank">version</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '" target="_blank">model</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/model-versions/' + vid + '" target="_blank">api:ver</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/models/' + mid + '" target="_blank">api:model</a>';
+      }
+    } else if (m.hf_repo) {
+      var repo = m.hf_repo;
+      var hfFile = m.hf_file || '';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/resolve/main/' + hfFile + '" target="_blank">download</a>';
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/blob/main/' + hfFile + '" target="_blank">file</a>';
+      }
+      linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '" target="_blank">repo</a>';
+      linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '" target="_blank">api:repo</a>';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '/tree/main/' + hfFile + '" target="_blank">api:file</a>';
+      }
+    }
+    linksHtml += '</div>';
+
+    refs.meta.innerHTML = '<span>' + escHtml(sizeStr) + '</span>' +
+      '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>' +
+      baseModelHtml +
+      linksHtml;
+
+    // Compact-mode columns
+    refs.compactSize.textContent = sizeStr;
+    const compactSourceEl = refs.compactSource;
+    compactSourceEl.innerHTML = '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>';
+
+    refs.tags.innerHTML = '';
+
+    refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+
+    const grid = document.querySelector('[data-grid="' + catId + '"]');
+    if (grid) grid.appendChild(card);
+
+    const entry = { el: card, refs: refs, model: m };
+    cardMap[m.file] = entry;
+    return entry;
+  }
+
+  function updateCard(catId, m) {
+    let entry = cardMap[m.file];
+    if (!entry) {
+      entry = createCard(catId, m);
+    }
+
+    entry.model = m;
+
+    const { el, refs } = entry;
+    const badge = refs.badge;
+    const progress = refs.progress;
+    const fill = refs.fill;
+    const pct = refs.pct;
+    const pbytes = refs.pbytes;
+    const btn = refs.actionBtn;
+    const errorEl = refs.error;
+
+    // Reset status classes
+    el.classList.remove('status-downloading', 'status-error', 'status-present', 'status-missing', 'status-queued');
+    el.classList.add('status-' + m.status);
+
+    badge.className = 'status-badge ' + m.status;
+
+    // Reset compact progress
+    el.style.setProperty('--compact-progress', '0%');
+
+    switch (m.status) {
+      case 'present':
+        badge.textContent = '\u2713 PRESENT';
+        btn.className = 'btn btn--sm btn--danger';
+        btn.disabled = false;
+        btn.innerHTML = '\uD83D\uDDD1 Delete';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'missing':
+        badge.textContent = 'MISSING';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u2193 Download';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'queued':
+        badge.textContent = 'QUEUED';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Queued...';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'downloading':
+        badge.innerHTML = '<span class="spinner sm"></span>DOWNLOADING';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Downloading...';
+        progress.classList.add('visible');
+        errorEl.classList.remove('visible');
+
+        if (m.expected_bytes && m.expected_bytes > 0 && m.progress != null) {
+          fill.classList.remove('indeterminate');
+          fill.style.width = m.progress.toFixed(1) + '%';
+          el.style.setProperty('--compact-progress', m.progress.toFixed(1) + '%');
+
+          const speedStr = m.speed_bytes ? ' \u00b7 ' + fmtBytes(m.speed_bytes) + '/s' : '';
+          pct.textContent = m.progress.toFixed(1) + '%' + speedStr;
+        } else {
+          fill.classList.add('indeterminate');
+          fill.style.width = '';
+          el.style.setProperty('--compact-progress', '50%');
+
+          const speedStr = m.speed_bytes ? fmtBytes(m.speed_bytes) + '/s' : '...';
+          pct.textContent = speedStr;
+        }
+
+        const dlBytes = m.on_disk_bytes || 0;
+        if (m.expected_bytes && m.expected_bytes > 0) {
+          pbytes.textContent = fmtBytes(dlBytes) + ' / ' + fmtBytes(m.expected_bytes);
+        } else {
+          pbytes.textContent = fmtBytes(dlBytes);
+        }
+        break;
+
+      case 'error':
+        badge.textContent = 'ERROR';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u21BB Retry';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        if (m.error) {
+          errorEl.textContent = m.error;
+          errorEl.classList.add('visible');
+        } else {
+          errorEl.classList.remove('visible');
+        }
+        break;
+    }
+  }
+
+  // ── Card actions ──
+  async function handleCardAction(filename) {
+    const entry = cardMap[filename];
+    if (!entry) return;
+    const m = entry.model;
+    const btn = entry.refs.actionBtn;
+
+    if (m.status === 'missing' || m.status === 'error') {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner sm"></span> Starting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Download error: ' + (err.detail || err.error || resp.status));
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        } else {
+          startPolling();
+        }
+      } catch (e) {
+        if (e.message !== 'auth') {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        }
+      }
+    } else if (m.status === 'present') {
+      if (!confirm('Delete ' + m.name + ' (' + m.file + ')?')) return;
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(filename), { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Delete error: ' + (err.detail || err.error || resp.status));
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      } catch (e) {
+        if (e.message !== 'auth') {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      }
+    }
+  }
+
+  // ── Batch downloads ──
+  async function downloadMissing(filenames) {
+    if (!filenames.length) return;
     try {
-      await apiFetch('/api/admin/models/' + encodeURIComponent(filename), { method: 'DELETE' });
-      loadLoras();
-    } catch (_) {}
+      const resp = await apiFetch('/api/admin/models/download-batch', {
+        method: 'POST',
+        body: { filenames: filenames }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert('Batch download error: ' + (err.detail || err.error || resp.status));
+      } else {
+        startPolling();
+      }
+    } catch (e) {
+      if (e.message !== 'auth') {
+        alert('Error: ' + e.message);
+      }
+    }
+  }
+
+  // ── Polling ──
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollModels, 3000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollModels() {
+    try {
+      const resp = await apiFetch('/api/admin/loras');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      mergeModelData(data);
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Poll error:', e);
+      }
+    }
+  }
+
+  // ── Sync LoRAs ──
+  var $syncBtn = document.getElementById('syncBtn');
+  $syncBtn.addEventListener('click', async function() {
+    $syncBtn.disabled = true;
+    $syncBtn.innerHTML = '<span class="spinner sm"></span> Syncing...';
+    try {
+      var resp = await apiFetch('/api/admin/loras/sync', { method: 'POST' });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        alert('Sync error: ' + (err.detail || err.error || resp.status));
+      } else {
+        var data = await resp.json();
+        if (data.status === 'updated') {
+          alert('LoRAs catalog updated to v' + data.new_version);
+          loadModels();
+        } else {
+          alert('LoRAs catalog is up to date (v' + (data.version || '?') + ')');
+        }
+      }
+    } catch (e) {
+      if (e.message !== 'auth') alert('Error: ' + e.message);
+    } finally {
+      $syncBtn.disabled = false;
+      $syncBtn.textContent = 'Sync LoRAs';
+    }
+  });
+
+  // ── Model JSON viewer ──
+  var $jsonOverlay = document.createElement('div');
+  $jsonOverlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(10,10,15,0.95);z-index:20000;overflow-y:auto;padding:32px;';
+  $jsonOverlay.innerHTML = '<div style="max-width:700px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '<span style="font-family:var(--display);font-size:16px;font-weight:700;">Model JSON</span>' +
+      '<button onclick="this.closest(\'div\').parentElement.parentElement.style.display=\'none\'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>' +
+    '</div>' +
+    '<pre id="modelJsonContent" style="font-family:var(--mono);font-size:11px;color:var(--text);white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;background:var(--bg);padding:16px;border-radius:4px;"></pre>' +
+  '</div>';
+  $jsonOverlay.addEventListener('click', function(e) { if (e.target === $jsonOverlay) $jsonOverlay.style.display = 'none'; });
+  document.body.appendChild($jsonOverlay);
+
+  window.showModelJson = function(el) {
+    var data = el.dataset.model;
+    try {
+      var obj = JSON.parse(data);
+      document.getElementById('modelJsonContent').textContent = JSON.stringify(obj, null, 2);
+    } catch(e) {
+      document.getElementById('modelJsonContent').textContent = data;
+    }
+    $jsonOverlay.style.display = '';
   };
 
-  // Boot
-  loadLoras();
+  // ── Boot ──
+  initialLoad();
+
 })();
 </script>
 </body>

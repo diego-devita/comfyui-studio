@@ -293,6 +293,12 @@
         <a href="/admin/models" class="stat-link">&#8594; Manage</a>
       </div>
       <div class="stat-card">
+        <div class="stat-value" id="lorasCount">--</div>
+        <div class="stat-label">LoRAs</div>
+        <div class="stat-sub" id="lorasSub">-- present</div>
+        <a href="/admin/loras" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
         <div class="stat-value" id="workflowsCount">--</div>
         <div class="stat-label">Workflows</div>
         <div class="stat-sub" id="workflowsSub">-- ready</div>
@@ -381,6 +387,8 @@
   const $updateOverlayBox = document.getElementById('updateOverlayBox');
   const $modelsCount  = document.getElementById('modelsCount');
   const $modelsSub    = document.getElementById('modelsSub');
+  const $lorasCount   = document.getElementById('lorasCount');
+  const $lorasSub     = document.getElementById('lorasSub');
   const $workflowsCount = document.getElementById('workflowsCount');
   const $workflowsSub = document.getElementById('workflowsSub');
   const $nodesCount   = document.getElementById('nodesCount');
@@ -447,6 +455,12 @@
     const models = data.models || compObj.models || {};
     $modelsCount.textContent = models.total || models.count || 0;
     $modelsSub.textContent = (models.present || 0) + ' present';
+
+    const loras = compObj.loras || {};
+    var lorasStatus = loras.status || '0 loras';
+    var lorasTotal = parseInt(lorasStatus) || 0;
+    $lorasCount.textContent = lorasTotal;
+    $lorasSub.textContent = lorasStatus;
 
     const workflows = data.workflows || compObj.workflows || {};
     $workflowsCount.textContent = workflows.total || workflows.count || 0;
