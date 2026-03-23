@@ -548,17 +548,18 @@
   function showDetail(job) {
     var rows = '';
     rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
     rows += '<tr><td>Status</td><td>' + escHtml(job.status || (job.progress ? job.progress.status : '?')) + '</td></tr>';
     rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
     if (job.started_at) rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
 
+    // Workflow params
+    rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
     if (job.input_image) {
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) + '</td></tr>';
     }
-
     if (job.params) {
-      rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
       for (var key in job.params) {
         var val = job.params[key];
         if (key.startsWith('_')) continue;

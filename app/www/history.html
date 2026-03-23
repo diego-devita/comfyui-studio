@@ -442,22 +442,22 @@
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
     if (job.output_dir) rows += '<tr><td>Output Dir</td><td>comfyui-studio/' + escHtml(job.output_dir) + '/</td></tr>';
     rows += '<tr><td>Status</td><td>' + escHtml(job.status) + '</td></tr>';
+    rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
+    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
+    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
+    if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
+
+    // Workflow params
+    rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
     if (job.input_image) {
       var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
         ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;" onmouseenter="this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
-        '&#128247;' +
+        '<svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor" style="vertical-align:-2px;"><path d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg>' +
         '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
         '</span></td></tr>';
     }
-    rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
-    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
-    if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
-    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
-
-    // Params
     if (job.params) {
-      rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
       for (var key in job.params) {
         var val = job.params[key];
         if (key === 'positive_prompt' || key === 'negative_prompt') {
