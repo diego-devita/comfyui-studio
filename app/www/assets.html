@@ -466,7 +466,12 @@
             var sj = item.data;
             var checkPath = sj.folder_path;
             var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + checkPath + '" onclick="event.stopPropagation();">';
-            var badgeHtml = '<span class="studio-badge">Video</span>';
+            var badges = [];
+            if (sj.video_count) badges.push(sj.video_count + ' video');
+            if (sj.image_count) badges.push(sj.image_count + ' img');
+            if (sj.preview_count) badges.push(sj.preview_count + ' preview');
+            if (sj.intermediate_count) badges.push(sj.intermediate_count + ' inter.');
+            var badgeHtml = '<span class="studio-badge">' + (badges.join(' · ') || 'Video') + '</span>';
 
             if (sj.thumbnail) {
               var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.thumbnail.filename) +
