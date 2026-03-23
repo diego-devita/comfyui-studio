@@ -122,7 +122,19 @@ body::before {
 .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
 
 /* ── Spinner ── */
-/* ── Logo BETA badge ── */
+/* ── Logo ── */
+.logo span { color: var(--accent); }
+.logo small {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-left: 14px;
+  border: solid 1px;
+  padding: .5em 1em .5em 1.5em;
+}
 .studio-word {
   position: relative;
   color: var(--accent);

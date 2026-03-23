@@ -677,8 +677,8 @@
 <!-- Navigation -->
 <nav class="main-nav">
   <a href="/home" class="nav-link">Home</a>
-  <a href="/admin/models" class="nav-link active">Models</a>
   <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link active">Models</a>
   <a href="/admin/workflows" class="nav-link">Workflows</a>
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
@@ -728,7 +728,7 @@
     <span class="filter-label">Categories</span>
     <div id="categoryFilters" class="tag-group"></div>
   </div>
-  <div class="filter-row">
+  <div class="filter-row" style="display:none;">
     <span class="filter-label">Tags</span>
     <div id="tagFilters" class="tag-group"></div>
   </div>
@@ -1305,9 +1305,7 @@
     const compactSourceEl = refs.compactSource;
     compactSourceEl.innerHTML = '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>';
 
-    if (m.tags && m.tags.length > 0) {
-      refs.tags.innerHTML = m.tags.map(t => '<span class="tag-pill">' + escHtml(t) + '</span>').join('');
-    }
+    refs.tags.innerHTML = '';
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
 
