@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Job Queue</title>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
+
+  main { padding: 32px 40px 64px; max-width: 960px; margin: 0 auto; }
+
+  /* ── Progress Panel ── */
+  .queue-progress {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .queue-progress-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .progress-step {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .progress-bar-wrap {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .progress-bar-fill.indeterminate {
+    width: 30%;
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { margin-left: 0%; }
+    50% { margin-left: 70%; }
+    100% { margin-left: 0%; }
+  }
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .progress-idle {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── Job Cards ── */
+  .queue-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .job-card {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .job-card:hover { border-color: var(--accent); }
+  .job-card.is-running { border-left: 3px solid var(--accent); }
+
+  .job-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .job-thumb-placeholder {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border-radius: 4px;
+  }
+
+  .job-info { min-width: 0; }
+  .job-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .job-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+  }
+  .job-prompt {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+
+  .job-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .job-status.running { color: var(--accent); border-color: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  .job-status.queued { color: var(--queued, #ffaa33); border-color: var(--queued, #ffaa33); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .empty-state {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    padding: 48px 0;
+  }
+
+  /* ── Detail Overlay ── */
+  .job-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .job-detail-overlay.visible { opacity: 1; pointer-events: auto; }
+  .job-detail-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 32px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+  }
+  .job-detail-box .close-btn {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: var(--muted);
+    font-size: 22px; cursor: pointer;
+  }
+  .job-detail-box .close-btn:hover { color: var(--text); }
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+  }
+  .detail-table td {
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .detail-table td:first-child {
+    color: var(--muted);
+    white-space: nowrap;
+    width: 140px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link active">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>Job Queue</small></div>
+</header>
+
+<main>
+  <!-- Telemetry -->
+  <div class="telemetry-panel" id="telemetryPanel"></div>
+
+  <!-- Progress Panel -->
+  <div class="queue-progress" id="queueProgress">
+    <div class="queue-progress-title">Current Job</div>
+    <div class="progress-idle" id="progressIdle">No active jobs</div>
+    <div id="progressActive" style="display:none;">
+      <div class="progress-step" id="progressStep"></div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="progressPct"></span>
+        <span id="progressElapsed"></span>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="progressJobId"></div>
+    </div>
+  </div>
+
+  <!-- Job List -->
+  <div class="queue-list" id="queueList"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">No jobs in queue</div>
+</main>
+
+<!-- Detail Overlay -->
+<div class="job-detail-overlay" id="detailOverlay">
+  <div class="job-detail-box" id="detailBox"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Utilities ──
+  function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function fmtDate(d) {
+    if (!d) return '--';
+    var dt = new Date(d);
+    if (isNaN(dt)) return String(d).substring(0, 16);
+    var dd = String(dt.getDate()).padStart(2, '0');
+    var mm = String(dt.getMonth() + 1).padStart(2, '0');
+    var hh = String(dt.getHours()).padStart(2, '0');
+    var mi = String(dt.getMinutes()).padStart(2, '0');
+    return dd + '/' + mm + ' ' + hh + ':' + mi;
+  }
+
+  function fmtElapsed(startedAt) {
+    if (!startedAt) return '';
+    var start = new Date(startedAt).getTime();
+    var now = Date.now();
+    var secs = Math.floor((now - start) / 1000);
+    if (secs < 60) return secs + 's';
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    return m + 'm ' + s + 's';
+  }
+
+  function fmtGB(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
+
+  var AUTH_OPTS = {};
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.credentials = 'include';
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      opts.headers = Object.assign({'Content-Type': 'application/json'}, opts.headers || {});
+      opts.body = JSON.stringify(opts.body);
+    }
+    return fetch(url, opts).then(function(r) {
+      if (r.status === 401 || r.status === 403) {
+        window.location = '/login';
+        throw new Error('auth');
+      }
+      return r;
+    });
+  }
+
+  // ── DOM refs ──
+  var $telemetryPanel = document.getElementById('telemetryPanel');
+  var $queueList = document.getElementById('queueList');
+  var $emptyState = document.getElementById('emptyState');
+  var $progressIdle = document.getElementById('progressIdle');
+  var $progressActive = document.getElementById('progressActive');
+  var $progressStep = document.getElementById('progressStep');
+  var $progressFill = document.getElementById('progressFill');
+  var $progressPct = document.getElementById('progressPct');
+  var $progressElapsed = document.getElementById('progressElapsed');
+  var $progressJobId = document.getElementById('progressJobId');
+  var $overlay = document.getElementById('detailOverlay');
+  var $detailBox = document.getElementById('detailBox');
+
+  // ── Telemetry (same as home/runner) ──
+  function makeGauge(id, label) {
+    return '<div class="gauge-card" id="' + id + '">' +
+      '<svg viewBox="0 0 80 80"><circle class="gauge-bg" cx="40" cy="40" r="34"></circle>' +
+      '<circle class="gauge-fg" cx="40" cy="40" r="34" stroke-dasharray="0 999"></circle></svg>' +
+      '<div class="gauge-pct">0%</div>' +
+      '<div class="gauge-label">' + label + '</div>' +
+      '<div class="gauge-sub"></div></div>';
+  }
+
+  function updateGauge(id, pct, sub) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var circ = 2 * Math.PI * 34;
+    var fg = el.querySelector('.gauge-fg');
+    var dash = circ * (pct / 100);
+    fg.setAttribute('stroke-dasharray', dash + ' ' + circ);
+    fg.classList.remove('warn', 'crit');
+    if (pct > 85) fg.classList.add('crit');
+    else if (pct > 65) fg.classList.add('warn');
+    el.querySelector('.gauge-pct').textContent = Math.round(pct) + '%';
+    if (sub) el.querySelector('.gauge-sub').textContent = sub;
+  }
+
+  async function pollTelemetry() {
+    try {
+      var resp = await apiFetch('/api/admin/telemetry');
+      if (!resp.ok) return;
+      var d = await resp.json();
+
+      $telemetryPanel.style.background = 'rgba(232, 255, 71, 0.03)';
+      setTimeout(function() { $telemetryPanel.style.background = ''; }, 300);
+
+      if (!$telemetryPanel.innerHTML) {
+        $telemetryPanel.innerHTML =
+          makeGauge('gGpu', 'GPU Load') +
+          makeGauge('gVram', 'VRAM') +
+          makeGauge('gRam', 'System RAM') +
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
+      }
+
+      if (d.gpu) {
+        updateGauge('gGpu', d.gpu.util_percent, d.gpu.name + (d.gpu.temp_c ? ' \u00b7 ' + d.gpu.temp_c + '\u00b0C' : ''));
+        updateGauge('gVram', d.gpu.vram_percent, fmtGB(d.gpu.vram_used) + ' / ' + fmtGB(d.gpu.vram_total));
+      }
+      updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
+      updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
+    } catch (_) {}
+  }
+
+  // ── Elapsed timer ──
+  var _runningStartedAt = null;
+  var _elapsedTimer = null;
+
+  function startElapsedTimer(startedAt) {
+    _runningStartedAt = startedAt;
+    if (_elapsedTimer) clearInterval(_elapsedTimer);
+    _elapsedTimer = setInterval(function() {
+      $progressElapsed.textContent = fmtElapsed(_runningStartedAt);
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null; }
+    _runningStartedAt = null;
+  }
+
+  // ── Queue polling ──
+  var _pollTimer = null;
+
+  async function pollQueue() {
+    try {
+      var resp = await apiFetch('/api/admin/queue');
+      if (!resp.ok) return;
+      var jobs = await resp.json();
+
+      if (jobs.length === 0) {
+        $queueList.innerHTML = '';
+        $emptyState.style.display = '';
+        $progressIdle.style.display = '';
+        $progressActive.style.display = 'none';
+        stopElapsedTimer();
+        // Stop polling when empty
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        return;
+      }
+
+      $emptyState.style.display = 'none';
+
+      // Find running job
+      var runningJob = null;
+      for (var i = 0; i < jobs.length; i++) {
+        if (jobs[i].progress && jobs[i].progress.status === 'running') {
+          runningJob = jobs[i];
+          break;
+        }
+      }
+
+      // Update progress panel
+      if (runningJob) {
+        var p = runningJob.progress;
+        $progressIdle.style.display = 'none';
+        $progressActive.style.display = '';
+        $progressStep.textContent = (p.node_title || 'Processing...') +
+          (p.total_steps > 0 ? ' \u00b7 step ' + p.step + '/' + p.total_steps : '');
+        $progressFill.classList.remove('indeterminate');
+        $progressFill.style.width = p.percent + '%';
+        $progressPct.textContent = p.percent + '%';
+        $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id) +
+          ' \u00b7 ' + runningJob.prompt_id.substring(0, 12) + '...';
+        if (!_runningStartedAt || _runningStartedAt !== runningJob.started_at) {
+          startElapsedTimer(runningJob.started_at);
+        }
+      } else {
+        // All queued, none running yet
+        var first = jobs[0];
+        $progressIdle.style.display = 'none';
+        $progressActive.style.display = '';
+        $progressStep.textContent = 'Queued \u2014 waiting for execution slot...';
+        $progressFill.classList.add('indeterminate');
+        $progressFill.style.width = '';
+        $progressPct.textContent = '';
+        $progressElapsed.textContent = '';
+        $progressJobId.textContent = (first.workflow_name || first.workflow_id) +
+          ' \u00b7 ' + first.prompt_id.substring(0, 12) + '...';
+        stopElapsedTimer();
+      }
+
+      // Render job cards
+      renderJobCards(jobs);
+
+    } catch (e) {
+      if (e.message !== 'auth') console.error('Queue poll error:', e);
+    }
+  }
+
+  function renderJobCards(jobs) {
+    $queueList.innerHTML = '';
+    jobs.forEach(function(job) {
+      var card = document.createElement('div');
+      card.className = 'job-card';
+      var isRunning = job.progress && job.progress.status === 'running';
+      if (isRunning) card.classList.add('is-running');
+
+      card.onclick = function() { showDetail(job); };
+
+      var thumbHtml;
+      if (job.input_image) {
+        thumbHtml = '<img class="job-thumb" src="/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#9654;</div>\'">';
+      } else {
+        thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+      }
+
+      var prompt = job.params && job.params.positive_prompt ? job.params.positive_prompt : '';
+      if (!prompt && job.params && job.params.scenes && job.params.scenes.length > 0) {
+        prompt = job.params.scenes[0].prompt || '';
+      }
+      if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
+
+      var statusCls = isRunning ? 'running' : 'queued';
+      var statusText = isRunning ? 'running' : 'queued';
+
+      card.innerHTML =
+        thumbHtml +
+        '<div class="job-info">' +
+          '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
+          '<div class="job-meta">' +
+            '<span>' + fmtDate(job.started_at) + '</span>' +
+            '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+          '</div>' +
+          (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
+        '</div>' +
+        '<div class="job-status ' + statusCls + '">' + statusText + '</div>';
+
+      $queueList.appendChild(card);
+    });
+  }
+
+  // ── Detail overlay ──
+  function showDetail(job) {
+    var rows = '';
+    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
+    rows += '<tr><td>Status</td><td>' + escHtml(job.status || (job.progress ? job.progress.status : '?')) + '</td></tr>';
+    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
+
+    if (job.input_image) {
+      rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) + '</td></tr>';
+    }
+
+    if (job.params) {
+      for (var key in job.params) {
+        var val = job.params[key];
+        if (key.startsWith('_')) continue;
+        if (key === 'positive_prompt' || key === 'negative_prompt') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;">' + escHtml(String(val)) + '</td></tr>';
+        } else if (typeof val === 'object') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td style="white-space:pre-wrap;font-size:11px;">' + escHtml(JSON.stringify(val, null, 2)) + '</td></tr>';
+        } else {
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(String(val)) + '</td></tr>';
+        }
+      }
+    }
+
+    $detailBox.innerHTML =
+      '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
+      '<h2>Job Details</h2>' +
+      '<table class="detail-table">' + rows + '</table>';
+
+    $overlay.classList.add('visible');
+  }
+
+  $overlay.addEventListener('click', function(e) {
+    if (e.target === $overlay) $overlay.classList.remove('visible');
+  });
+
+  // ── Boot ──
+  pollTelemetry();
+  setInterval(pollTelemetry, 3000);
+
+  // Initial queue poll + start timer
+  pollQueue();
+  _pollTimer = setInterval(pollQueue, 2000);
+
+  // Also re-check queue every 10s even when "idle" (to catch new jobs)
+  setInterval(function() {
+    if (!_pollTimer) {
+      pollQueue().then(function() {
+        // pollQueue will restart _pollTimer if jobs are found
+      });
+    }
+  }, 10000);
+
+})();
+</script>
+</body>
+</html>
