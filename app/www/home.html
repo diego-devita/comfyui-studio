@@ -99,23 +99,31 @@
     font-size: 11px;
     color: var(--muted);
   }
-  /* ── Update button bar ── */
+  /* ── Update button progress fill ── */
   .header-update .btn {
     position: relative;
     overflow: hidden;
+    z-index: 1;
   }
   .update-bar {
     position: absolute;
-    bottom: 0;
+    top: 0;
     left: 0;
-    height: 3px;
+    bottom: 0;
     width: 0%;
     background: var(--accent);
+    opacity: 0.25;
+    z-index: -1;
     transition: none;
   }
   .update-bar.animating {
     transition: width 15s linear;
     width: 100%;
+    animation: barPulse 2s ease-in-out infinite;
+  }
+  @keyframes barPulse {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.35; }
   }
   .update-badge {
     font-size: 10px;
