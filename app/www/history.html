@@ -418,7 +418,7 @@
         }
         if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
 
-        var checkHtml = (job.status === 'completed' || job.status === 'error')
+        var checkHtml = (job.status === 'completed' || job.status === 'error' || job.status === 'stalled')
           ? '<input type="checkbox" class="job-check" data-prompt-id="' + job.prompt_id + '" onclick="event.stopPropagation();">'
           : '<div class="job-check-placeholder"></div>';
 
@@ -435,7 +435,10 @@
             '</div>' +
             (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
           '</div>' +
-          '<div class="job-status ' + statusCls + '">' + escHtml(job.status) + '</div>';
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<div class="job-status ' + statusCls + '">' + escHtml(job.status) + '</div>' +
+            ((job.status === 'stalled' || job.status === 'error') && job.workflow_id ? '<button class="btn btn--sm" style="border-color:var(--success);color:var(--success);font-size:9px;" onclick="event.stopPropagation();retryJob(\'' + job.prompt_id + '\',this)">&#9654; Retry</button>' : '') +
+          '</div>';
 
         var cb = card.querySelector('.job-check');
         if (cb) {
@@ -609,6 +612,9 @@
     // Action buttons
     var actionsHtml = '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">';
     if (job.workflow_id) {
+      if (job.status === 'stalled' || job.status === 'error') {
+        actionsHtml += '<button class="btn btn--sm" style="border-color:var(--success);color:var(--success);" onclick="retryJob(\'' + job.prompt_id + '\',this)">&#9654; Retry</button>';
+      }
       actionsHtml += '<button class="btn btn--sm" onclick="rerunJob(_detailJob)">&#8635; Re-run</button>';
     }
     actionsHtml += '<button class="btn btn--sm" onclick="exportJobJson(_detailJob)">&#128230; Export JSON</button>';
@@ -719,6 +725,30 @@
     }
     var encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
     window.location = '/run/' + encodeURIComponent(job.workflow_id) + '#rerun=' + encoded;
+  };
+
+  window.retryJob = async function(promptId, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    try {
+      var resp = await apiFetch('/api/admin/history/retry', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt_id: promptId}),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        alert('Retry failed: ' + (err.detail || resp.status));
+        if (btn) { btn.disabled = false; btn.textContent = '▶ Retry'; }
+        return;
+      }
+      var data = await resp.json();
+      if (btn) { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; btn.textContent = '✓ Queued'; }
+      // Refresh list after short delay
+      setTimeout(function() { _lastJobIds = []; loadHistory(); }, 1000);
+    } catch (e) {
+      alert('Error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Retry'; }
+    }
   };
 
   // Export JSON: download job record as .json file

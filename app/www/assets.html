@@ -433,7 +433,9 @@
             var sj = item.data;
             var checkPath = sj.folder_path;
             var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + checkPath + '" onclick="event.stopPropagation();">';
-            var badgeHtml = '<span class="studio-badge">' + sj.image_count + ' images</span>';
+            var galBadgeStyle = sj.incomplete ? 'background:var(--accent);color:#0a0a0f;' : '';
+            var badgeHtml = '<span class="studio-badge" style="' + galBadgeStyle + '">' + (sj.incomplete ? '\u23F3 ' : '') + sj.image_count + ' images</span>';
+            if (sj.incomplete) { card.style.borderColor = 'var(--accent)'; card.style.opacity = '0.7'; }
 
             if (sj.thumbnail) {
               var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.thumbnail.filename) +
@@ -467,11 +469,14 @@
             var checkPath = sj.folder_path;
             var checkHtml = '<input type="checkbox" class="asset-check" data-path="' + checkPath + '" onclick="event.stopPropagation();">';
             var badges = [];
+            if (sj.incomplete) badges.push('\u23F3 In Progress');
             if (sj.video_count) badges.push(sj.video_count + ' video');
             if (sj.image_count) badges.push(sj.image_count + ' img');
             if (sj.preview_count) badges.push(sj.preview_count + ' preview');
             if (sj.intermediate_count) badges.push(sj.intermediate_count + ' inter.');
-            var badgeHtml = '<span class="studio-badge">' + (badges.join(' · ') || 'Video') + '</span>';
+            var badgeStyle = sj.incomplete ? 'background:var(--accent);color:#0a0a0f;' : '';
+            var badgeHtml = '<span class="studio-badge" style="' + badgeStyle + '">' + (badges.join(' · ') || 'Video') + '</span>';
+            if (sj.incomplete) { card.style.borderColor = 'var(--accent)'; card.style.opacity = '0.7'; }
 
             if (sj.thumbnail) {
               var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(sj.thumbnail.filename) +
