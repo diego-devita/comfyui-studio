@@ -124,6 +124,7 @@ body::before {
 /* ── Spinner ── */
 /* ── Logo ── */
 .logo span { color: var(--accent); }
+.logo .beta-badge { color: black; }
 .logo small {
   font-family: var(--mono);
   font-size: 15px;
