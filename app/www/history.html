@@ -420,6 +420,8 @@
     .then(function(r) { return r.json(); })
     .then(function() {
       $histDeleteBtn.disabled = false;
+      $histDeleteBtn.textContent = 'Delete selected';
+      $histDeleteBtn.style.visibility = 'hidden';
       $histSelectAll.checked = false;
       loadHistory();
     })

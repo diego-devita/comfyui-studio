@@ -24,20 +24,24 @@
     line-height: 1;
   }
   .logo span { color: var(--accent); }
+  .studio-word {
+    position: relative;
+    color: var(--accent);
+  }
   .beta-badge {
-    font-family: var(--mono);
+    position: absolute;
+    bottom: -12px;
+    right: 0;
+    font-family: var(--display);
     font-size: 8px;
-    font-weight: 700;
+    font-weight: 900;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: #0a0a0f;
     background: var(--accent);
     padding: 1px 6px;
     border-radius: 3px;
-    text-align: right;
-    margin-top: 2px;
-    margin-left: auto;
-    width: fit-content;
+    line-height: 1.4;
   }
   .version-tag {
     font-family: var(--mono);
@@ -120,6 +124,18 @@
     color: var(--muted);
     margin-bottom: 16px;
     text-align: center;
+    padding: 1em;
+    border: solid;
+    border-radius: var(--radius-card);
+    display: none;
+    animation: flashResult 5s ease-in-out forwards;
+  }
+  @keyframes flashResult {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    85% { opacity: 0.3; }
+    92% { opacity: 0.8; }
+    100% { opacity: 0; display: none; }
   }
 
   /* ── Update polling bar ── */
@@ -229,7 +245,7 @@
 
 <!-- Header -->
 <header>
-  <div class="logo">ComfyUI <span>Studio</span> <span class="version-tag" id="versionTag"></span><div class="beta-badge">BETA</div></div>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
     <button class="btn" id="updateBtn">Check for Updates</button>
     <div class="update-poll-bar" id="updatePollBar"></div>
@@ -433,6 +449,21 @@
     }
   }
 
+  var _resultTimer = null;
+  function showUpdateResult(text, color) {
+    if (_resultTimer) { clearTimeout(_resultTimer); _resultTimer = null; }
+    $updateResult.textContent = text;
+    $updateResult.style.color = color || 'var(--muted)';
+    $updateResult.style.borderColor = color || 'var(--border)';
+    $updateResult.style.display = '';
+    $updateResult.style.animation = 'none';
+    $updateResult.offsetHeight; // reflow
+    $updateResult.style.animation = 'flashResult 5s ease-in-out forwards';
+    _resultTimer = setTimeout(function() {
+      $updateResult.style.display = 'none';
+    }, 5000);
+  }
+
   // ── Initial load ──
   async function initialLoad() {
     try {
@@ -480,14 +511,13 @@
 
     $updateBtn.disabled = true;
     $updateBtn.innerHTML = '<span class="spinner sm"></span> Checking...';
-    $updateResult.textContent = '';
+    $updateResult.style.display = 'none';
 
     try {
       const resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        $updateResult.textContent = 'Error: ' + (err.detail || err.error || resp.status);
-        $updateResult.style.color = 'var(--error)';
+        showUpdateResult('Error: ' + (err.detail || err.error || resp.status), 'var(--error)');
         stopUpdatePolling();
         return;
       }
@@ -501,8 +531,7 @@
         setTimeout(function() { $updateBtn.style.background = ''; $updateBtn.style.color = ''; }, 2000);
 
         if (data.restart_needed) {
-          $updateResult.textContent = 'Updated: ' + data.updated.join(', ') + ' — restarting...';
-          $updateResult.style.color = 'var(--success)';
+          showUpdateResult('Updated: ' + data.updated.join(', ') + ' — restarting...', 'var(--success)');
           $updateBtn.disabled = true;
           $updateBtn.innerHTML = '<span class="spinner sm"></span> Restarting...';
           for (let i = 0; i < 30; i++) {
@@ -512,22 +541,19 @@
               if (check.ok) { location.reload(); return; }
             } catch (_) {}
           }
-          $updateResult.textContent = 'Backend did not come back. Try refreshing manually.';
-          $updateResult.style.color = 'var(--error)';
+          showUpdateResult('Backend did not come back. Try refreshing manually.', 'var(--error)');
           $updateBtn.disabled = false;
           $updateBtn.textContent = 'Check for Updates';
           return;
         }
-        $updateResult.textContent = 'Updated: ' + data.updated.join(', ');
-        $updateResult.style.color = 'var(--success)';
+        showUpdateResult('Updated: ' + data.updated.join(', '), 'var(--success)');
         initialLoad();
         return;
       }
 
       // No updates found — schedule retry if under max attempts
       if (attempt >= MAX_ATTEMPTS) {
-        $updateResult.textContent = 'No updates found after ' + MAX_ATTEMPTS + ' attempts.';
-        $updateResult.style.color = 'var(--muted)';
+        showUpdateResult('No updates found after ' + MAX_ATTEMPTS + ' attempts.', 'var(--muted)');
         stopUpdatePolling();
         return;
       }
@@ -545,8 +571,7 @@
 
     } catch (e) {
       if (e.message !== 'auth') {
-        $updateResult.textContent = 'Error: ' + e.message;
-        $updateResult.style.color = 'var(--error)';
+        showUpdateResult('Error: ' + e.message, 'var(--error)');
       }
       stopUpdatePolling();
     }
@@ -555,8 +580,7 @@
   $updateBtn.addEventListener('click', function() {
     if (_updatePolling) {
       // Stop polling
-      $updateResult.textContent = 'Polling stopped.';
-      $updateResult.style.color = 'var(--muted)';
+      showUpdateResult('Polling stopped.', 'var(--muted)');
       stopUpdatePolling();
     } else {
       // Start polling
