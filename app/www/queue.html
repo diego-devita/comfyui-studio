@@ -464,11 +464,24 @@
         var p = runningJob.progress;
         $progressIdle.style.display = 'none';
         $progressActive.style.display = '';
-        $progressStep.textContent = (p.node_title || 'Processing...') +
-          (p.total_steps > 0 ? ' \u00b7 step ' + p.step + '/' + p.total_steps : '');
+        var stepLabel = p.node_title || 'Processing...';
+        if (p.total_steps > 0) {
+          stepLabel = (p.node_title || 'Processing') + ' \u00b7 step ' + p.step + '/' + p.total_steps;
+          if (p.step_rate) stepLabel += ' \u00b7 ' + p.step_rate + ' it/s';
+          if (p.eta_seconds != null && p.eta_seconds > 0) {
+            var em = Math.floor(p.eta_seconds / 60), es = p.eta_seconds % 60;
+            stepLabel += ' \u00b7 ~' + (em > 0 ? em + 'm ' : '') + es + 's';
+          }
+        }
+        $progressStep.textContent = stepLabel;
         $progressFill.classList.remove('indeterminate');
         $progressFill.style.width = p.percent + '%';
-        $progressPct.textContent = p.percent + '%';
+        var pctLabel = p.percent + '%';
+        if (p.effective_total > 0) {
+          pctLabel += ' \u00b7 node ' + (p.nodes_done || 0) + '/' + p.effective_total;
+          if (p.cached_count > 0) pctLabel += ' (' + p.cached_count + ' cached)';
+        }
+        $progressPct.textContent = pctLabel;
         $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id) +
           ' \u00b7 ' + runningJob.prompt_id.substring(0, 12) + '...';
         var elapsed_ref = runningJob.started_at || runningJob.queued_at;

@@ -1616,18 +1616,33 @@
         const pct = data.percent || 0;
         const step = data.step || 0;
         const totalSteps = data.total_steps || 0;
+        const eta = data.eta_seconds;
+        const rate = data.step_rate;
+        const nodesDone = data.nodes_done || 0;
+        const effectiveTotal = data.effective_total || data.total_nodes || 0;
+        const cachedCount = data.cached_count || 0;
 
-        // Build status text
+        // Build status text: "NodeTitle · step 5/20 · 2.1 it/s · ~15s"
         var label = node || 'Processing...';
         if (totalSteps > 0) {
           label = node + ' \u00b7 step ' + step + '/' + totalSteps;
+          if (rate) label += ' \u00b7 ' + rate + ' it/s';
+          if (eta != null && eta > 0) {
+            var em = Math.floor(eta / 60), es = eta % 60;
+            label += ' \u00b7 ~' + (em > 0 ? em + 'm ' : '') + es + 's';
+          }
         }
         $progressStep.textContent = label;
 
-        // Always use the overall percent from backend
+        // Percent + node counter
         $progressFill.classList.remove('indeterminate');
         $progressFill.style.width = pct + '%';
-        $progressPct.textContent = pct + '%';
+        var pctLabel = pct + '%';
+        if (effectiveTotal > 0) {
+          pctLabel += ' \u00b7 node ' + nodesDone + '/' + effectiveTotal;
+          if (cachedCount > 0) pctLabel += ' (' + cachedCount + ' cached)';
+        }
+        $progressPct.textContent = pctLabel;
 
       } else if (status === 'completed' || status === 'done' || status === 'success') {
         stopPolling();
