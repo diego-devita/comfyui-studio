@@ -437,8 +437,6 @@
         $emptyState.style.display = '';
         document.getElementById('queueProgress').style.display = 'none';
         stopElapsedTimer();
-        // Stop polling when empty
-        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
         return;
       }
 
@@ -581,18 +579,9 @@
   pollTelemetry();
   setInterval(pollTelemetry, 3000);
 
-  // Initial queue poll + start timer
+  // Initial queue poll + start timer (always poll, even when empty)
   pollQueue();
   _pollTimer = setInterval(pollQueue, 2000);
-
-  // Also re-check queue every 10s even when "idle" (to catch new jobs)
-  setInterval(function() {
-    if (!_pollTimer) {
-      pollQueue().then(function() {
-        // pollQueue will restart _pollTimer if jobs are found
-      });
-    }
-  }, 10000);
 
 })();
 </script>
