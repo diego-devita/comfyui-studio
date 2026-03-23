@@ -1,8 +1,8 @@
 id: t2i-dynamic
 category: t2i
 name: "Text to Image"
-version: 4
-date: "2026-03-23 01:05"
+version: 5
+date: "2026-03-23 01:28"
 type: dynamic
 description: "Configurable text-to-image with checkpoint selection, LoRA stack, hires fix, face detailer, and batch generation."
 author: ""
@@ -198,5 +198,5 @@ required_nodes:
   - "KSampler"
   - "VAEDecode"
   - "SaveImage"
-  - "ONNXDetectorProvider"
+  - "UltralyticsDetectorProvider"
   - "FaceDetailer"

@@ -1,6 +1,6 @@
 {
-  "version": 28,
-  "date": "2026-03-23 01:11",
+  "version": 29,
+  "date": "2026-03-23 01:28",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
@@ -29,8 +29,8 @@
     },
     {
       "id": "t2i-dynamic",
-      "version": 4,
-      "date": "2026-03-23 01:11"
+      "version": 5,
+      "date": "2026-03-23 01:28"
     },
     {
       "id": "t2i-batch",

@@ -60,6 +60,9 @@ https://github.com/cubiq/ComfyUI_FaceAnalysis.git
 # Requires post-install script
 https://github.com/ltdrdata/ComfyUI-Impact-Pack.git requirements.txt python install.py
 
+# Ultralytics detectors (face_yolov8m etc.) — required by FaceDetailer
+https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git requirements.txt
+
 # Regional prompting, wildcards, lora stacking — companion to Impact-Pack
 https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
 
@@ -81,6 +84,19 @@ https://github.com/city96/ComfyUI-GGUF.git
 # Slider widgets and utilities
 https://github.com/Smirnov75/ComfyUI-mxToolkit.git
 
+# ── Performance Optimization ──────────────────────────────
+
+# WaveSpeed — FBCache + torch.compile, 1.5-2x speedup, works with LoRA
+https://github.com/chengzeyi/Comfy-WaveSpeed.git
+
+# ── Segmentation ──────────────────────────────────────────
+
+# SAM2 — Segment Anything Model 2 for images and video
+https://github.com/kijai/ComfyUI-segment-anything-2.git
+
+# Florence2 + SAM2 — text-driven segmentation ("select the person")
+https://github.com/rdancer/ComfyUI_Florence2SAM2.git
+
 # ── Video Generation ────────────────────────────────────────
 
 # Load/save video, VHS_VideoCombine — required for any video workflow
@@ -98,6 +114,15 @@ https://github.com/kijai/ComfyUI-WanVideoWrapper.git
 
 # HunyuanVideo wrapper — another major video model
 https://github.com/kijai/ComfyUI-HunyuanVideoWrapper.git
+
+# LTX Video — Lightricks video model, fastest generation
+https://github.com/Lightricks/ComfyUI-LTXVideo.git
+
+# CogVideoX — best I2V quality, T2V, runs on 8-24GB VRAM
+https://github.com/kijai/ComfyUI-CogVideoXWrapper.git
+
+# Mochi 1 — best photorealistic T2V quality
+https://github.com/kijai/ComfyUI-MochiWrapper.git
 
 # ── CivitAI Integration ───────────────────────────────────
 

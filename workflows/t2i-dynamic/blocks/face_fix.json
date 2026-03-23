@@ -4,7 +4,7 @@
       "inputs": {
         "model_name": "bbox/face_yolov8m.pt"
       },
-      "class_type": "ONNXDetectorProvider",
+      "class_type": "UltralyticsDetectorProvider",
       "_meta": {"title": "Face Detector"}
     },
     "face_detailer": {
@@ -21,6 +21,16 @@
         "feather": 5,
         "noise_mask": true,
         "force_inpaint": true,
+        "bbox_threshold": 0.5,
+        "bbox_dilation": 10,
+        "bbox_crop_factor": 3.0,
+        "sam_detection_hint": "center-1",
+        "sam_dilation": 0,
+        "sam_threshold": 0.93,
+        "sam_bbox_expansion": 0,
+        "sam_mask_hint_threshold": 0.7,
+        "sam_mask_hint_use_negative": "False",
+        "drop_size": 10,
         "wildcard": "",
         "cycle": 1,
         "image": "{{image}}",
