@@ -122,6 +122,27 @@ body::before {
 .source-badge.other { background: #1f2a2a; color: #a0c0d0; }
 
 /* ── Spinner ── */
+/* ── Logo BETA badge ── */
+.studio-word {
+  position: relative;
+  color: var(--accent);
+}
+.beta-badge {
+  position: absolute;
+  bottom: -17px;
+  right: 0;
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: black;
+  background: var(--accent);
+  padding: 1px 6px 0 6px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
 .spinner {
   display: inline-block;
   width: 10px;
