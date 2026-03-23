@@ -591,14 +591,14 @@
     _updatePolling = false;
     if (_updatePollTimer) { clearTimeout(_updatePollTimer); _updatePollTimer = null; }
     $updateBar.classList.remove('animating');
-    $updateBar.style.width = '0%';
+    $updateBar.style.width = '';
     $updateBtn.disabled = false;
     $updateBtnText.textContent = 'Check for Updates';
   }
 
   function startBar() {
     $updateBar.classList.remove('animating');
-    $updateBar.style.width = '0%';
+    $updateBar.style.width = '';
     $updateBar.offsetHeight;
     $updateBar.classList.add('animating');
   }
