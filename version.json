@@ -3,7 +3,7 @@
   "date": "2026-03-23 23:27",
   "components": {
     "backend": {"version": "9.25.0", "date": "2026-03-23 23:27", "file": "app/main.py"},
-    "frontend": {"version": "9.25.0", "date": "2026-03-23 23:27", "dir": "app/www/"},
+    "frontend": {"version": "9.25.1", "date": "2026-03-23 23:33", "dir": "app/www/"},
     "models": {"version": 21, "date": "2026-03-23 16:25", "file": "app/models.json"},
     "loras": {"version": 2, "date": "2026-03-23 16:53", "file": "app/loras.json"},
     "workflows": {"version": 31, "date": "2026-03-23 15:43", "dir": "workflows/"}
