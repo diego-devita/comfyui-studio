@@ -526,7 +526,8 @@
         '<div class="job-info">' +
           '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
           '<div class="job-meta">' +
-            '<span>' + fmtDate(job.started_at || job.queued_at) + '</span>' +
+            '<span>Q ' + fmtDate(job.queued_at) + '</span>' +
+            (job.started_at ? '<span>S ' + fmtDate(job.started_at) + '</span>' : '') +
             '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
           '</div>' +
           (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +

@@ -348,7 +348,8 @@
           '<div class="job-info">' +
             '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
             '<div class="job-meta">' +
-              '<span>' + fmtDate(job.started_at) + '</span>' +
+              '<span>Q ' + fmtDate(job.queued_at) + '</span>' +
+              '<span>S ' + fmtDate(job.started_at) + '</span>' +
               (job.duration ? '<span>' + job.duration + 's</span>' : '') +
               '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
             '</div>' +
@@ -449,6 +450,7 @@
         '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
         '</span></td></tr>';
     }
+    rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
     rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
     if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
     if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
