@@ -690,9 +690,7 @@
 <!-- Header -->
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>LoRAs</small></div>
-  <div class="header-actions">
-    <button class="btn" id="syncBtn">Sync LoRAs</button>
-  </div>
+  <div class="header-actions"></div>
 </header>
 
 <!-- Status bar -->
@@ -1542,33 +1540,6 @@
       }
     }
   }
-
-  // ── Sync LoRAs ──
-  var $syncBtn = document.getElementById('syncBtn');
-  $syncBtn.addEventListener('click', async function() {
-    $syncBtn.disabled = true;
-    $syncBtn.innerHTML = '<span class="spinner sm"></span> Syncing...';
-    try {
-      var resp = await apiFetch('/api/admin/loras/sync', { method: 'POST' });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        alert('Sync error: ' + (err.detail || err.error || resp.status));
-      } else {
-        var data = await resp.json();
-        if (data.status === 'updated') {
-          alert('LoRAs catalog updated to v' + data.new_version);
-          loadModels();
-        } else {
-          alert('LoRAs catalog is up to date (v' + (data.version || '?') + ')');
-        }
-      }
-    } catch (e) {
-      if (e.message !== 'auth') alert('Error: ' + e.message);
-    } finally {
-      $syncBtn.disabled = false;
-      $syncBtn.textContent = 'Sync LoRAs';
-    }
-  });
 
   // ── Model JSON viewer ──
   var $jsonOverlay = document.createElement('div');
