@@ -1,6 +1,6 @@
 {
-  "app_version": "9.15.1",
-  "date": "2026-03-23 17:43",
+  "app_version": "9.16.1",
+  "date": "2026-03-23 18:30",
   "components": {
     "backend": {"version": "9.15.1", "date": "2026-03-23 17:43", "file": "app/main.py"},
     "frontend": {"version": "9.16.1", "date": "2026-03-23 18:30", "dir": "app/www/"},
