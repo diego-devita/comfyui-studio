@@ -452,11 +452,12 @@
     }
     rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
     rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
-    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
     if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
+    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
 
     // Params
     if (job.params) {
+      rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
       for (var key in job.params) {
         var val = job.params[key];
         if (key === 'positive_prompt' || key === 'negative_prompt') {
