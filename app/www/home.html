@@ -108,6 +108,30 @@
     text-align: center;
   }
 
+  /* ── Update polling bar ── */
+  .header-update { position: relative; }
+  .update-poll-bar {
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    height: 2px;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 1px;
+    transition: none;
+  }
+  .update-poll-bar.animating {
+    transition: width 15s linear;
+    width: 100%;
+  }
+  .update-poll-info {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 2px;
+  }
+
   /* ── Stat Cards ── */
   .stat-cards {
     display: flex;
@@ -197,6 +221,8 @@
   <div class="logo">ComfyUI <span>Studio</span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
     <button class="btn" id="updateBtn">Check for Updates</button>
+    <div class="update-poll-bar" id="updatePollBar"></div>
+    <div class="update-poll-info" id="updatePollInfo" style="display:none;"></div>
     <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
   </div>
 </header>
@@ -413,10 +439,36 @@
     }
   }
 
-  // ── Check for Updates ──
-  $updateBtn.addEventListener('click', async () => {
+  // ── Check for Updates (with auto-retry polling) ──
+  var $pollBar = document.getElementById('updatePollBar');
+  var $pollInfo = document.getElementById('updatePollInfo');
+  var _updatePolling = false;
+  var _updatePollTimer = null;
+  var MAX_ATTEMPTS = 20;
+  var POLL_INTERVAL = 15; // seconds
+
+  function stopUpdatePolling() {
+    _updatePolling = false;
+    if (_updatePollTimer) { clearTimeout(_updatePollTimer); _updatePollTimer = null; }
+    $pollBar.classList.remove('animating');
+    $pollBar.style.width = '0%';
+    $pollInfo.style.display = 'none';
+    $updateBtn.disabled = false;
+    $updateBtn.textContent = 'Check for Updates';
+  }
+
+  function startPollBar() {
+    $pollBar.classList.remove('animating');
+    $pollBar.style.width = '0%';
+    $pollBar.offsetHeight; // reflow
+    $pollBar.classList.add('animating');
+  }
+
+  async function doUpdateCheck(attempt) {
+    if (!_updatePolling) return;
+
     $updateBtn.disabled = true;
-    $updateBtn.innerHTML = '<span class="spinner"></span> Checking...';
+    $updateBtn.innerHTML = '<span class="spinner sm"></span> Checking...';
     $updateResult.textContent = '';
 
     try {
@@ -425,54 +477,81 @@
         const err = await resp.json().catch(() => ({}));
         $updateResult.textContent = 'Error: ' + (err.detail || err.error || resp.status);
         $updateResult.style.color = 'var(--error)';
-        $updateBtn.disabled = false;
-        $updateBtn.textContent = 'Check for Updates';
+        stopUpdatePolling();
         return;
       }
 
       const data = await resp.json();
       if (data.updated && data.updated.length > 0) {
+        // Found updates!
+        stopUpdatePolling();
+        $updateBtn.style.background = 'var(--success)';
+        $updateBtn.style.color = '#000';
+        setTimeout(function() { $updateBtn.style.background = ''; $updateBtn.style.color = ''; }, 2000);
+
         if (data.restart_needed) {
           $updateResult.textContent = 'Updated: ' + data.updated.join(', ') + ' — restarting...';
           $updateResult.style.color = 'var(--success)';
-          $updateBtn.innerHTML = '<span class="spinner"></span> Restarting...';
-          // Poll until backend is back, then reload
-          const poll = async () => {
-            for (let i = 0; i < 30; i++) {
-              await new Promise(r => setTimeout(r, 2000));
-              try {
-                const check = await apiFetch('/api/admin/system/status');
-                if (check.ok) { location.reload(); return; }
-              } catch (_) {}
-            }
-            $updateResult.textContent = 'Backend did not come back. Try refreshing manually.';
-            $updateResult.style.color = 'var(--error)';
-            $updateBtn.disabled = false;
-            $updateBtn.textContent = 'Check for Updates';
-          };
-          poll();
+          $updateBtn.disabled = true;
+          $updateBtn.innerHTML = '<span class="spinner sm"></span> Restarting...';
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+              const check = await apiFetch('/api/admin/system/status');
+              if (check.ok) { location.reload(); return; }
+            } catch (_) {}
+          }
+          $updateResult.textContent = 'Backend did not come back. Try refreshing manually.';
+          $updateResult.style.color = 'var(--error)';
+          $updateBtn.disabled = false;
+          $updateBtn.textContent = 'Check for Updates';
           return;
         }
         $updateResult.textContent = 'Updated: ' + data.updated.join(', ');
         $updateResult.style.color = 'var(--success)';
-        // Refresh status to reflect updated components
         initialLoad();
-      } else if (data.message) {
-        $updateResult.textContent = data.message;
-        $updateResult.style.color = 'var(--muted)';
-      } else {
-        $updateResult.textContent = 'Everything is up to date.';
-        $updateResult.style.color = 'var(--muted)';
+        return;
       }
+
+      // No updates found — schedule retry if under max attempts
+      if (attempt >= MAX_ATTEMPTS) {
+        $updateResult.textContent = 'No updates found after ' + MAX_ATTEMPTS + ' attempts.';
+        $updateResult.style.color = 'var(--muted)';
+        stopUpdatePolling();
+        return;
+      }
+
+      // Show retry state
+      $updateBtn.disabled = false;
+      $updateBtn.textContent = 'Stop polling';
+      $pollInfo.textContent = 'Attempt ' + attempt + '/' + MAX_ATTEMPTS + ' — retrying in ' + POLL_INTERVAL + 's...';
+      $pollInfo.style.display = '';
+      startPollBar();
+
+      _updatePollTimer = setTimeout(function() {
+        if (_updatePolling) doUpdateCheck(attempt + 1);
+      }, POLL_INTERVAL * 1000);
+
     } catch (e) {
       if (e.message !== 'auth') {
         $updateResult.textContent = 'Error: ' + e.message;
         $updateResult.style.color = 'var(--error)';
       }
+      stopUpdatePolling();
     }
+  }
 
-    $updateBtn.disabled = false;
-    $updateBtn.textContent = 'Check for Updates';
+  $updateBtn.addEventListener('click', function() {
+    if (_updatePolling) {
+      // Stop polling
+      $updateResult.textContent = 'Polling stopped.';
+      $updateResult.style.color = 'var(--muted)';
+      stopUpdatePolling();
+    } else {
+      // Start polling
+      _updatePolling = true;
+      doUpdateCheck(1);
+    }
   });
 
   // ── Telemetry ──

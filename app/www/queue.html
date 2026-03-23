@@ -351,25 +351,29 @@
   // ── Telemetry (same as home/runner) ──
   function makeGauge(id, label) {
     return '<div class="gauge-card" id="' + id + '">' +
-      '<svg viewBox="0 0 80 80"><circle class="gauge-bg" cx="40" cy="40" r="34"></circle>' +
-      '<circle class="gauge-fg" cx="40" cy="40" r="34" stroke-dasharray="0 999"></circle></svg>' +
-      '<div class="gauge-pct">0%</div>' +
+      '<div class="gauge-ring">' +
+        '<svg viewBox="0 0 80 80"><circle class="gauge-bg" /><circle class="gauge-fill" /></svg>' +
+        '<div class="gauge-value">--</div>' +
+      '</div>' +
       '<div class="gauge-label">' + label + '</div>' +
-      '<div class="gauge-sub"></div></div>';
+      '<div class="gauge-sub">&nbsp;</div>' +
+    '</div>';
   }
 
   function updateGauge(id, pct, sub) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var circ = 2 * Math.PI * 34;
-    var fg = el.querySelector('.gauge-fg');
-    var dash = circ * (pct / 100);
-    fg.setAttribute('stroke-dasharray', dash + ' ' + circ);
-    fg.classList.remove('warn', 'crit');
-    if (pct > 85) fg.classList.add('crit');
-    else if (pct > 65) fg.classList.add('warn');
-    el.querySelector('.gauge-pct').textContent = Math.round(pct) + '%';
-    if (sub) el.querySelector('.gauge-sub').textContent = sub;
+    var card = document.getElementById(id);
+    if (!card) return;
+    var fill = card.querySelector('.gauge-fill');
+    var val = card.querySelector('.gauge-value');
+    var subEl = card.querySelector('.gauge-sub');
+    var p = Math.max(0, Math.min(100, pct || 0));
+    var offset = 213.6 - (213.6 * p / 100);
+    fill.style.strokeDashoffset = offset;
+    fill.classList.remove('warn', 'crit');
+    if (p > 85) fill.classList.add('crit');
+    else if (p > 65) fill.classList.add('warn');
+    val.textContent = Math.round(p) + '%';
+    if (sub) subEl.textContent = sub;
   }
 
   async function pollTelemetry() {
@@ -462,8 +466,12 @@
         $progressPct.textContent = p.percent + '%';
         $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id) +
           ' \u00b7 ' + runningJob.prompt_id.substring(0, 12) + '...';
-        if (!_runningStartedAt || _runningStartedAt !== runningJob.started_at) {
-          startElapsedTimer(runningJob.started_at);
+        if (runningJob.started_at) {
+          if (!_runningStartedAt || _runningStartedAt !== runningJob.started_at) {
+            startElapsedTimer(runningJob.started_at);
+          }
+        } else {
+          $progressElapsed.textContent = '';
         }
       } else {
         // All queued, none running yet
@@ -519,7 +527,7 @@
         '<div class="job-info">' +
           '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
           '<div class="job-meta">' +
-            '<span>' + fmtDate(job.started_at) + '</span>' +
+            '<span>' + fmtDate(job.started_at || job.queued_at) + '</span>' +
             '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
           '</div>' +
           (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
@@ -536,7 +544,8 @@
     rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
     rows += '<tr><td>Status</td><td>' + escHtml(job.status || (job.progress ? job.progress.status : '?')) + '</td></tr>';
-    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
+    rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
+    if (job.started_at) rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
 
     if (job.input_image) {
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) + '</td></tr>';
