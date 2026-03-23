@@ -312,8 +312,20 @@
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
+  <span class="nav-activity" id="activityToggle" title="Activity"><svg width="14" height="14" viewBox="0 0 448 512" fill="currentColor"><path d="M224 0c-17.7 0-32 14.3-32 32V49.9C119.5 61.4 64 124.2 64 200v33.4c0 45.4-15.5 89.5-43.8 124.9L5.3 377c-5.8 7.2-6.9 17.1-2.9 25.4S14.8 416 24 416H424c9.2 0 17.6-5.3 21.6-13.6s2.9-18.2-2.9-25.4l-14.9-18.6C399.5 322.9 384 278.8 384 233.4V200c0-75.8-55.5-138.6-128-150.1V32c0-17.7-14.3-32-32-32zm0 512c26.5 0 48.4-16.2 57.7-38.8c3.4-8.2-1.2-17.5-9.7-20.3c-2-.6-4-.9-6-.9H182c-2 0-4 .3-6 .9c-8.5 2.8-13.1 12.1-9.7 20.3c9.3 22.6 31.2 38.8 57.7 38.8z"/></svg><span class="activity-dot" id="activityDot"></span></span>
   <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
 </nav>
+
+<!-- Activity Panel -->
+<div class="activity-panel" id="activityPanel">
+  <div class="activity-panel-inner">
+    <div class="activity-panel-header">
+      <span class="activity-panel-title">Activity</span>
+      <button class="activity-panel-close" id="activityClose">&times;</button>
+    </div>
+    <div class="activity-list" id="activityList"></div>
+  </div>
+</div>
 
 <!-- Header -->
 <header>
@@ -838,6 +850,82 @@
       startTelemetryPolling();
     }
   });
+
+  // ── Activity Panel ──
+  var $actPanel = document.getElementById('activityPanel');
+  var $actList = document.getElementById('activityList');
+  var $actDot = document.getElementById('activityDot');
+  var _actOpen = false;
+  var _actLastId = null;
+  var _actWs = null;
+
+  function escHtmlAct(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function renderEvent(evt) {
+    var ts = (evt.timestamp || '').substring(11, 19);
+    return '<div class="activity-item">' +
+      '<span class="activity-severity ' + (evt.severity || 'info') + '"></span>' +
+      '<span class="activity-time">' + ts + '</span>' +
+      '<span class="activity-msg">' + escHtmlAct(evt.message || '') + '</span>' +
+    '</div>';
+  }
+
+  async function loadActivityHistory() {
+    try {
+      var resp = await apiFetch('/api/admin/events?limit=50');
+      if (!resp.ok) return;
+      var events = await resp.json();
+      if (!events.length) {
+        $actList.innerHTML = '<div class="activity-empty">No activity yet</div>';
+        return;
+      }
+      $actList.innerHTML = events.map(renderEvent).join('');
+      $actList.scrollTop = $actList.scrollHeight;
+      _actLastId = events[events.length - 1].id;
+    } catch (_) {}
+  }
+
+  function connectActivityWS() {
+    if (_actWs && _actWs.readyState <= 1) return;
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    _actWs = new WebSocket(proto + '//' + location.host + '/api/run/ws');
+    _actWs.onmessage = function(e) {
+      if (typeof e.data !== 'string') return;
+      try {
+        var msg = JSON.parse(e.data);
+        if (!msg.type || msg.type.indexOf('.') < 0) return; // not an event
+        if (_actOpen) {
+          $actList.insertAdjacentHTML('beforeend', renderEvent(msg));
+          $actList.scrollTop = $actList.scrollHeight;
+        } else {
+          $actDot.classList.add('has-new');
+        }
+      } catch (_) {}
+    };
+    _actWs.onclose = function() {
+      _actWs = null;
+      setTimeout(connectActivityWS, 3000);
+    };
+  }
+
+  document.getElementById('activityToggle').addEventListener('click', function() {
+    _actOpen = !_actOpen;
+    $actPanel.classList.toggle('open', _actOpen);
+    $actDot.classList.remove('has-new');
+    if (_actOpen) loadActivityHistory();
+  });
+  document.getElementById('activityClose').addEventListener('click', function() {
+    _actOpen = false;
+    $actPanel.classList.remove('open');
+  });
+  document.addEventListener('click', function(e) {
+    if (_actOpen && !$actPanel.contains(e.target) && !document.getElementById('activityToggle').contains(e.target)) {
+      _actOpen = false;
+      $actPanel.classList.remove('open');
+    }
+  });
+
+  connectActivityWS();
 
   // ── Boot ──
   initialLoad();

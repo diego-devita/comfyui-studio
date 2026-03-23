@@ -387,3 +387,110 @@ body::before {
   font-size: 10px;
   color: var(--muted);
 }
+
+/* ── Activity Panel (global) ── */
+.nav-activity {
+  margin-left: auto;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 0.15s;
+  position: relative;
+}
+.nav-activity:hover { color: var(--accent); }
+.nav-activity .activity-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: none;
+}
+.nav-activity .activity-dot.has-new { display: block; animation: activityPulse 2s ease-in-out infinite; }
+@keyframes activityPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.activity-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 250;
+  background: var(--bg);
+  border-bottom: 2px solid var(--accent);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.activity-panel.open {
+  max-height: 50vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.activity-panel-inner {
+  padding: 16px 40px;
+}
+.activity-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.activity-panel-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.activity-panel-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+.activity-panel-close:hover { color: var(--text); }
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.activity-time {
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.activity-severity {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.activity-severity.info { background: var(--muted); }
+.activity-severity.success { background: var(--success); }
+.activity-severity.warning { background: var(--queued, #ffaa33); }
+.activity-severity.error { background: var(--error); }
+.activity-msg { color: var(--text); }
+.activity-empty {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 16px 0;
+}
