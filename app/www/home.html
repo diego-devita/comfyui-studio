@@ -42,6 +42,28 @@
   /* ── Main ── */
   main { padding: 32px 40px 64px; max-width: 960px; margin: 0 auto; }
 
+  /* ── Telemetry Accordion ── */
+  .telemetry-accordion {
+    margin-bottom: 24px;
+  }
+  .telemetry-toggle {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    cursor: pointer;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    transition: border-color 0.15s;
+  }
+  .telemetry-toggle:hover { border-color: var(--accent); }
+  .telemetry-toggle::after { content: ' \25BC'; font-size: 9px; }
+  .telemetry-toggle.open::after { content: ' \25B2'; }
+  .telemetry-toggle.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
   /* ── Component Table ── */
   .comp-table {
     width: 100%;
@@ -103,8 +125,9 @@
   #updateBtn {
     position: relative;
     overflow: hidden;
+  }
+  #updateBtn:not(:hover):not(:disabled) {
     background: transparent;
-    border: 1px solid var(--accent);
   }
   .update-bar {
     position: absolute;
@@ -282,8 +305,11 @@
       </div>
     </div>
 
-    <!-- Telemetry -->
-    <div class="telemetry-panel" id="telemetryPanel"></div>
+    <!-- Telemetry Accordion -->
+    <div class="telemetry-accordion" id="telemetryAccordion">
+      <div class="telemetry-toggle" id="telemetryToggle">Telemetry</div>
+      <div class="telemetry-panel" id="telemetryPanel" style="display:none;"></div>
+    </div>
 
     <!-- Component Table -->
     <table class="comp-table" id="compTable">
@@ -658,10 +684,35 @@
     } catch (_) {}
   }
 
+  // ── Telemetry Accordion ──
+  var $telemetryToggle = document.getElementById('telemetryToggle');
+  var _telemetryTimer = null;
+
+  function startTelemetryPolling() {
+    if (_telemetryTimer) return;
+    pollTelemetry();
+    _telemetryTimer = setInterval(pollTelemetry, 3000);
+  }
+
+  function stopTelemetryPolling() {
+    if (_telemetryTimer) { clearInterval(_telemetryTimer); _telemetryTimer = null; }
+  }
+
+  $telemetryToggle.addEventListener('click', function() {
+    var open = $telemetryPanel.style.display !== 'none';
+    if (open) {
+      $telemetryPanel.style.display = 'none';
+      $telemetryToggle.classList.remove('open');
+      stopTelemetryPolling();
+    } else {
+      $telemetryPanel.style.display = '';
+      $telemetryToggle.classList.add('open');
+      startTelemetryPolling();
+    }
+  });
+
   // ── Boot ──
   initialLoad();
-  pollTelemetry();
-  setInterval(pollTelemetry, 3000);
 
 })();
 </script>

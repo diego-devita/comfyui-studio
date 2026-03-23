@@ -1,11 +1,11 @@
 {
-  "version": 30,
-  "date": "2026-03-23 01:46",
+  "version": 31,
+  "date": "2026-03-23 15:43",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
-      "version": 7,
-      "date": "2026-03-23 01:46"
+      "version": 8,
+      "date": "2026-03-23 15:43"
     },
     {
       "id": "wan22-i2v-fp8",
