@@ -1,8 +1,8 @@
 id: faceid-batch
 category: ipa
 name: "FaceID (Batch)"
-version: 2
-date: "2026-03-23 00:49"
+version: 3
+date: "2026-03-23 01:01"
 type: dynamic
 description: "IP-Adapter FaceID — preserves facial identity using InsightFace recognition. Strongest face preservation for character consistency."
 author: ""
@@ -20,16 +20,19 @@ inputs:
     name: "Face Reference"
     type: image
     required: true
+    tooltip: "A clear photo of the face you want to preserve. FaceID uses InsightFace — real facial recognition, not just visual similarity like IP-Adapter. It reads facial landmarks and geometry, so it works even with different lighting, angles, or expressions. Best with a frontal, well-lit face photo."
 
   - id: checkpoint
     name: "Checkpoint"
     type: checkpoint_picker
     required: true
+    tooltip: "The base model that defines the visual style. Realistic checkpoints (CyberRealistic Pony, RealVisXL) give photorealistic output with the reference face. Anime checkpoints will stylize the face. Must be SD 1.5 or SDXL-based. FaceID Plus V2 works best with SDXL/Pony."
 
   - id: loras
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5
+    tooltip: "Optional LoRAs for style or scenarios. FaceID is very strong at preserving the face, so LoRAs have more room to define the scene compared to regular IP-Adapter. The FaceID LoRA is loaded automatically by the preset — these are your additional creative LoRAs."
 
   - id: faceid_preset
     name: "FaceID Preset"
@@ -41,6 +44,7 @@ inputs:
       - {label: "FACEID PORTRAIT (style transfer)", value: "FACEID PORTRAIT (style transfer)"}
       - {label: "FACEID PORTRAIT UNNORM - SDXL only (strong)", value: "FACEID PORTRAIT UNNORM - SDXL only (strong)"}
     default: "FACEID PLUS V2"
+    tooltip: "Which FaceID model to use. PLUS V2 is the best all-rounder — strong face identity with good prompt flexibility. PORTRAIT transfers the face style more artistically. PORTRAIT UNNORM is the strongest face lock for SDXL but can look stiff. Plain FACEID is the basic version with weaker likeness."
 
   - id: faceid_lora_strength
     name: "FaceID LoRA Strength"
@@ -49,6 +53,7 @@ inputs:
     max: 2.0
     step: 0.05
     default: 0.6
+    tooltip: "Strength of the FaceID-specific LoRA that gets loaded automatically with the preset. This LoRA helps the model understand FaceID embeddings. 0.6 is a good default. Lower = softer face influence, model has more freedom. Higher = stronger adherence to the face but can produce artifacts. Not the same as your creative LoRAs."
 
   - id: faceid_weight
     name: "FaceID Weight"
@@ -57,6 +62,7 @@ inputs:
     max: 2.0
     step: 0.05
     default: 0.85
+    tooltip: "How strongly the face identity influences generation. 0.5-0.7 = recognizable but stylized. 0.8-0.9 = strong likeness, good balance. 1.0+ = very strict face copy, may reduce prompt effect. Works differently from IP-Adapter weight — FaceID uses facial geometry, not just visual features, so it's more precise."
 
   - id: faceid_v2_weight
     name: "FaceID V2 Weight"
@@ -65,6 +71,7 @@ inputs:
     max: 2.0
     step: 0.05
     default: 0.85
+    tooltip: "Additional weight control specific to FaceID Plus V2. Controls a secondary embedding that adds detail beyond the base face geometry. Keep it similar to FaceID Weight for balanced results. Lower it if the face looks too 'pasted on' or unnatural."
 
   - id: clip_skip
     name: "CLIP Skip"
@@ -72,6 +79,7 @@ inputs:
     min: -12
     max: -1
     default: -2
+    tooltip: "How many CLIP layers to skip from the end. -1 = use all layers (most literal prompt interpretation). -2 = skip last layer (recommended for most models, especially Pony/Illustrious). Most checkpoints are trained with -2."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -79,12 +87,14 @@ inputs:
     required: true
     default: ""
     placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes the scene you want the face placed into. FaceID handles the face — your prompt handles everything else: scene, clothing, pose, lighting, style. Include quality tags and LoRA trigger words. FaceID is strong enough that even aggressive prompts won't lose the face."
 
   - id: negative_prompt
     name: "Negative Prompt"
     type: text
     required: false
     default: "bad quality, worst quality, low quality"
+    tooltip: "What to avoid. Standard negatives work well. You can add things like 'glasses' or 'beard' if the reference has them but you don't want them in the output — FaceID preserves geometry, not accessories."
 
   - id: resolution
     name: "Resolution"
@@ -95,6 +105,7 @@ inputs:
       pony: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
       illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
     default: {w: 832, h: 1216}
+    tooltip: "Output image size. Use presets matching your checkpoint. Portrait (832x1216) works best for face-focused generation. Going outside the model's training resolution produces bad results."
 
   - id: batch_size
     name: "Batch Size"
@@ -102,6 +113,7 @@ inputs:
     min: 1
     max: 100
     default: 1
+    tooltip: "Number of images per pass. FaceID is heavier than regular IP-Adapter (InsightFace + FaceID model + LoRA), so batch sizes above 5-10 at 1024px may hit VRAM limits. Start small and increase."
 
   - id: steps
     name: "Steps"
@@ -109,6 +121,7 @@ inputs:
     min: 1
     max: 100
     default: 19
+    tooltip: "Denoising steps. 15-25 is the sweet spot. FaceID doesn't need more steps than normal generation — the face identity is injected as conditioning, not refined through steps."
 
   - id: cfg
     name: "CFG Scale"
@@ -117,6 +130,7 @@ inputs:
     max: 30.0
     step: 0.5
     default: 4.0
+    tooltip: "Prompt adherence strength. Low (2-5) = natural, soft, more creative freedom. High (8+) = strict prompt following but can clash with FaceID. Pony/Illustrious work best at 3-5. SD 1.5 at 7-9."
 
   - id: sampler_name
     name: "Sampler"
@@ -129,6 +143,7 @@ inputs:
       - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
       - {label: "UniPC", value: "uni_pc"}
     default: "euler_ancestral"
+    tooltip: "Denoising algorithm. Euler Ancestral gives creative variety per batch. DPM++ 2M is more deterministic. Both work well with FaceID — the face identity is preserved regardless of sampler."
 
   - id: scheduler
     name: "Scheduler"
@@ -140,6 +155,7 @@ inputs:
       - {label: "SGM Uniform", value: "sgm_uniform"}
       - {label: "Simple", value: "simple"}
     default: "normal"
+    tooltip: "Noise schedule. Normal or Karras both work well. Karras tends to produce sharper details."
 
   - id: denoise
     name: "Denoise"
@@ -148,11 +164,13 @@ inputs:
     max: 1.0
     step: 0.05
     default: 1.0
+    tooltip: "Keep at 1.0 — this workflow generates from empty latent. The face comes from FaceID conditioning, not from denoising an existing image."
 
   - id: seed
     name: "Seed"
     type: seed
     default: -1
+    tooltip: "Random seed. -1 = random each time. Set a specific number to reproduce exact results. With batch > 1, each image gets unique noise but the face identity stays consistent across all."
 
 outputs:
   - id: image

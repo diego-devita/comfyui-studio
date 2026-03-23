@@ -1,6 +1,6 @@
 {
-  "version": 26,
-  "date": "2026-03-23 00:49",
+  "version": 27,
+  "date": "2026-03-23 01:01",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
@@ -49,8 +49,8 @@
     },
     {
       "id": "faceid-batch",
-      "version": 2,
-      "date": "2026-03-23 00:49"
+      "version": 3,
+      "date": "2026-03-23 01:01"
     }
   ]
 }
