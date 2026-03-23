@@ -113,6 +113,7 @@
   }
   .job-status.completed { color: var(--success); border-color: var(--success); }
   .job-status.error { color: var(--error); border-color: var(--error); }
+  .job-status.stalled { color: #ff8f47; border-color: #ff8f47; }
   .job-status.running { color: var(--accent); border-color: var(--accent); }
 
   .job-prompt {
@@ -310,7 +311,8 @@
           showDetail(job);
         };
 
-        var statusCls = job.status === 'completed' ? 'completed' : (job.status === 'error' ? 'error' : 'running');
+        var statusMap = {completed:'completed', error:'error', stalled:'stalled', running:'running', queued:'queued'};
+        var statusCls = statusMap[job.status] || 'running';
 
         var thumbHtml;
         var thumbOutput = job.output || (job.outputs && job.outputs[0]);
