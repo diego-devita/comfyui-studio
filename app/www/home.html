@@ -259,6 +259,7 @@
   <a href="/home" class="nav-link active">Home</a>
   <a href="/admin/nodes" class="nav-link">Nodes</a>
   <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
   <a href="/admin/workflows" class="nav-link">Workflows</a>
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
@@ -423,7 +424,7 @@
       : Object.entries(compObj).map(([key, val]) => Object.assign({ name: key }, val));
     $compBody.innerHTML = '';
 
-    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', workflows: 'Workflows' };
+    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', workflows: 'Workflows' };
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
     components.forEach(c => {

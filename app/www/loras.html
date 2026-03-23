@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — LoRAs</title>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  header {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+  .logo small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-left: 14px;
+    font-weight: 400;
+  }
+
+  main { padding: 32px 40px 64px; max-width: 960px; margin: 0 auto; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: var(--accent); color: #0a0a0f; }
+  .btn:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn--danger { border-color: var(--border); color: var(--muted); }
+  .btn--danger:hover:not(:disabled) { border-color: var(--error); background: var(--error); color: #fff; }
+  .btn--sm { padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Category ── */
+  .cat-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 32px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-title:first-child { margin-top: 0; }
+
+  /* ── Model Card ── */
+  .model-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    margin-bottom: 8px;
+  }
+  .model-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+  .model-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .model-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .model-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .model-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .status-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid;
+  }
+  .status-badge.present { color: var(--success); border-color: var(--success); }
+  .status-badge.missing { color: var(--error); border-color: var(--error); }
+  .status-badge.downloading { color: var(--accent); border-color: var(--accent); }
+  .status-badge.queued { color: var(--queued, #ffaa33); border-color: var(--queued, #ffaa33); }
+
+  .progress-bar {
+    width: 120px;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .empty-state {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    padding: 48px 0;
+  }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link active">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<header>
+  <div class="logo">ComfyUI <span>Studio</span> <small>LoRAs</small></div>
+</header>
+
+<main>
+  <div id="lorasList"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">No LoRAs in catalog</div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function fmtGB(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.credentials = 'include';
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      opts.headers = Object.assign({'Content-Type': 'application/json'}, opts.headers || {});
+      opts.body = JSON.stringify(opts.body);
+    }
+    return fetch(url, opts).then(function(r) {
+      if (r.status === 401 || r.status === 403) {
+        window.location = '/login';
+        throw new Error('auth');
+      }
+      return r;
+    });
+  }
+
+  var $list = document.getElementById('lorasList');
+  var $empty = document.getElementById('emptyState');
+  var _pollTimer = null;
+
+  async function loadLoras() {
+    try {
+      var resp = await apiFetch('/api/admin/loras');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      renderLoras(data);
+    } catch (e) {
+      if (e.message !== 'auth') console.error('LoRAs load error:', e);
+    }
+  }
+
+  function renderLoras(data) {
+    var cats = data.categories || [];
+    if (cats.length === 0 || cats.every(function(c) { return c.models.length === 0; })) {
+      $list.innerHTML = '';
+      $empty.style.display = '';
+      return;
+    }
+    $empty.style.display = 'none';
+
+    var hasDownloading = false;
+    var html = '';
+    cats.forEach(function(cat) {
+      html += '<div class="cat-title">' + escHtml(cat.name) + ' (' + cat.models.length + ')</div>';
+      cat.models.forEach(function(m) {
+        var statusCls = m.status;
+        var statusText = m.status;
+        if (m.status === 'downloading') hasDownloading = true;
+
+        var meta = [];
+        if (m.size_gb) meta.push(m.size_gb.toFixed(1) + ' GB');
+        if (m.source) meta.push(m.source);
+        if (m.base_model) meta.push(m.base_model);
+
+        var tags = '';
+        if (m.tags && m.tags.length) {
+          tags = '<div class="model-tags">' + m.tags.map(function(t) {
+            return '<span class="model-tag">' + escHtml(t) + '</span>';
+          }).join('') + '</div>';
+        }
+
+        var actions = '';
+        if (m.status === 'present') {
+          actions = '<span class="status-badge present">installed</span>' +
+            '<button class="btn btn--danger btn--sm" onclick="deleteLora(\'' + escHtml(m.file) + '\')">Delete</button>';
+        } else if (m.status === 'downloading') {
+          var pct = m.progress != null ? m.progress.toFixed(0) + '%' : '';
+          actions = '<span class="status-badge downloading">downloading ' + pct + '</span>' +
+            '<div class="progress-bar"><div class="progress-bar-fill" style="width:' + (m.progress || 0) + '%"></div></div>';
+        } else if (m.status === 'queued') {
+          actions = '<span class="status-badge queued">queued</span>';
+        } else if (m.status === 'error') {
+          actions = '<span class="status-badge missing">error</span>' +
+            '<button class="btn btn--sm" onclick="downloadLora(\'' + escHtml(m.file) + '\',this)">Retry</button>';
+        } else {
+          actions = '<span class="status-badge missing">missing</span>' +
+            '<button class="btn btn--sm" onclick="downloadLora(\'' + escHtml(m.file) + '\',this)">Download</button>';
+        }
+
+        html += '<div class="model-card">' +
+          '<div>' +
+            '<div class="model-name">' + escHtml(m.name) + '</div>' +
+            '<div class="model-meta">' + meta.map(function(s) { return '<span>' + escHtml(s) + '</span>'; }).join('') + '</div>' +
+            tags +
+          '</div>' +
+          '<div class="model-actions">' + actions + '</div>' +
+        '</div>';
+      });
+    });
+    $list.innerHTML = html;
+
+    // Poll faster while downloads are active
+    if (hasDownloading && !_pollTimer) {
+      _pollTimer = setInterval(loadLoras, 2000);
+    } else if (!hasDownloading && _pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+  }
+
+  window.downloadLora = async function(filename, btn) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+    try {
+      await apiFetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
+      setTimeout(loadLoras, 500);
+      if (!_pollTimer) _pollTimer = setInterval(loadLoras, 2000);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Download'; }
+    }
+  };
+
+  window.deleteLora = async function(filename) {
+    if (!confirm('Delete ' + filename + '?')) return;
+    try {
+      await apiFetch('/api/admin/models/' + encodeURIComponent(filename), { method: 'DELETE' });
+      loadLoras();
+    } catch (_) {}
+  };
+
+  // Boot
+  loadLoras();
+})();
+</script>
+</body>
+</html>
