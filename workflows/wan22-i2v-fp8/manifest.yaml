@@ -1,8 +1,8 @@
 id: wan22-i2v-fp8
 category: i2v
 name: "WAN 2.2 Image to Video (FP8 Fast)"
-version: 3
-date: "2026-03-23 00:49"
+version: 4
+date: "2026-03-23 01:40"
 description: "Image to video with WAN 2.2 14B FP8 models, dual-pass sampling (high+low noise), 4-step LightX2V LoRA acceleration, auto aspect ratio from input image, Lanczos upscale, RIFE 4x frame interpolation to 60fps."
 author: ""
 
@@ -15,6 +15,7 @@ inputs:
     node_id: "1"
     field: "image"
     required: true
+    tooltip: "The first frame of your video. Use a clear, well-composed image — the model will animate from this starting point. FP8 quantization may lose fine details, so high-contrast images work best."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -24,6 +25,7 @@ inputs:
     required: true
     default: ""
     placeholder: "Describe what happens in the video..."
+    tooltip: "Describe the motion and action you want, not just appearance. WAN responds well to verbs and camera directions (e.g. 'the woman slowly turns her head, camera pans right'). Keep it concise — 1-2 sentences work better than long descriptions."
 
   - id: negative_prompt
     name: "Negative Prompt"
@@ -32,6 +34,7 @@ inputs:
     field: "text"
     required: false
     default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+    tooltip: "Things to avoid in the output. The default covers common artifacts. Add motion-specific negatives like 'jittery, flickering, morphing' if needed. With FP8 at low CFG, negative prompts have less influence — the default is usually sufficient."
 
   - id: duration
     name: "Duration"
@@ -48,6 +51,7 @@ inputs:
       - label: "20 seconds"
         value: 321
     default: 81
+    tooltip: "Video length before frame interpolation. FP8 is fast — 5s generates in ~2 min on an A40. Longer durations use more VRAM and may lose coherence after 10s. The final output is upscaled and interpolated to 60fps."
 
   - id: cfg
     name: "CFG Scale"
@@ -58,6 +62,7 @@ inputs:
     max: 5.0
     step: 0.1
     default: 1.5
+    tooltip: "How closely the model follows the prompt. FP8 with LightX2V acceleration works best at very low CFG (1.0-2.0). Higher values increase prompt adherence but may introduce artifacts. Default 1.5 is the sweet spot for this workflow."
 
   - id: seed
     name: "Seed"
@@ -65,6 +70,7 @@ inputs:
     node_id: "21"
     field: "noise_seed"
     default: -1
+    tooltip: "Controls generation randomness. Use -1 for a random seed each time. Set a specific number to reproduce the same video — useful for iterating on prompts while keeping the same motion pattern."
 
   - id: upscale
     name: "Upscale Factor"
@@ -75,6 +81,7 @@ inputs:
     max: 2.5
     step: 0.5
     default: 1.5
+    tooltip: "Lanczos upscale applied before RIFE frame interpolation. 1.0 = no upscale (native ~480p), 1.5 = ~720p, 2.0 = ~960p. Higher values increase output quality but also processing time and file size."
 
 outputs:
   - id: video

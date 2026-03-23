@@ -1,8 +1,8 @@
 id: wan22-i2v-lightx2v
 category: i2v
 name: "WAN 2.2 Image to Video (LightX2V)"
-version: 6
-date: "2026-03-23 00:49"
+version: 7
+date: "2026-03-23 01:40"
 description: "Image to video with WAN 2.2 14B LightX2V models, dual-pass sampling (high+low noise), 20 steps, Lanczos upscale 1.5x, RIFE 4x frame interpolation to 60fps. Proven workflow from wan22-b200."
 author: ""
 
@@ -15,6 +15,7 @@ inputs:
     node_id: "218"
     field: "image"
     required: true
+    tooltip: "The first frame of your video. Use a clear, well-composed image with good lighting. LightX2V uses full-precision distilled models, so fine details and textures are preserved well from the input."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -24,6 +25,7 @@ inputs:
     required: true
     default: ""
     placeholder: "Describe what happens in the video..."
+    tooltip: "Describe the motion and action you want, not just appearance. WAN responds well to verbs and camera directions (e.g. 'the woman slowly turns her head, camera pans right'). LightX2V's distilled models handle complex motion descriptions well — be specific about what should move."
 
   - id: negative_prompt
     name: "Negative Prompt"
@@ -32,6 +34,7 @@ inputs:
     field: "text"
     required: false
     default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+    tooltip: "Things to avoid in the output. The default covers common artifacts. LightX2V at higher CFG (3.5) is more responsive to negatives than FP8 workflows — add 'jittery, flickering, morphing' if you notice temporal instability."
 
   - id: duration
     name: "Duration"
@@ -48,6 +51,7 @@ inputs:
       - label: "20 seconds"
         value: 321
     default: 81
+    tooltip: "Video length before frame interpolation. Full-precision LightX2V models use more VRAM than FP8 — longer durations may be slower. The final output is upscaled with Remacri and interpolated to 60fps via RIFE."
 
   - id: cfg
     name: "CFG Scale"
@@ -58,6 +62,7 @@ inputs:
     max: 10.0
     step: 0.5
     default: 3.5
+    tooltip: "How closely the model follows the prompt. LightX2V's full-precision models tolerate higher CFG than FP8. Default 3.5 balances prompt adherence with natural motion. Go lower (2.0) for more fluid, organic movement or higher (5.0) for stronger prompt control."
 
   - id: seed
     name: "Seed"
@@ -65,6 +70,7 @@ inputs:
     node_id: "304"
     field: "noise_seed"
     default: -1
+    tooltip: "Controls generation randomness. Use -1 for a random seed each time. Set a specific number to reproduce the same video — useful for iterating on prompts while keeping the same motion pattern."
 
   - id: upscale
     name: "Upscale Factor"
@@ -75,6 +81,7 @@ inputs:
     max: 2.5
     step: 0.5
     default: 1.5
+    tooltip: "Upscale using Remacri 4x model before RIFE frame interpolation. 1.0 = no upscale (native ~480p), 1.5 = ~720p, 2.0 = ~960p. Remacri produces sharper results than Lanczos but takes longer to process."
 
 outputs:
   - id: video

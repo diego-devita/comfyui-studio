@@ -1,8 +1,8 @@
 id: wan22-svi-dynamic
 category: i2v
 name: "WAN 2.2 SVI Pro Multi-Scene"
-version: 8
-date: "2026-03-23 00:49"
+version: 9
+date: "2026-03-23 01:40"
 type: dynamic
 description: "Multi-scene I2V using SVI Pro technique. Configurable scene count, per-scene prompts, durations and seeds, LoRA picker. GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""
@@ -52,15 +52,18 @@ inputs:
     name: "Input Image"
     type: image
     required: true
+    tooltip: "The first frame that starts your multi-scene video. Each subsequent scene continues from the last frame of the previous one, so this image sets the visual foundation for the entire sequence."
 
   - id: scenes
     name: "Scenes"
     type: scene_list
+    tooltip: "Build your video scene by scene. Each scene generates a clip that continues from where the previous one ended — the last frame becomes the next scene's input. Add scenes to create longer, multi-part narratives with different actions or camera angles."
     per_scene:
       - id: prompt
         name: "Prompt"
         type: text
         required: true
+        tooltip: "Describe the motion for this specific scene. Each scene gets its own prompt, so you can change the action between scenes (e.g. scene 1: 'she walks forward', scene 2: 'she turns and smiles'). Focus on what changes, not what stays the same."
       - id: duration
         name: "Duration (seconds)"
         type: select
@@ -71,16 +74,19 @@ inputs:
           - {label: "8 seconds", value: 8}
           - {label: "10 seconds", value: 10}
         default: 5
+        tooltip: "Length of this individual scene clip. SVI Pro blends scenes with overlap frames for smooth transitions. Shorter scenes (3-5s) keep the motion coherent; longer scenes (8-10s) allow more complex actions."
       - id: seed
         name: "Seed"
         type: seed
         default: -1
+        tooltip: "Seed for this specific scene. Use -1 for random. Setting different seeds per scene varies the motion style; using the same seed across scenes creates more consistent movement patterns."
 
   - id: loras
     name: "LoRAs"
     type: lora_picker
     base_model: "wan-i2v-14b"
     max_loras: 3
+    tooltip: "Select up to 3 LoRA pairs compatible with WAN I2V 14B. LoRAs come in high/low noise pairs — both are applied automatically at different sampling stages. The LightX2V accelerator LoRA is always included; pick additional style or motion LoRAs here."
 
 outputs:
   - id: video

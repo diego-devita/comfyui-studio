@@ -1,31 +1,31 @@
 {
-  "version": 29,
-  "date": "2026-03-23 01:28",
+  "version": 30,
+  "date": "2026-03-23 01:46",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
-      "version": 6,
-      "date": "2026-03-23 00:49"
+      "version": 7,
+      "date": "2026-03-23 01:46"
     },
     {
       "id": "wan22-i2v-fp8",
-      "version": 3,
-      "date": "2026-03-23 00:49"
+      "version": 4,
+      "date": "2026-03-23 01:46"
     },
     {
       "id": "wan22-i2v-kijai",
-      "version": 7,
-      "date": "2026-03-23 00:49"
+      "version": 8,
+      "date": "2026-03-23 01:46"
     },
     {
       "id": "wan22-svi-pro",
-      "version": 3,
-      "date": "2026-03-23 00:49"
+      "version": 4,
+      "date": "2026-03-23 01:46"
     },
     {
       "id": "wan22-svi-dynamic",
-      "version": 8,
-      "date": "2026-03-23 00:49"
+      "version": 9,
+      "date": "2026-03-23 01:46"
     },
     {
       "id": "t2i-dynamic",

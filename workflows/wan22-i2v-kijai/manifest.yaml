@@ -1,8 +1,8 @@
 id: wan22-i2v-kijai
 category: i2v
 name: "WAN 2.2 Image to Video (Kijai Wrapper)"
-version: 7
-date: "2026-03-23 00:49"
+version: 8
+date: "2026-03-23 01:40"
 description: "Image to video using Kijai's WanVideoWrapper nodes with FP8 models, SageAttention, torch compile, block swap for VRAM management, LightX2V LoRA, dual-pass sampling (6 steps split 3+3), CFG scheduling. Output at 16fps native resolution."
 author: ""
 
@@ -15,6 +15,7 @@ inputs:
     node_id: "67"
     field: "image"
     required: true
+    tooltip: "The first frame of your video. Kijai's wrapper auto-resizes the image, so any resolution works — but a clear, well-composed image produces better results. The model animates outward from this starting frame."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -24,6 +25,7 @@ inputs:
     required: true
     default: ""
     placeholder: "Describe what happens in the video..."
+    tooltip: "Describe the motion and action you want, not just appearance. WAN responds well to verbs and camera directions (e.g. 'the woman slowly turns her head, camera pans right'). Kijai's wrapper uses a combined text encoder — prompts may feel slightly different from other WAN workflows."
 
   - id: negative_prompt
     name: "Negative Prompt"
@@ -32,6 +34,7 @@ inputs:
     field: "negative_prompt"
     required: false
     default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+    tooltip: "Things to avoid in the output. The default covers common artifacts. Add motion-specific negatives like 'jittery, flickering, morphing' if you see those issues. Kijai's CFG scheduling reduces the need for heavy negatives."
 
   - id: duration
     name: "Duration"
@@ -48,6 +51,7 @@ inputs:
       - label: "20 seconds"
         value: 321
     default: 81
+    tooltip: "Video length at native 16fps (no frame interpolation in this workflow). Kijai's block swap keeps VRAM usage stable even for longer clips. Output is 16fps — good for previewing motion before running higher-quality workflows."
 
   - id: cfg
     name: "CFG Scale"
@@ -58,6 +62,7 @@ inputs:
     max: 10.0
     step: 0.5
     default: 2.0
+    tooltip: "Starting CFG value for Kijai's scheduled CFG. This is the initial strength — it decreases during sampling via the CFG schedule. WAN works best at low CFG (1.5-3.0). Going above 4.0 often causes oversaturation and artifacts."
 
   - id: seed
     name: "Seed"
@@ -65,6 +70,7 @@ inputs:
     node_id: "27"
     field: "seed"
     default: -1
+    tooltip: "Controls generation randomness. Use -1 for a random seed each time. Set a specific number to reproduce the same video — useful for comparing prompt changes while keeping the same motion pattern."
 
 outputs:
   - id: video

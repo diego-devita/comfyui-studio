@@ -1,8 +1,8 @@
 id: wan22-svi-pro
 category: i2v
 name: "WAN 2.2 SVI Pro 5 Scenes"
-version: 3
-date: "2026-03-23 00:49"
+version: 4
+date: "2026-03-23 01:40"
 description: "Multi-scene I2V using SVI Pro technique. 5 concatenated clips with per-scene prompts, overlap blending, GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""
 
@@ -15,6 +15,7 @@ inputs:
     node_id: "97"
     field: "image"
     required: true
+    tooltip: "The first frame of your 5-scene video. SVI Pro generates each clip starting from the last frame of the previous one, so this image sets the visual tone for all 5 scenes. Clear, well-lit images with distinct subjects work best."
 
   - id: prompt_clip1
     name: "Prompt (Clip 1)"
@@ -24,6 +25,7 @@ inputs:
     required: true
     default: ""
     placeholder: "Describe clip 1..."
+    tooltip: "The first scene starts from your input image. Describe the initial motion or action. This is the only required prompt — leave clips 2-5 empty to reuse this prompt for all scenes, or fill them in for a multi-scene narrative."
 
   - id: prompt_clip2
     name: "Prompt (Clip 2)"
@@ -33,6 +35,7 @@ inputs:
     required: false
     default: ""
     placeholder: "Describe clip 2..."
+    tooltip: "Optional second scene prompt. Continues from the last frame of clip 1. If left empty, clip 1's prompt is reused. Use this to introduce a change in action (e.g. a new camera angle or different movement)."
 
   - id: prompt_clip3
     name: "Prompt (Clip 3)"
@@ -42,6 +45,7 @@ inputs:
     required: false
     default: ""
     placeholder: "Describe clip 3..."
+    tooltip: "Optional third scene prompt. Continues from the last frame of clip 2. SVI Pro blends overlapping frames between clips for smooth transitions. Good for the middle of a story arc."
 
   - id: prompt_clip4
     name: "Prompt (Clip 4)"
@@ -51,6 +55,7 @@ inputs:
     required: false
     default: ""
     placeholder: "Describe clip 4..."
+    tooltip: "Optional fourth scene prompt. Continues from the last frame of clip 3. By this point, the video may drift from the original image — keep prompts grounded in what the model can realistically maintain."
 
   - id: prompt_clip5
     name: "Prompt (Clip 5)"
@@ -60,6 +65,7 @@ inputs:
     required: false
     default: ""
     placeholder: "Describe clip 5..."
+    tooltip: "Optional fifth and final scene prompt. This is the last clip in the sequence.  LoRA helps maintain visual consistency across all 5 scenes. The final output is interpolated to 32fps via RIFE."
 
   - id: seed
     name: "Seed"
@@ -67,6 +73,7 @@ inputs:
     node_id: "189"
     field: "noise_seed"
     default: -1
+    tooltip: "Controls generation randomness for all 5 scenes. Use -1 for a random seed. Setting a specific seed makes all clips reproducible — useful for refining prompts across the multi-scene sequence."
 
 outputs:
   - id: video
