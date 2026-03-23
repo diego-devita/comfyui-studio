@@ -1,9 +1,9 @@
 {
-  "app_version": "9.14.0",
-  "date": "2026-03-23 17:34",
+  "app_version": "9.15.0",
+  "date": "2026-03-23 17:40",
   "components": {
-    "backend": {"version": "9.14.0", "date": "2026-03-23 17:34", "file": "app/main.py"},
-    "frontend": {"version": "9.14.0", "date": "2026-03-23 17:34", "dir": "app/www/"},
+    "backend": {"version": "9.15.0", "date": "2026-03-23 17:40", "file": "app/main.py"},
+    "frontend": {"version": "9.15.0", "date": "2026-03-23 17:40", "dir": "app/www/"},
     "models": {"version": 21, "date": "2026-03-23 16:25", "file": "app/models.json"},
     "loras": {"version": 2, "date": "2026-03-23 16:53", "file": "app/loras.json"},
     "workflows": {"version": 31, "date": "2026-03-23 15:43", "dir": "workflows/"}

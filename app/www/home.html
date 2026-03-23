@@ -91,6 +91,46 @@
   }
   .comp-table tr:last-child td { border-bottom: none; }
   .comp-table td { color: var(--text); }
+  .comp-table td:last-child { text-align: center; }
+  .comp-table th:last-child { text-align: center; }
+
+  /* ── Toggle Switch ── */
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+    vertical-align: middle;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.08);
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .toggle input:checked + .toggle-slider {
+    background: rgba(232, 255, 71, 0.15);
+    border-color: var(--accent);
+  }
+  .toggle input:checked + .toggle-slider::before {
+    transform: translateX(14px);
+    background: var(--accent);
+  }
 
   .status-dot {
     display: inline-block;
@@ -186,16 +226,17 @@
   .stat-cards {
     display: flex;
     justify-content: center;
-    gap: 16px;
+    gap: 12px;
     margin-bottom: 32px;
     flex-wrap: wrap;
   }
   .stat-card {
-    flex: 0 1 240px;
+    flex: 1 1 0;
+    min-width: 140px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
-    padding: 24px 20px;
+    padding: 20px 16px;
     text-align: center;
     transition: border-color 0.2s;
   }
@@ -326,6 +367,7 @@
           <th>Version</th>
           <th>Date</th>
           <th>Status</th>
+          <th>Update</th>
         </tr>
       </thead>
       <tbody id="compBody">
@@ -436,6 +478,7 @@
     const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', workflows: 'Workflows' };
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
+    var _defaultUnchecked = { loras: true };
     components.forEach(c => {
       const row = document.createElement('tr');
       const displayName = labelMap[c.name] || c.name || '--';
@@ -443,11 +486,13 @@
       const displayDate = c.date || (typeof date === 'string' ? date : '--');
       const color = statusDotColor(c.status || 'ok');
       const displayVersion = typeof c.version === 'number' ? '#' + c.version : (c.version || '--');
+      var checked = _defaultUnchecked[c.name] ? '' : 'checked';
       row.innerHTML =
         '<td>' + escHtml(displayName) + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
-        '<td>' + dotHtml(color, displayStatus) + '</td>';
+        '<td>' + dotHtml(color, displayStatus) + '</td>' +
+        '<td><label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label></td>';
       $compBody.appendChild(row);
     });
 
@@ -567,7 +612,15 @@
     $updateBtnText.innerHTML = '<span class="spinner sm"></span> Checking...';
 
     try {
-      var resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
+      // Read component toggles to build skip list
+      var skipComponents = [];
+      document.querySelectorAll('#compBody input[data-comp]').forEach(function(cb) {
+        if (!cb.checked) skipComponents.push(cb.dataset.comp);
+      });
+      var resp = await apiFetch('/api/admin/system/update', {
+        method: 'POST',
+        body: { skip_components: skipComponents },
+      });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
         showOverlay('Error: ' + (err.detail || err.error || resp.status), 'var(--error)', 5000);
