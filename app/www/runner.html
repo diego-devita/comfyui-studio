@@ -1363,8 +1363,12 @@
 
   async function executeWorkflow() {
     $generateBtn.disabled = true;
+    $generateBtn.disabled = true;
     $generateBtn.innerHTML = '<span class="spinner"></span> Submitting...';
     $execError.classList.remove('visible');
+    currentPromptId = null;
+    // Clean old seed hints
+    document.querySelectorAll('.seed-used').forEach(function(el) { el.remove(); });
 
     try {
       const formData = new FormData();
@@ -1464,24 +1468,32 @@
         }
       }
 
-      // Job queued successfully — show confirmation
-      $generateBtn.innerHTML = '&#9989; Job queued \u00b7 ' + currentPromptId.substring(0, 8) + '...';
+      // Job queued — show confirmation and re-enable immediately
+      $generateBtn.disabled = false;
       $generateBtn.style.position = 'relative';
       $generateBtn.style.overflow = 'hidden';
+      $generateBtn.innerHTML = '&#9989; Queued \u00b7 ' + currentPromptId.substring(0, 8) + '<div class="queued-bar"></div>';
 
-      // 5s progress bar inside button then reset
-      var qBar = document.createElement('div');
-      qBar.style.cssText = 'position:absolute;top:0;left:0;bottom:0;width:0%;background:var(--accent);opacity:0.2;z-index:0;transition:width 5s linear;';
-      $generateBtn.appendChild(qBar);
-      qBar.offsetHeight;
-      qBar.style.width = '100%';
+      // 5s fill bar then reset text
+      var qBar = $generateBtn.querySelector('.queued-bar');
+      if (qBar) {
+        qBar.style.cssText = 'position:absolute;top:0;left:0;bottom:0;width:0%;background:var(--accent);opacity:0.15;z-index:-1;transition:width 5s linear;';
+        qBar.offsetHeight;
+        qBar.style.width = '100%';
+      }
 
+      var resetPid = currentPromptId;
       setTimeout(function() {
-        $generateBtn.disabled = false;
-        $generateBtn.innerHTML = '&#9654; Generate';
-        $generateBtn.style.position = '';
-        $generateBtn.style.overflow = '';
+        // Only reset if no new job was submitted meanwhile
+        if (currentPromptId === resetPid) {
+          $generateBtn.innerHTML = '&#9654; Generate';
+          $generateBtn.style.position = '';
+          $generateBtn.style.overflow = '';
+        }
       }, 5000);
+
+      // Reset prompt ID so next generate is clean
+      currentPromptId = null;
 
     } catch (e) {
       if (e.message !== 'auth') {
@@ -1489,6 +1501,7 @@
       }
       $generateBtn.disabled = false;
       $generateBtn.innerHTML = '&#9654; Generate';
+      currentPromptId = null;
     }
   }
 

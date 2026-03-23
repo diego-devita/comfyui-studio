@@ -100,10 +100,11 @@
     color: var(--muted);
   }
   /* ── Update button progress fill ── */
-  .header-update .btn {
+  #updateBtn {
     position: relative;
     overflow: hidden;
-    z-index: 1;
+    background: transparent;
+    border: 1px solid var(--accent);
   }
   .update-bar {
     position: absolute;
@@ -112,9 +113,7 @@
     bottom: 0;
     width: 0%;
     background: var(--accent);
-    opacity: 0.25;
-    z-index: -1;
-    transition: none;
+    opacity: 0;
   }
   .update-bar.animating {
     transition: width 15s linear;
@@ -123,7 +122,7 @@
   }
   @keyframes barPulse {
     0%, 100% { opacity: 0.15; }
-    50% { opacity: 0.35; }
+    50% { opacity: 0.4; }
   }
   .update-badge {
     font-size: 10px;
@@ -248,7 +247,7 @@
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
-    <button class="btn" id="updateBtn">Check for Updates<div class="update-bar" id="updateBar"></div></button>
+    <button class="btn" id="updateBtn"><span style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div></button>
     <div class="header-meta">Last updated: <span id="lastUpdated">--</span> <a href="https://github.com/diego-devita/comfyui-studio/blob/main/version.json" target="_blank" style="text-decoration:none;margin-left:4px;" title="View version.json">&#8599;</a></div>
   </div>
 </header>
@@ -490,6 +489,7 @@
     if (_overlayTimer) { clearTimeout(_overlayTimer); _overlayTimer = null; }
     $updateOverlay.classList.remove('visible');
   }
+  $updateOverlay.addEventListener('click', hideOverlay);
 
   // ── Check for Updates (with auto-retry polling) ──
   var _updatePolling = false;
@@ -503,7 +503,7 @@
     $updateBar.classList.remove('animating');
     $updateBar.style.width = '0%';
     $updateBtn.disabled = false;
-    $updateBtn.innerHTML = 'Check for Updates<div class="update-bar" id="updateBar"></div>';
+    $updateBtn.innerHTML = '<span style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div>';
   }
 
   function startBar() {
@@ -515,8 +515,7 @@
 
   function setBtnWaiting(attempt) {
     $updateBtn.disabled = false;
-    $updateBtn.innerHTML = 'Stop <span class="update-badge">' + attempt + '/' + MAX_ATTEMPTS + '</span><div class="update-bar" id="updateBar"></div>';
-    // Re-ref since we replaced innerHTML
+    $updateBtn.innerHTML = '<span style="position:relative;z-index:1;">Stop <span class="update-badge">' + attempt + '/' + MAX_ATTEMPTS + '</span></span><div class="update-bar" id="updateBar"></div>';
     return document.getElementById('updateBar');
   }
 
@@ -524,7 +523,7 @@
     if (!_updatePolling) return;
 
     $updateBtn.disabled = true;
-    $updateBtn.innerHTML = '<span class="spinner sm"></span> Checking...<div class="update-bar" id="updateBar"></div>';
+    $updateBtn.innerHTML = '<span style="position:relative;z-index:1;"><span class="spinner sm"></span> Checking...</span><div class="update-bar" id="updateBar"></div>';
 
     try {
       var resp = await apiFetch('/api/admin/system/update', { method: 'POST' });
@@ -551,7 +550,7 @@
           }
           showOverlay('Backend did not come back. Try refreshing manually.', 'var(--error)', null);
           $updateBtn.disabled = false;
-          $updateBtn.innerHTML = 'Check for Updates<div class="update-bar" id="updateBar"></div>';
+          $updateBtn.innerHTML = '<span style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div>';
           return;
         }
         showOverlay('Updated: ' + data.updated.join(', '), 'var(--success)', 5000);
