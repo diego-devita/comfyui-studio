@@ -1359,16 +1359,37 @@
   }
 
 
-  // ── Toast ──
+  // ── Toast (stackable with expiry bar) ──
+  var _toastStack = [];
+  function _layoutToasts() {
+    var top = 24;
+    for (var i = _toastStack.length - 1; i >= 0; i--) {
+      var t = _toastStack[i];
+      if (!t.parentElement) { _toastStack.splice(i, 1); continue; }
+      t.style.top = top + 'px';
+      top += t.offsetHeight + 8;
+    }
+  }
   function showToast(msg, duration) {
-    var existing = document.getElementById('jobToast');
-    if (existing) existing.remove();
     var toast = document.createElement('div');
-    toast.id = 'jobToast';
-    toast.style.cssText = 'position:fixed;top:24px;right:24px;z-index:400;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-card);padding:12px 40px 12px 16px;font-family:var(--mono);font-size:12px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,0.4);';
+    toast.style.cssText = 'position:fixed;right:24px;z-index:' + (400 + _toastStack.length) + ';background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-card);padding:12px 40px 12px 16px;font-family:var(--mono);font-size:12px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,0.4);overflow:hidden;transition:opacity 0.3s;';
     toast.innerHTML = msg + '<span style="position:absolute;top:8px;right:12px;cursor:pointer;color:var(--muted);font-size:16px;" onclick="this.parentElement.remove()">&times;</span>';
+    if (duration) {
+      var bar = document.createElement('div');
+      bar.style.cssText = 'position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--accent);transform-origin:left;transition:transform ' + duration + 'ms linear;';
+      toast.appendChild(bar);
+      requestAnimationFrame(function() { bar.style.transform = 'scaleX(0)'; });
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() { toast.remove(); _layoutToasts(); }, 300);
+      }, duration);
+    }
+    _toastStack.push(toast);
     document.body.appendChild(toast);
-    if (duration) setTimeout(function() { if (toast.parentElement) toast.remove(); }, duration);
+    _layoutToasts();
+    // Re-layout when removed via X
+    var obs = new MutationObserver(function() { if (!toast.parentElement) { obs.disconnect(); _layoutToasts(); } });
+    obs.observe(toast.parentElement, { childList: true });
   }
 
   // ── Generate ──
