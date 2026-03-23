@@ -688,11 +688,9 @@
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Model Manager</small></div>
   <div class="header-actions">
-    <label class="btn" style="cursor:pointer;">
-      <svg width="12" height="12" viewBox="0 0 384 512" fill="currentColor" style="vertical-align:-1px;"><path d="M64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16l160 0 0 80c0 17.7 14.3 32 32 32l80 0 0 288c0 8.8-7.2 16-16 16L64 464zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-293.5c0-17-6.7-33.3-18.7-45.3L274.7 18.7C262.7 6.7 246.5 0 229.5 0L64 0zm97 289c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0L79 303c-9.4 9.4-9.4 24.6 0 33.9l48 48c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-31-31 31-31zM257 255c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l31 31-31 31c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l48-48c9.4-9.4 9.4-24.6 0-33.9l-48-48z"/></svg> Import JSON
-      <input type="file" id="importModelsFile" accept=".json" style="display:none;">
-    </label>
-    <button class="btn" id="fetchMetadataBtn">Fetch Metadata</button>
+    <button class="btn" id="importJsonBtn">Import JSON...</button>
+    <input type="file" id="importModelsFile" accept=".json" style="display:none;">
+    <button class="btn" id="fetchMetadataBtn">Fetch Metadata...</button>
     <button class="btn" id="activityLogBtn" style="border-color:var(--border);color:var(--muted);">Activity Log</button>
   </div>
 </header>
@@ -1298,7 +1296,7 @@
     });
 
     // Set static content
-    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><svg width="12" height="12" viewBox="0 0 576 512" fill="currentColor"><path d="M288 80c-65.2 0-118.8 29.6-159.9 67.7C89.6 183.5 63 226 49.4 256c13.6 30 40.2 72.5 78.6 108.3C169.2 402.4 222.8 432 288 432s118.8-29.6 159.9-67.7C486.4 328.5 513 286 526.6 256c-13.6-30-40.2-72.5-78.6-108.3C406.8 109.6 353.2 80 288 80zM95.4 112.6C142.5 68.8 207.2 32 288 32s145.5 36.8 192.6 80.6c46.8 43.5 78.1 95.4 93 131.1c3.3 7.9 3.3 16.7 0 24.6c-14.9 35.7-46.2 87.7-93 131.1C433.5 443.2 368.8 480 288 480s-145.5-36.8-192.6-80.6C48.6 355.9 17.3 303.9 2.4 268.3c-3.3-7.9-3.3-16.7 0-24.6c14.9-35.7 46.2-87.7 93-131.1zM288 192a64 64 0 1 1 0 128 64 64 0 1 1 0-128zm0 176a112 112 0 1 0 0-224 112 112 0 1 0 0 224z"/></svg></span>';
+    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><svg width="12" height="12" viewBox="0 0 576 512" fill="currentColor"><path d="M288 80c-65.2 0-118.8 29.6-159.9 67.7C89.6 183.5 63 226 49.4 256c13.6 30 40.2 72.5 78.6 108.3C169.2 402.4 222.8 432 288 432s118.8-29.6 159.9-67.7C486.4 328.5 513 286 526.6 256c-13.6-30-40.2-72.5-78.6-108.3C406.8 109.6 353.2 80 288 80zM95.4 112.6C142.5 68.8 207.2 32 288 32s145.5 36.8 192.6 80.6c46.8 43.5 78.1 95.4 93 131.1c3.3 7.9 3.3 16.7 0 24.6c-14.9 35.7-46.2 87.7-93 131.1C433.5 443.2 368.8 480 288 480s-145.5-36.8-192.6-80.6C48.6 355.9 17.3 303.9 2.4 268.3c-3.3-7.9-3.3-16.7 0-24.6c14.9-35.7 46.2-87.7 93-131.1zM288 192a64 64 0 1 1 0 128 64 64 0 1 1 0-128zm0 176a112 112 0 1 0 0-224 112 112 0 1 0 0 224z"/></svg></span>';
 
     const sizeStr = fmtSize(m.size_gb);
     const sourceClass = (m.source || '').toLowerCase();
@@ -1594,8 +1592,16 @@
       });
   }
 
+  // ── Import JSON confirm ──
+  document.getElementById('importJsonBtn').addEventListener('click', function() {
+    if (confirm('Import JSON adds new models from a JSON file to the catalog.\n\nThe file should have the same format as models.json (with categories and models arrays). Models that already exist will be skipped.\n\nContinue?')) {
+      document.getElementById('importModelsFile').click();
+    }
+  });
+
   // ── Fetch Metadata ──
   document.getElementById('fetchMetadataBtn').addEventListener('click', function() {
+    if (!confirm('Fetch Metadata contacts CivitAI and HuggingFace to download tags, base model info, and other metadata for all models in the catalog.\n\nThis may take a few minutes depending on the number of models.\n\nContinue?')) return;
     var btn = this;
     btn.disabled = true;
     btn.textContent = 'Fetching...';
@@ -1647,15 +1653,15 @@
     var formData = new FormData();
     formData.append('file', file);
 
-    var btn = e.target.closest('label');
-    btn.style.opacity = '0.5';
-    btn.style.pointerEvents = 'none';
+    var btn = document.getElementById('importJsonBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
 
     apiFetch('/api/admin/models/import', {method: 'POST', body: formData})
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = '';
+        btn.disabled = false;
+        btn.textContent = 'Import JSON...';
         e.target.value = '';
         var msg = 'Added: ' + data.total_added + ' model(s)';
         if (data.skipped && data.skipped.length > 0) {
@@ -1665,8 +1671,8 @@
         if (data.total_added > 0) initialLoad();
       })
       .catch(function(err) {
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = '';
+        btn.disabled = false;
+        btn.textContent = 'Import JSON...';
         if (err.message !== 'auth') alert('Import failed: ' + err.message);
       });
   });
