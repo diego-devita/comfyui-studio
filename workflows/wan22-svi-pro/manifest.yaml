@@ -65,7 +65,7 @@ inputs:
     required: false
     default: ""
     placeholder: "Describe clip 5..."
-    tooltip: "Optional fifth and final scene prompt. This is the last clip in the sequence.  LoRA helps maintain visual consistency across all 5 scenes. The final output is interpolated to 32fps via RIFE."
+    tooltip: "Optional fifth and final scene prompt. This is the last clip in the sequence. The final output is interpolated to 32fps via RIFE."
 
   - id: seed
     name: "Seed"
