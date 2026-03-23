@@ -358,6 +358,47 @@
   .btn-generate:hover:not(:disabled) { background: var(--accent); color: #0a0a0f; }
   .btn-generate:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
 
+  /* ── Job Count Stepper ── */
+  .gen-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin-right: 10px;
+    vertical-align: middle;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .gen-stepper button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 14px;
+    width: 28px;
+    height: 32px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gen-stepper button:hover { color: var(--accent); background: rgba(232,255,71,0.06); }
+  .gen-stepper-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    min-width: 24px;
+    text-align: center;
+    padding: 0 2px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    height: 32px;
+    line-height: 32px;
+  }
+  .gen-stepper.is-one { opacity: 0.4; }
+  .gen-stepper.is-one .gen-stepper-val { color: var(--muted); }
+
   /* ── Progress Panel ── */
   .progress-panel {
     display: none;
@@ -577,7 +618,11 @@
 
     <!-- Generate -->
     <div class="generate-row">
-      <button class="btn-generate" id="generateBtn" disabled>&#9654; Generate</button>
+      <div class="gen-stepper is-one" id="genStepper">
+        <button type="button" id="genMinus">&#8722;</button>
+        <span class="gen-stepper-val" id="genCount">1</span>
+        <button type="button" id="genPlus">&#43;</button>
+      </div><button class="btn-generate" id="generateBtn" disabled>&#9654; Generate</button>
     </div>
 
     <!-- Execution error -->
@@ -1392,127 +1437,145 @@
     obs.observe(toast.parentElement, { childList: true });
   }
 
+  // ── Job Count Stepper ──
+  var _genCount = 1;
+  var $genStepper = document.getElementById('genStepper');
+  var $genCountEl = document.getElementById('genCount');
+  document.getElementById('genMinus').addEventListener('click', function() {
+    if (_genCount > 1) { _genCount--; updateStepper(); }
+  });
+  document.getElementById('genPlus').addEventListener('click', function() {
+    if (_genCount < 20) { _genCount++; updateStepper(); }
+  });
+  function updateStepper() {
+    $genCountEl.textContent = _genCount;
+    $genStepper.classList.toggle('is-one', _genCount === 1);
+    $generateBtn.innerHTML = _genCount > 1
+      ? '&#9654; Generate &times;' + _genCount
+      : '&#9654; Generate';
+  }
+
   // ── Generate ──
   $generateBtn.addEventListener('click', executeWorkflow);
 
   async function executeWorkflow() {
+    var totalJobs = _genCount;
     $generateBtn.disabled = true;
-    $generateBtn.innerHTML = '<span class="spinner"></span> Submitting...';
     $execError.classList.remove('visible');
     document.querySelectorAll('.seed-used').forEach(function(el) { el.remove(); });
 
-    try {
-      const formData = new FormData();
-
-      // Gather all non-file inputs into a params object
-      const params = {};
-      $formPanel.querySelectorAll('[data-input-id]').forEach(el => {
-        const id = el.dataset.inputId;
-        if (el.type === 'file') return;
-        if (el.classList.contains('scene-list')) {
-          params[id] = getSceneListValue(id);
-        } else if (el.classList.contains('lora-picker')) {
-          // Check if it's a dynamic LoRA picker or SVI-style picker
-          if (el.querySelector('.lora-dyn-slot')) {
-            params[id] = getLoraDynamicValue(id);
-          } else {
-            params[id] = getLoraPickerValue(id);
-          }
-        } else if (el.dataset.inputId && el.querySelector && el.querySelector('input[placeholder="W"]')) {
-          // Resolution picker
-          params['width'] = getResolutionValue(id).w;
-          params['height'] = getResolutionValue(id).h;
-        } else if (el.type === 'range') {
-          params[id] = parseFloat(el.value);
-        } else if (el.type === 'number') {
-          params[id] = el.value ? Number(el.value) : null;
+    // Gather params once (shared across all jobs)
+    const params = {};
+    $formPanel.querySelectorAll('[data-input-id]').forEach(el => {
+      const id = el.dataset.inputId;
+      if (el.type === 'file') return;
+      if (el.classList.contains('scene-list')) {
+        params[id] = getSceneListValue(id);
+      } else if (el.classList.contains('lora-picker')) {
+        if (el.querySelector('.lora-dyn-slot')) {
+          params[id] = getLoraDynamicValue(id);
         } else {
-          params[id] = el.value;
+          params[id] = getLoraPickerValue(id);
         }
-      });
+      } else if (el.dataset.inputId && el.querySelector && el.querySelector('input[placeholder="W"]')) {
+        params['width'] = getResolutionValue(id).w;
+        params['height'] = getResolutionValue(id).h;
+      } else if (el.type === 'range') {
+        params[id] = parseFloat(el.value);
+      } else if (el.type === 'number') {
+        params[id] = el.value ? Number(el.value) : null;
+      } else {
+        params[id] = el.value;
+      }
+    });
 
-      // Add existing image references to params
-      // Backend expects '_existing_input_image' key
-      for (const [id, filename] of Object.entries(existingImages)) {
-        var paramKey = id === 'image' ? '_existing_input_image' : '_existing_' + id;
-        params[paramKey] = filename;
+    for (const [id, filename] of Object.entries(existingImages)) {
+      var paramKey = id === 'image' ? '_existing_input_image' : '_existing_' + id;
+      params[paramKey] = filename;
+    }
+
+    var queued = 0;
+    for (var jobIdx = 0; jobIdx < totalJobs; jobIdx++) {
+      if (totalJobs > 1) {
+        $generateBtn.innerHTML = '<span class="spinner"></span> ' + (jobIdx + 1) + '/' + totalJobs;
+      } else {
+        $generateBtn.innerHTML = '<span class="spinner"></span> Submitting...';
       }
 
-      formData.append('params', JSON.stringify(params));
+      try {
+        const formData = new FormData();
+        formData.append('params', JSON.stringify(params));
 
-      // Append file inputs (skip if using existing image)
-      // Backend expects 'input_image' as the form field name
-      for (const [id, file] of Object.entries(inputFiles)) {
-        if (!existingImages[id]) {
-          formData.append(id === 'image' ? 'input_image' : id, file);
+        for (const [id, file] of Object.entries(inputFiles)) {
+          if (!existingImages[id]) {
+            formData.append(id === 'image' ? 'input_image' : id, file);
+          }
         }
-      }
 
-      const resp = await apiFetch('/api/run/' + encodeURIComponent(workflowId) + '/execute', {
-        method: 'POST',
-        body: formData
-      });
+        const resp = await apiFetch('/api/run/' + encodeURIComponent(workflowId) + '/execute', {
+          method: 'POST',
+          body: formData
+        });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || err.error || 'Execution failed (HTTP ' + resp.status + ')');
-      }
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || err.error || 'Execution failed (HTTP ' + resp.status + ')');
+        }
 
-      const result = await resp.json();
-      currentPromptId = result.prompt_id || result.id;
+        const result = await resp.json();
+        currentPromptId = result.prompt_id || result.id;
 
-      if (!currentPromptId) {
-        throw new Error('No prompt_id returned from server.');
-      }
+        if (!currentPromptId) {
+          throw new Error('No prompt_id returned from server.');
+        }
 
-      // Show resolved seeds
-      if (result.seeds) {
-        for (const [key, seedVal] of Object.entries(result.seeds)) {
-          // Per-scene seeds (scene_1, scene_2, etc.)
-          var match = key.match(/^scene_(\d+)$/);
-          if (match) {
-            var sceneIdx = parseInt(match[1]) - 1;
-            var sceneCards = document.querySelectorAll('.scene-card');
-            if (sceneCards[sceneIdx]) {
-              var seedInput = sceneCards[sceneIdx].querySelector('.scene-seed');
-              if (seedInput && Number(seedInput.value) === -1) {
-                var hint = document.createElement('div');
-                hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:2px;';
+        // Show resolved seeds (only for last job to avoid clutter)
+        if (jobIdx === totalJobs - 1 && result.seeds) {
+          for (const [key, seedVal] of Object.entries(result.seeds)) {
+            var match = key.match(/^scene_(\d+)$/);
+            if (match) {
+              var sceneIdx = parseInt(match[1]) - 1;
+              var sceneCards = document.querySelectorAll('.scene-card');
+              if (sceneCards[sceneIdx]) {
+                var seedInput = sceneCards[sceneIdx].querySelector('.scene-seed');
+                if (seedInput && Number(seedInput.value) === -1) {
+                  var hint = document.createElement('div');
+                  hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:2px;';
+                  hint.textContent = 'Used: ' + seedVal;
+                  seedInput.parentElement.appendChild(hint);
+                }
+              }
+            } else {
+              var seedEl = document.querySelector('[data-input-id="' + key + '"]');
+              if (seedEl) {
+                var hint = seedEl.parentElement.querySelector('.seed-used');
+                if (!hint) {
+                  hint = document.createElement('div');
+                  hint.className = 'seed-used';
+                  hint.style.cssText = 'font-size:12px;color:var(--muted);margin-top:2px;';
+                  seedEl.parentElement.appendChild(hint);
+                }
                 hint.textContent = 'Used: ' + seedVal;
-                seedInput.parentElement.appendChild(hint);
               }
-            }
-          } else {
-            // Static workflow seeds
-            var seedEl = document.querySelector('[data-input-id="' + key + '"]');
-            if (seedEl) {
-              var hint = seedEl.parentElement.querySelector('.seed-used');
-              if (!hint) {
-                hint = document.createElement('div');
-                hint.className = 'seed-used';
-                hint.style.cssText = 'font-size:12px;color:var(--muted);margin-top:2px;';
-                seedEl.parentElement.appendChild(hint);
-              }
-              hint.textContent = 'Used: ' + seedVal;
             }
           }
         }
-      }
 
-      // Job queued — toast + re-enable button
-      showToast('&#9989; Job queued \u00b7 <code>' + currentPromptId.substring(0, 12) + '</code>', 5000);
-      $generateBtn.disabled = false;
-      $generateBtn.innerHTML = '&#9654; Generate';
-      currentPromptId = null;
+        queued++;
+        showToast('&#9989; Job ' + (totalJobs > 1 ? queued + '/' + totalJobs + ' ' : '') + 'queued \u00b7 <code>' + currentPromptId.substring(0, 12) + '</code>', 5000);
+        currentPromptId = null;
 
-    } catch (e) {
-      if (e.message !== 'auth') {
-        showExecError(e.message + (currentPromptId ? ' \u00b7 job: ' + currentPromptId : ''));
+      } catch (e) {
+        if (e.message !== 'auth') {
+          showExecError(e.message + (currentPromptId ? ' \u00b7 job: ' + currentPromptId : ''));
+        }
+        currentPromptId = null;
+        break;
       }
-      $generateBtn.disabled = false;
-      $generateBtn.innerHTML = '&#9654; Generate';
-      currentPromptId = null;
     }
+
+    $generateBtn.disabled = false;
+    updateStepper();
   }
 
   // ── Status Polling ──
