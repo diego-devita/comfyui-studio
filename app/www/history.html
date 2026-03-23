@@ -259,9 +259,9 @@
 
   function copyBtn(text) {
     var escaped = String(text).replace(/'/g, "\\'").replace(/\n/g, '\\n');
-    return ' <span style="cursor:pointer;opacity:0.4;font-size:12px;transition:opacity 0.15s;" ' +
+    return ' <span style="cursor:pointer;opacity:0.4;font-size:12px;transition:opacity 0.15s;position:relative;" ' +
       'onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" ' +
-      'onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + escaped + '\').then(function(){event.target.style.opacity=1;setTimeout(function(){event.target.style.opacity=0.4},800);})" ' +
+      'onclick="event.stopPropagation();var el=this;navigator.clipboard.writeText(\'' + escaped + '\').then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" ' +
       'title="Copy"><svg width="11" height="11" viewBox="0 0 448 512" fill="currentColor"><path d="M384 336l-192 0c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l140.1 0L400 115.9 400 320c0 8.8-7.2 16-16 16zM192 384l192 0c35.3 0 64-28.7 64-64l0-204.1c0-12.7-5.1-24.9-14.1-33.9L366.1 14.1c-9-9-21.2-14.1-33.9-14.1L192 0c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64zM64 128c-35.3 0-64 28.7-64 64L0 448c0 35.3 28.7 64 64 64l192 0c35.3 0 64-28.7 64-64l0-32-48 0 0 32c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l32 0 0-48-32 0z"/></svg></span>';
   }
 
@@ -348,9 +348,9 @@
           '<div class="job-info">' +
             '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
             '<div class="job-meta">' +
-              '<span>Q ' + fmtDate(job.queued_at) + '</span>' +
-              '<span>S ' + fmtDate(job.started_at) + '</span>' +
-              (job.duration ? '<span>' + job.duration + 's</span>' : '') +
+              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
+              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
+              (job.duration ? '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;">' + job.duration + 's</span>' : '') +
               '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
             '</div>' +
             (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
@@ -437,7 +437,7 @@
 
   function showDetail(job) {
     var rows = '';
-    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + copyBtn(job.prompt_id) + '</td></tr>';
     rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
     rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
     if (job.output_dir) rows += '<tr><td>Output Dir</td><td>comfyui-studio/' + escHtml(job.output_dir) + '/</td></tr>';
@@ -448,11 +448,11 @@
     if (job.duration) rows += '<tr><td>Duration</td><td>' + job.duration + 's</td></tr>';
 
     // Workflow params
-    rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
+    rows += '<tr><td colspan="2" style="padding:1px 0;border-bottom:none;background:var(--accent);opacity:0.3;"></td></tr>';
     if (job.input_image) {
       var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
-        ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;" onmouseenter="this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
+        ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;opacity:0.4;" onmouseenter="this.style.opacity=0.8;this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.style.opacity=0.4;this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
         '<svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor" style="vertical-align:-2px;"><path d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg>' +
         '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
         '</span></td></tr>';

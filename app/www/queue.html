@@ -555,7 +555,7 @@
     if (job.started_at) rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
 
     // Workflow params
-    rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
+    rows += '<tr><td colspan="2" style="padding:1px 0;border-bottom:none;background:var(--accent);opacity:0.3;"></td></tr>';
     if (job.input_image) {
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) + '</td></tr>';
     }
