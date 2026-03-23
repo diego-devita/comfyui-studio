@@ -390,36 +390,26 @@ body::before {
 
 /* ── Activity Panel (global) ── */
 .nav-activity {
-  margin-left: auto;
-  padding: 8px 12px;
-  cursor: pointer;
-  color: var(--muted);
-  transition: color 0.15s;
   position: relative;
 }
-.nav-activity:hover { color: var(--accent); }
+.nav-activity svg { vertical-align: -2px; }
 .nav-activity .activity-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  display: none;
+  background: var(--muted);
+  margin-left: 4px;
+  vertical-align: middle;
 }
-.nav-activity .activity-dot.has-new { display: block; animation: activityPulse 2s ease-in-out infinite; }
+.nav-activity .activity-dot.connected { background: var(--success); }
+.nav-activity .activity-dot.has-new { background: var(--accent); animation: activityPulse 2s ease-in-out infinite; }
 @keyframes activityPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
 
 .activity-panel {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 250;
   background: var(--bg);
   border-bottom: 2px solid var(--accent);
   max-height: 0;
@@ -427,7 +417,7 @@ body::before {
   transition: max-height 0.3s ease;
 }
 .activity-panel.open {
-  max-height: 50vh;
+  max-height: 250px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
