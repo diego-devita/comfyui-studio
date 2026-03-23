@@ -212,12 +212,16 @@
   .update-overlay-box {
     font-family: var(--mono);
     font-size: 14px;
-    text-align: center;
     padding: 1em 2em;
     border: solid 1px;
     border-radius: var(--radius-card);
     background: var(--surface);
     animation: overlayFlash 1s ease;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
   @keyframes overlayFlash {
     0% { background: rgba(232,255,71,0.15); }
@@ -410,6 +414,7 @@
   }
 
   async function apiFetch(url, opts = {}) {
+    opts.credentials = 'include';
     if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
       opts.headers = {...(opts.headers||{}), 'Content-Type': 'application/json'};
       opts.body = JSON.stringify(opts.body);
@@ -499,6 +504,8 @@
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
     var _defaultUnchecked = { loras: true };
+    var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras' };
+    var svgEye = '<svg width="12" height="12" viewBox="0 0 576 512" fill="currentColor"><path d="M288 80c-65.2 0-118.8 29.6-159.9 67.7C89.6 183.5 63 226 49.4 256c13.6 30 40.2 72.5 78.6 108.3C169.2 402.4 222.8 432 288 432s118.8-29.6 159.9-67.7C486.4 328.5 513 286 526.6 256c-13.6-30-40.2-72.5-78.6-108.3C406.8 109.6 353.2 80 288 80zM95.4 112.6C142.5 68.8 207.2 32 288 32s145.5 36.8 192.6 80.6c46.8 43.5 78.1 95.4 93 131.1c3.3 7.9 3.3 16.7 0 24.6c-14.9 35.7-46.2 87.7-93 131.1C433.5 443.2 368.8 480 288 480s-145.5-36.8-192.6-80.6C48.6 355.9 17.3 303.9 2.4 268.3c-3.3-7.9-3.3-16.7 0-24.6c14.9-35.7 46.2-87.7 93-131.1zM288 192a64 64 0 1 1 0 128 64 64 0 1 1 0-128zm0 176a112 112 0 1 0 0-224 112 112 0 1 0 0 224z"/></svg>';
     components.forEach(c => {
       const row = document.createElement('tr');
       const displayName = labelMap[c.name] || c.name || '--';
@@ -507,8 +514,11 @@
       const color = statusDotColor(c.status || 'ok');
       const displayVersion = typeof c.version === 'number' ? '#' + c.version : (c.version || '--');
       var checked = _defaultUnchecked[c.name] ? '' : 'checked';
+      var eyeHtml = _viewableComps[c.name]
+        ? ' <span style="cursor:pointer;opacity:0.4;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="showCatalogOverlay(\'' + _viewableComps[c.name] + '\',\'' + escHtml(displayName) + '\')" title="View catalog">' + svgEye + '</span>'
+        : '';
       row.innerHTML =
-        '<td>' + escHtml(displayName) + '</td>' +
+        '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
         '<td>' + dotHtml(color, displayStatus) + '</td>' +
@@ -593,7 +603,22 @@
       }, duration);
     }
   }
-  async function showRemoteVersion() {
+  window.showCatalogOverlay = async function(apiUrl, title) {
+    try {
+      var resp = await apiFetch(apiUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      var content = '<div style="font-family:var(--mono);font-size:12px;max-width:700px;text-align:left;">' +
+        '<h3 style="margin:0 0 12px;">' + escHtml(title) + '</h3>' +
+        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;max-height:60vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">' + escHtml(JSON.stringify(data, null, 2)) + '</pre>' +
+        '</div>';
+      showOverlay(content, 'var(--text)', null);
+    } catch (e) {
+      showOverlay('Error: ' + e.message, 'var(--error)', 5000);
+    }
+  }
+
+  window.showRemoteVersion = async function() {
     try {
       var resp = await apiFetch('/api/admin/system/remote-version');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);

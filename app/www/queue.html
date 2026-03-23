@@ -797,8 +797,8 @@
   var $previewImg = document.getElementById('previewImg');
   var $previewStrip = document.getElementById('previewStrip');
   var _previewOpen = true;
-  $previewArea.classList.add('open');
-  $previewToggle.classList.add('open');
+  if ($previewArea) $previewArea.classList.add('open');
+  if ($previewToggle) $previewToggle.classList.add('open');
 
   $previewToggle.addEventListener('click', function() {
     _previewOpen = !_previewOpen;

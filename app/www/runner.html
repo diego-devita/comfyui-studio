@@ -1781,7 +1781,11 @@
     btn.onclick = function() {
       navigator.clipboard.writeText(id).then(function() {
         btn.style.opacity = '1';
-        setTimeout(function() { btn.style.opacity = '0.5'; }, 1000);
+        var tip = document.createElement('span');
+        tip.textContent = 'Copied!';
+        tip.style.cssText = 'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;';
+        btn.appendChild(tip);
+        setTimeout(function() { tip.style.opacity = '0'; setTimeout(function() { tip.remove(); btn.style.opacity = '0.5'; }, 300); }, 3000);
       });
     };
   }
