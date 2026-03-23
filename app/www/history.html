@@ -325,10 +325,14 @@
 
   function fmtDuration(sec) {
     if (!sec) return '';
+    var pill = 'background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;';
+    if (sec < 60) {
+      return '<span style="' + pill + '">' + sec + 's</span>';
+    }
     var m = Math.floor(sec / 60), s = sec % 60;
-    var human = m > 0 ? m + 'm' + (s > 0 ? s + 's' : '') : s + 's';
-    return '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;">' + human + '</span>' +
-           '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;opacity:0.5;">(' + sec + 's)</span>';
+    var human = m + 'm' + (s > 0 ? s + 's' : '');
+    return '<span style="' + pill + '">' + human + '</span>' +
+           '<span style="' + pill + 'opacity:0.5;">(' + sec + 's)</span>';
   }
 
   function copyBtn(text) {
@@ -431,7 +435,7 @@
               '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
               '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
               (job.duration ? fmtDuration(job.duration) : '') +
-              '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+              '<span style="color:bisque;">' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
             '</div>' +
             (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
           '</div>' +
@@ -790,10 +794,10 @@
 
   function startLiveBar() {
     $liveBar.style.transition = 'none';
-    $liveBar.style.transform = 'scaleX(1)';
+    $liveBar.style.transform = 'scaleX(0)';
     $liveBar.offsetHeight;
     $liveBar.style.transition = 'transform ' + POLL_MS + 'ms linear';
-    $liveBar.style.transform = 'scaleX(0)';
+    $liveBar.style.transform = 'scaleX(1)';
   }
 
   function refreshNow() {

@@ -569,6 +569,60 @@
     _runningStartedAt = null;
   }
 
+  // ── Shared progress panel updater ──
+  var _wsConnected = false;
+
+  function fmtEta(sec) {
+    if (sec == null || sec <= 0) return '';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return '~' + (m > 0 ? m + 'm' : '') + s + 's';
+  }
+
+  function updateProgressPanel(runningJob, firstJob) {
+    if (runningJob) {
+      var p = runningJob.progress || {};
+      $progressIdle.style.display = 'none';
+      $progressActive.style.display = '';
+
+      // Line 1: Node + step detail
+      var stepLine = p.node_title || 'Processing...';
+      if (p.total_steps > 0) {
+        stepLine = (p.node_title || 'Processing') + ' \u00b7 step ' + p.step + '/' + p.total_steps;
+        if (p.step_rate) stepLine += ' \u00b7 ' + p.step_rate + ' it/s';
+        var stepEta = fmtEta(p.eta_seconds);
+        if (stepEta) stepLine += ' \u00b7 ' + stepEta;
+      }
+      $progressStep.textContent = stepLine;
+
+      // Progress bar
+      $progressFill.classList.remove('indeterminate');
+      $progressFill.style.width = (p.percent || 0) + '%';
+
+      // Line 2: Global percent + nodes
+      var pctLine = (p.percent || 0) + '%';
+      var eff = p.effective_total || p.total_nodes || 0;
+      if (eff > 0) {
+        pctLine += ' \u00b7 node ' + (p.nodes_done || 0) + '/' + eff;
+        if (p.cached_count > 0) pctLine += ' (' + p.cached_count + ' cached)';
+      }
+      $progressPct.textContent = pctLine;
+
+      // Job ID line (stable)
+      $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id || '') +
+        ' \u00b7 ' + (runningJob.prompt_id || '').substring(0, 12) + '...';
+
+    } else if (firstJob) {
+      $progressIdle.style.display = 'none';
+      $progressActive.style.display = '';
+      $progressStep.textContent = 'Queued \u2014 waiting for execution slot...';
+      $progressFill.classList.add('indeterminate');
+      $progressFill.style.width = '';
+      $progressPct.textContent = '';
+      $progressJobId.textContent = (firstJob.workflow_name || firstJob.workflow_id || '') +
+        ' \u00b7 ' + (firstJob.prompt_id || '').substring(0, 12) + '...';
+    }
+  }
+
   // ── Queue polling ──
   var _pollTimer = null;
 
@@ -598,56 +652,25 @@
         }
       }
 
-      // Update progress panel
+      // Update progress panel — ONLY if WS is not connected (WS is primary source)
+      if (!_wsConnected) {
+        updateProgressPanel(runningJob, jobs[0]);
+      } else if (!runningJob) {
+        // Even with WS, if no running job show queued state
+        updateProgressPanel(null, jobs[0]);
+      }
+      // Always update elapsed timer from poll data (more reliable for started_at)
       if (runningJob) {
-        var p = runningJob.progress;
-        $progressIdle.style.display = 'none';
-        $progressActive.style.display = '';
-        var stepLabel = p.node_title || 'Processing...';
-        if (p.total_steps > 0) {
-          stepLabel = (p.node_title || 'Processing') + ' \u00b7 step ' + p.step + '/' + p.total_steps;
-          if (p.step_rate) stepLabel += ' \u00b7 ' + p.step_rate + ' it/s';
-          if (p.eta_seconds != null && p.eta_seconds > 0) {
-            var em = Math.floor(p.eta_seconds / 60), es = p.eta_seconds % 60;
-            stepLabel += ' \u00b7 ~' + (em > 0 ? em + 'm ' : '') + es + 's';
-          }
-        }
-        $progressStep.textContent = stepLabel;
-        $progressFill.classList.remove('indeterminate');
-        $progressFill.style.width = p.percent + '%';
-        var pctLabel = p.percent + '%';
-        if (p.effective_total > 0) {
-          pctLabel += ' \u00b7 node ' + (p.nodes_done || 0) + '/' + p.effective_total;
-          if (p.cached_count > 0) pctLabel += ' (' + p.cached_count + ' cached)';
-        }
-        $progressPct.textContent = pctLabel;
-        $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id) +
-          ' \u00b7 ' + runningJob.prompt_id.substring(0, 12) + '...';
         var elapsed_ref = runningJob.started_at || runningJob.queued_at;
-        if (elapsed_ref) {
-          if (!_runningStartedAt || _runningStartedAt !== elapsed_ref) {
-            startElapsedTimer(elapsed_ref);
-          }
-        } else {
-          $progressElapsed.textContent = '';
+        if (elapsed_ref && (!_runningStartedAt || _runningStartedAt !== elapsed_ref)) {
+          startElapsedTimer(elapsed_ref);
+        }
+      } else if (jobs[0] && jobs[0].queued_at) {
+        if (!_runningStartedAt || _runningStartedAt !== jobs[0].queued_at) {
+          startElapsedTimer(jobs[0].queued_at);
         }
       } else {
-        // All queued, none running yet
-        var first = jobs[0];
-        $progressIdle.style.display = 'none';
-        $progressActive.style.display = '';
-        $progressStep.textContent = 'Queued \u2014 waiting for execution slot...';
-        $progressFill.classList.add('indeterminate');
-        $progressFill.style.width = '';
-        $progressPct.textContent = '';
-        $progressJobId.textContent = (first.workflow_name || first.workflow_id) +
-          ' \u00b7 ' + first.prompt_id.substring(0, 12) + '...';
-        if (first.queued_at) {
-          if (!_runningStartedAt || _runningStartedAt !== first.queued_at) {
-            startElapsedTimer(first.queued_at);
-          }
-        } else {
-          stopElapsedTimer();
+        stopElapsedTimer();
         }
       }
 
@@ -692,7 +715,7 @@
           '<div class="job-meta">' +
             '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
             (job.started_at ? '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>S</b> ' + fmtDate(job.started_at) + '</span>' : '') +
-            '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+            '<span style="color:bisque;">' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
           '</div>' +
           (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
         '</div>' +
@@ -773,7 +796,9 @@
   var $previewArea = document.getElementById('previewArea');
   var $previewImg = document.getElementById('previewImg');
   var $previewStrip = document.getElementById('previewStrip');
-  var _previewOpen = false;
+  var _previewOpen = true;
+  $previewArea.classList.add('open');
+  $previewToggle.classList.add('open');
 
   $previewToggle.addEventListener('click', function() {
     _previewOpen = !_previewOpen;
@@ -810,49 +835,31 @@
       }
     };
 
+    _ws.onopen = function() { _wsConnected = true; };
     _ws.onclose = function() {
       _ws = null;
+      _wsConnected = false;
       if (!_wsRetry) _wsRetry = setTimeout(function() { _wsRetry = null; connectWS(); }, 3000);
     };
     _ws.onerror = function() { /* onclose will fire */ };
   }
 
   function handleWSProgress(data) {
-    // Update progress panel from WS data
     var status = data.status;
     if (status === 'running') {
       document.getElementById('queueProgress').style.display = '';
-      $progressIdle.style.display = 'none';
-      $progressActive.style.display = '';
 
-      var stepLabel = data.node_title || 'Processing...';
-      if (data.total_steps > 0) {
-        stepLabel = (data.node_title || 'Processing') + ' \u00b7 step ' + data.step + '/' + data.total_steps;
-        if (data.step_rate) stepLabel += ' \u00b7 ' + data.step_rate + ' it/s';
-        if (data.eta_seconds != null && data.eta_seconds > 0) {
-          var em = Math.floor(data.eta_seconds / 60), es = data.eta_seconds % 60;
-          stepLabel += ' \u00b7 ~' + (em > 0 ? em + 'm ' : '') + es + 's';
-        }
-      }
-      $progressStep.textContent = stepLabel;
-      $progressFill.classList.remove('indeterminate');
-      $progressFill.style.width = (data.percent || 0) + '%';
-      var pctLabel = (data.percent || 0) + '%';
-      if (data.effective_total > 0) {
-        pctLabel += ' \u00b7 node ' + (data.nodes_done || 0) + '/' + data.effective_total;
-        if (data.cached_count > 0) pctLabel += ' (' + data.cached_count + ' cached)';
-      }
-      $progressPct.textContent = pctLabel;
-
-      if (data.prompt_id) {
-        $progressJobId.textContent = (data.node_title ? '' : 'Running') +
-          ' \u00b7 ' + data.prompt_id.substring(0, 12) + '...';
-      }
+      var fakeJob = {
+        progress: data,
+        workflow_name: data.workflow_name || '',
+        workflow_id: data.workflow_id || '',
+        prompt_id: data.prompt_id || '',
+      };
+      updateProgressPanel(fakeJob, null);
 
       // Update node output strip
       var outputs = data.node_outputs || {};
-      var outputKeys = Object.keys(outputs);
-      if (outputKeys.length !== Object.keys(_lastNodeOutputs).length) {
+      if (JSON.stringify(Object.keys(outputs)) !== JSON.stringify(Object.keys(_lastNodeOutputs))) {
         _lastNodeOutputs = outputs;
         renderNodeStrip(outputs);
       }
@@ -885,10 +892,10 @@
 
   function startLiveBar() {
     $liveBar.style.transition = 'none';
-    $liveBar.style.transform = 'scaleX(1)';
+    $liveBar.style.transform = 'scaleX(0)';
     $liveBar.offsetHeight;
     $liveBar.style.transition = 'transform ' + POLL_MS + 'ms linear';
-    $liveBar.style.transform = 'scaleX(0)';
+    $liveBar.style.transform = 'scaleX(1)';
   }
 
   document.getElementById('liveIndicator').addEventListener('click', function() {
