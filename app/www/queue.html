@@ -208,7 +208,13 @@
     max-height: 85vh;
     overflow-y: auto;
     position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
+  .job-detail-box::-webkit-scrollbar { width: 6px; }
+  .job-detail-box::-webkit-scrollbar-track { background: transparent; }
+  .job-detail-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  .job-detail-box::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
   .job-detail-box .close-btn {
     position: absolute; top: 12px; right: 16px;
     background: none; border: none; color: var(--muted);
@@ -568,7 +574,7 @@
     if (job.input_image) {
       var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
       rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
-        ' <span style="cursor:pointer;position:relative;display:inline-block;opacity:0.4;" onmouseenter="this.style.opacity=0.8;this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.style.opacity=0.4;this.querySelector(\'.img-preview-popup\').style.display=\'none\'">' +
+        ' <span style="cursor:pointer;position:relative;display:inline-block;opacity:0.4;" onmouseenter="this.style.opacity=0.8;this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.style.opacity=0.4;this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
         '<svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor" style="vertical-align:-2px;"><path d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg>' +
         '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
         '</span></td></tr>';
@@ -598,6 +604,17 @@
   $overlay.addEventListener('click', function(e) {
     if (e.target === $overlay) $overlay.classList.remove('visible');
   });
+
+  // ── Image fullscreen overlay ──
+  var $imgOverlay = document.createElement('div');
+  $imgOverlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;cursor:pointer;';
+  $imgOverlay.addEventListener('click', function() { $imgOverlay.style.display = 'none'; });
+  document.body.appendChild($imgOverlay);
+
+  window.showImageFullscreen = function(url) {
+    $imgOverlay.innerHTML = '<img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">';
+    $imgOverlay.style.display = 'flex';
+  };
 
   // ── Boot ──
   pollTelemetry();
