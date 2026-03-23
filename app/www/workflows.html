@@ -257,9 +257,7 @@
 <!-- Header -->
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Workflow Manager</small></div>
-  <div class="header-actions">
-    <button class="btn" id="syncRefBtn">Sync to ComfyUI</button>
-  </div>
+  <div class="header-actions"></div>
 </header>
 
 <!-- Main content -->
@@ -516,30 +514,6 @@
   }
 
 
-
-  // ── Sync Reference Workflows to ComfyUI ──
-  const $syncRefBtn = document.getElementById('syncRefBtn');
-  $syncRefBtn.addEventListener('click', async () => {
-    $syncRefBtn.disabled = true;
-    $syncRefBtn.innerHTML = '<span class="spinner sm"></span> Syncing...';
-    try {
-      const resp = await apiFetch('/api/admin/workflows/sync-reference', { method: 'POST' });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        alert('Sync error: ' + (err.detail || err.error || resp.status));
-      } else {
-        const data = await resp.json();
-        alert('Synced ' + (data.count || 0) + ' workflow(s) to ComfyUI');
-      }
-    } catch (e) {
-      if (e.message !== 'auth') {
-        alert('Error: ' + e.message);
-      }
-    } finally {
-      $syncRefBtn.disabled = false;
-      $syncRefBtn.textContent = 'Sync to ComfyUI';
-    }
-  });
 
   // ── Boot ──
   initialLoad();
