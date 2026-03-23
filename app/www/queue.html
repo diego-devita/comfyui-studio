@@ -465,9 +465,10 @@
         $progressPct.textContent = p.percent + '%';
         $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id) +
           ' \u00b7 ' + runningJob.prompt_id.substring(0, 12) + '...';
-        if (runningJob.started_at) {
-          if (!_runningStartedAt || _runningStartedAt !== runningJob.started_at) {
-            startElapsedTimer(runningJob.started_at);
+        var elapsed_ref = runningJob.started_at || runningJob.queued_at;
+        if (elapsed_ref) {
+          if (!_runningStartedAt || _runningStartedAt !== elapsed_ref) {
+            startElapsedTimer(elapsed_ref);
           }
         } else {
           $progressElapsed.textContent = '';
@@ -481,10 +482,15 @@
         $progressFill.classList.add('indeterminate');
         $progressFill.style.width = '';
         $progressPct.textContent = '';
-        $progressElapsed.textContent = '';
         $progressJobId.textContent = (first.workflow_name || first.workflow_id) +
           ' \u00b7 ' + first.prompt_id.substring(0, 12) + '...';
-        stopElapsedTimer();
+        if (first.queued_at) {
+          if (!_runningStartedAt || _runningStartedAt !== first.queued_at) {
+            startElapsedTimer(first.queued_at);
+          }
+        } else {
+          stopElapsedTimer();
+        }
       }
 
       // Render job cards
@@ -552,6 +558,7 @@
     }
 
     if (job.params) {
+      rows += '<tr><td colspan="2" style="padding:4px 0;border-bottom:2px solid var(--accent);opacity:0.3;"></td></tr>';
       for (var key in job.params) {
         var val = job.params[key];
         if (key.startsWith('_')) continue;
