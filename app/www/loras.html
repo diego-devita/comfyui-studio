@@ -426,28 +426,23 @@
     border: none;
   }
 
-  /* ── Status badge ── */
+  /* ── Status badge (icon only) ── */
   .status-badge {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border: 1px solid;
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
+    font-size: 16px;
+    cursor: help;
     flex-shrink: 0;
     align-self: flex-start;
     transition: all 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    line-height: 1;
   }
-  .status-badge.present     { color: var(--success); border-color: var(--success); }
-  .status-badge.missing     { color: var(--muted);   border-color: var(--border);  }
-  .status-badge.queued      { color: var(--queued);  border-color: var(--queued);  animation: pulse 2s ease-in-out infinite; }
-  .status-badge.downloading { color: var(--accent);  border-color: var(--accent);  }
-  .status-badge.error       { color: var(--error);   border-color: var(--error);   }
+  .status-badge.present     { color: var(--success); }
+  .status-badge.missing     { color: var(--muted); }
+  .status-badge.queued      { color: var(--queued); animation: pulse 2s ease-in-out infinite; }
+  .status-badge.downloading { color: var(--accent); }
+  .status-badge.error       { color: var(--error); }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -721,11 +716,11 @@
   <div class="filter-row">
     <span class="filter-label">Status</span>
     <div id="statusFilters" class="tag-group">
-      <button class="filter-tag active" data-status="present">present</button>
-      <button class="filter-tag active" data-status="missing">missing</button>
-      <button class="filter-tag active" data-status="queued">queued</button>
-      <button class="filter-tag active" data-status="downloading">downloading</button>
-      <button class="filter-tag active" data-status="error">error</button>
+      <button class="filter-tag active" data-status="present">&#10003; present</button>
+      <button class="filter-tag active" data-status="missing">&#10005; missing</button>
+      <button class="filter-tag active" data-status="queued">&#9719; queued</button>
+      <button class="filter-tag active" data-status="downloading">&#8595; downloading</button>
+      <button class="filter-tag active" data-status="error">&#9888; error</button>
     </div>
   </div>
   <div class="filter-row">
@@ -1263,7 +1258,7 @@
         '</div>' +
         '<span class="card-compact-size" data-ref="compactSize"></span>' +
         '<span class="card-compact-source" data-ref="compactSource"></span>' +
-        '<div class="status-badge missing" data-ref="badge">MISSING</div>' +
+        '<div class="status-badge missing" data-ref="badge" title="Missing">\u2715</div>' +
       '</div>' +
       '<div class="card-tags" data-ref="tags"></div>' +
       '<div class="progress-wrap" data-ref="progress">' +
@@ -1370,7 +1365,8 @@
 
     switch (m.status) {
       case 'present':
-        badge.textContent = '\u2713 PRESENT';
+        badge.textContent = '\u2713';
+        badge.title = 'Installed';
         btn.className = 'btn btn--sm btn--danger';
         btn.disabled = false;
         btn.innerHTML = '\uD83D\uDDD1 Delete';
@@ -1380,7 +1376,8 @@
         break;
 
       case 'missing':
-        badge.textContent = 'MISSING';
+        badge.textContent = '\u2715';
+        badge.title = 'Missing';
         btn.className = 'btn btn--sm';
         btn.disabled = false;
         btn.innerHTML = '\u2193 Download';
@@ -1390,7 +1387,8 @@
         break;
 
       case 'queued':
-        badge.textContent = 'QUEUED';
+        badge.textContent = '\u25F7';
+        badge.title = 'Queued';
         btn.className = 'btn btn--sm';
         btn.disabled = true;
         btn.textContent = 'Queued...';
@@ -1400,7 +1398,8 @@
         break;
 
       case 'downloading':
-        badge.innerHTML = '<span class="spinner sm"></span>DOWNLOADING';
+        badge.textContent = '\u2193';
+        badge.title = 'Downloading';
         btn.className = 'btn btn--sm';
         btn.disabled = true;
         btn.textContent = 'Downloading...';
@@ -1432,7 +1431,8 @@
         break;
 
       case 'error':
-        badge.textContent = 'ERROR';
+        badge.textContent = '\u26A0';
+        badge.title = 'Error';
         btn.className = 'btn btn--sm';
         btn.disabled = false;
         btn.innerHTML = '\u21BB Retry';
