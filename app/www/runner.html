@@ -582,24 +582,7 @@
     <!-- Execution error -->
     <div class="exec-error" id="execError"></div>
 
-    <!-- Progress -->
-    <div class="progress-panel" id="progressPanel">
-      <div class="progress-step" id="progressStep">Preparing...</div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" id="progressFill"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div class="progress-pct" id="progressPct"></div>
-        <div class="progress-pct" id="progressElapsed" style="color:var(--muted);"></div>
-      </div>
-      <div id="progressJobId" style="display:none;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted);display:none;">
-        <span style="opacity:0.6;">Job:</span>
-        <code id="jobIdText" style="user-select:all;margin:0 6px;"></code>
-        <span id="jobIdCopy" style="cursor:pointer;opacity:0.5;transition:opacity 0.15s;" title="Copy">&#128203;</span>
-      </div>
-    </div>
-
-    <!-- Result -->
+    <!-- Result (kept for error display) -->
     <div class="result-panel" id="resultPanel"></div>
 
     <!-- Image Picker Overlay -->
@@ -1380,16 +1363,8 @@
 
   async function executeWorkflow() {
     $generateBtn.disabled = true;
-    $generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
+    $generateBtn.innerHTML = '<span class="spinner"></span> Submitting...';
     $execError.classList.remove('visible');
-    $resultPanel.classList.remove('visible');
-    $progressPanel.classList.add('visible');
-    $progressStep.textContent = 'Submitting...';
-    $progressFill.style.width = '0%';
-    $progressFill.classList.remove('indeterminate');
-    $progressPct.textContent = '';
-    $progressElapsed.textContent = '';
-    startElapsedTimer();
 
     try {
       const formData = new FormData();
@@ -1489,17 +1464,29 @@
         }
       }
 
-      $progressStep.textContent = 'Queued...';
-      $progressFill.classList.add('indeterminate');
-      showJobId(currentPromptId);
-      startStatusPolling();
+      // Job queued successfully — show confirmation
+      $generateBtn.innerHTML = '&#9989; Job queued \u00b7 ' + currentPromptId.substring(0, 8) + '...';
+      $generateBtn.style.position = 'relative';
+      $generateBtn.style.overflow = 'hidden';
+
+      // 5s progress bar inside button then reset
+      var qBar = document.createElement('div');
+      qBar.style.cssText = 'position:absolute;top:0;left:0;bottom:0;width:0%;background:var(--accent);opacity:0.2;z-index:0;transition:width 5s linear;';
+      $generateBtn.appendChild(qBar);
+      qBar.offsetHeight;
+      qBar.style.width = '100%';
+
+      setTimeout(function() {
+        $generateBtn.disabled = false;
+        $generateBtn.innerHTML = '&#9654; Generate';
+        $generateBtn.style.position = '';
+        $generateBtn.style.overflow = '';
+      }, 5000);
 
     } catch (e) {
-      stopElapsedTimer();
       if (e.message !== 'auth') {
         showExecError(e.message + (currentPromptId ? ' \u00b7 job: ' + currentPromptId : ''));
       }
-      $progressPanel.classList.remove('visible');
       $generateBtn.disabled = false;
       $generateBtn.innerHTML = '&#9654; Generate';
     }

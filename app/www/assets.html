@@ -336,6 +336,8 @@
     .then(function(r) { return r.json(); })
     .then(function(data) {
       $deleteBtn.disabled = false;
+      $deleteBtn.textContent = 'Delete selected';
+      $deleteBtn.style.visibility = 'hidden';
       $selectAll.checked = false;
       loadAssets();
     })
