@@ -261,6 +261,46 @@
     50% { opacity: 0.5; }
   }
 
+  /* ── Live indicator ── */
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+  .live-indicator:hover { border-color: var(--accent); color: var(--text); }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(68,255,136,0.4); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(68,255,136,0); }
+  }
+  .live-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    width: 100%;
+    background: var(--accent);
+    transform-origin: left;
+    opacity: 0.4;
+  }
+
   .empty-state {
     font-family: var(--mono);
     font-size: 13px;
@@ -341,6 +381,11 @@
 
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Job Queue</small></div>
+  <div class="live-indicator" id="liveIndicator" title="Auto-refreshing · Click to refresh now">
+    <span class="live-dot"></span>
+    <span>LIVE</span>
+    <div class="live-bar" id="liveBar"></div>
+  </div>
 </header>
 
 <main>
@@ -834,13 +879,31 @@
     $previewStrip.innerHTML = html || '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);">No node outputs yet</span>';
   }
 
+  // ── Live indicator bar ──
+  var POLL_MS = 2000;
+  var $liveBar = document.getElementById('liveBar');
+
+  function startLiveBar() {
+    $liveBar.style.transition = 'none';
+    $liveBar.style.transform = 'scaleX(1)';
+    $liveBar.offsetHeight;
+    $liveBar.style.transition = 'transform ' + POLL_MS + 'ms linear';
+    $liveBar.style.transform = 'scaleX(0)';
+  }
+
+  document.getElementById('liveIndicator').addEventListener('click', function() {
+    pollQueue();
+    startLiveBar();
+  });
+
   // ── Boot ──
   pollTelemetry();
   setInterval(pollTelemetry, 3000);
 
-  // Initial queue poll + start timer (always poll, even when empty)
+  // Queue poll + live bar
   pollQueue();
-  _pollTimer = setInterval(pollQueue, 2000);
+  startLiveBar();
+  _pollTimer = setInterval(function() { pollQueue(); startLiveBar(); }, POLL_MS);
 
   // Start WebSocket
   connectWS();
