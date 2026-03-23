@@ -1,9 +1,9 @@
 {
-  "app_version": "9.6.1",
-  "date": "2026-03-23 14:30",
+  "app_version": "9.6.2",
+  "date": "2026-03-23 14:31",
   "components": {
     "backend": {"version": "9.2.0", "date": "2026-03-23 12:02", "file": "app/main.py"},
-    "frontend": {"version": "9.6.1", "date": "2026-03-23 14:30", "dir": "app/www/"},
+    "frontend": {"version": "9.6.2", "date": "2026-03-23 14:31", "dir": "app/www/"},
     "models": {"version": 20, "date": "2026-03-23 01:28", "file": "app/models.json"},
     "workflows": {"version": 30, "date": "2026-03-23 01:46", "dir": "workflows/"}
   }

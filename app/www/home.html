@@ -559,7 +559,9 @@
         return;
       }
 
-      // No updates — retry or stop
+      // No updates — show overlay, then retry or stop
+      showOverlay('Everything is up to date.', 'var(--muted)', 5000);
+
       if (attempt >= MAX_ATTEMPTS) {
         showOverlay('No updates found after ' + MAX_ATTEMPTS + ' attempts.', 'var(--muted)', 5000);
         stopUpdatePolling();
