@@ -94,6 +94,91 @@
     color: var(--muted);
   }
 
+  /* ── Preview area (expandable) ── */
+  .preview-toggle {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    margin-top: 8px;
+    padding: 4px 0;
+    transition: color 0.15s;
+    user-select: none;
+  }
+  .preview-toggle:hover { color: var(--text); }
+  .preview-toggle::after { content: ' \25BC'; font-size: 8px; }
+  .preview-toggle.open::after { content: ' \25B2'; }
+
+  .preview-area {
+    display: none;
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .preview-area.open { display: block; }
+
+  .preview-live {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .preview-live img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .preview-live-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .preview-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .preview-strip::-webkit-scrollbar { height: 4px; }
+  .preview-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .preview-strip-item {
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+  .preview-strip-item:hover { border-color: var(--accent); }
+  .preview-strip-item img {
+    display: block;
+    height: 64px;
+    width: auto;
+  }
+  .preview-strip-item .strip-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.7);
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--text);
+    padding: 2px 4px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* ── Job Cards ── */
   .queue-list { display: flex; flex-direction: column; gap: 12px; }
 
@@ -276,6 +361,15 @@
         <span id="progressElapsed"></span>
       </div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="progressJobId"></div>
+      <div class="preview-toggle" id="previewToggle">Preview</div>
+      <div class="preview-area" id="previewArea">
+        <div class="preview-live" id="previewLive">
+          <div class="preview-live-label">Sampler output</div>
+          <img id="previewImg" style="display:none;">
+        </div>
+        <div class="preview-live-label" style="margin-top:8px;">Node outputs</div>
+        <div class="preview-strip" id="previewStrip"></div>
+      </div>
     </div>
   </div>
 
@@ -629,6 +723,117 @@
     $imgOverlay.style.display = 'flex';
   };
 
+  // ── Preview toggle ──
+  var $previewToggle = document.getElementById('previewToggle');
+  var $previewArea = document.getElementById('previewArea');
+  var $previewImg = document.getElementById('previewImg');
+  var $previewStrip = document.getElementById('previewStrip');
+  var _previewOpen = false;
+
+  $previewToggle.addEventListener('click', function() {
+    _previewOpen = !_previewOpen;
+    $previewArea.classList.toggle('open', _previewOpen);
+    $previewToggle.classList.toggle('open', _previewOpen);
+  });
+
+  // ── WebSocket for real-time progress + preview ──
+  var _ws = null;
+  var _wsRetry = null;
+  var _lastNodeOutputs = {};
+
+  function connectWS() {
+    if (_ws && _ws.readyState <= 1) return;
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    _ws = new WebSocket(proto + '//' + location.host + '/api/run/ws');
+
+    _ws.onmessage = function(e) {
+      if (typeof e.data === 'string') {
+        // JSON progress update
+        try {
+          var data = JSON.parse(e.data);
+          handleWSProgress(data);
+        } catch (_) {}
+      } else {
+        // Binary preview frame (JPEG)
+        if (_previewOpen) {
+          var blob = new Blob([e.data], { type: 'image/jpeg' });
+          var url = URL.createObjectURL(blob);
+          $previewImg.onload = function() { URL.revokeObjectURL(url); };
+          $previewImg.src = url;
+          $previewImg.style.display = '';
+        }
+      }
+    };
+
+    _ws.onclose = function() {
+      _ws = null;
+      if (!_wsRetry) _wsRetry = setTimeout(function() { _wsRetry = null; connectWS(); }, 3000);
+    };
+    _ws.onerror = function() { /* onclose will fire */ };
+  }
+
+  function handleWSProgress(data) {
+    // Update progress panel from WS data
+    var status = data.status;
+    if (status === 'running') {
+      document.getElementById('queueProgress').style.display = '';
+      $progressIdle.style.display = 'none';
+      $progressActive.style.display = '';
+
+      var stepLabel = data.node_title || 'Processing...';
+      if (data.total_steps > 0) {
+        stepLabel = (data.node_title || 'Processing') + ' \u00b7 step ' + data.step + '/' + data.total_steps;
+        if (data.step_rate) stepLabel += ' \u00b7 ' + data.step_rate + ' it/s';
+        if (data.eta_seconds != null && data.eta_seconds > 0) {
+          var em = Math.floor(data.eta_seconds / 60), es = data.eta_seconds % 60;
+          stepLabel += ' \u00b7 ~' + (em > 0 ? em + 'm ' : '') + es + 's';
+        }
+      }
+      $progressStep.textContent = stepLabel;
+      $progressFill.classList.remove('indeterminate');
+      $progressFill.style.width = (data.percent || 0) + '%';
+      var pctLabel = (data.percent || 0) + '%';
+      if (data.effective_total > 0) {
+        pctLabel += ' \u00b7 node ' + (data.nodes_done || 0) + '/' + data.effective_total;
+        if (data.cached_count > 0) pctLabel += ' (' + data.cached_count + ' cached)';
+      }
+      $progressPct.textContent = pctLabel;
+
+      if (data.prompt_id) {
+        $progressJobId.textContent = (data.node_title ? '' : 'Running') +
+          ' \u00b7 ' + data.prompt_id.substring(0, 12) + '...';
+      }
+
+      // Update node output strip
+      var outputs = data.node_outputs || {};
+      var outputKeys = Object.keys(outputs);
+      if (outputKeys.length !== Object.keys(_lastNodeOutputs).length) {
+        _lastNodeOutputs = outputs;
+        renderNodeStrip(outputs);
+      }
+    }
+  }
+
+  function renderNodeStrip(outputs) {
+    var html = '';
+    for (var nid in outputs) {
+      var node = outputs[nid];
+      var items = node.items || [];
+      items.forEach(function(item) {
+        if (item.media === 'image') {
+          var src = '/api/comfyui/view?filename=' + encodeURIComponent(item.filename) +
+            '&type=' + encodeURIComponent(item.type) +
+            (item.subfolder ? '&subfolder=' + encodeURIComponent(item.subfolder) : '');
+          html += '<div class="preview-strip-item" onclick="showImageFullscreen(\'' + src.replace(/'/g, "\\'") + '\')">' +
+            '<img src="' + src + '">' +
+            '<div class="strip-label">' + escHtml(node.node_title) + '</div>' +
+          '</div>';
+        }
+      });
+    }
+    $previewStrip.innerHTML = html || '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);">No node outputs yet</span>';
+  }
+
   // ── Boot ──
   pollTelemetry();
   setInterval(pollTelemetry, 3000);
@@ -636,6 +841,9 @@
   // Initial queue poll + start timer (always poll, even when empty)
   pollQueue();
   _pollTimer = setInterval(pollQueue, 2000);
+
+  // Start WebSocket
+  connectWS();
 
 })();
 </script>
