@@ -1,8 +1,8 @@
 id: i2i-batch
 category: i2i
 name: "Image to Image (Batch)"
-version: 2
-date: "2026-03-23 00:49"
+version: 3
+date: "2026-03-23 01:05"
 type: dynamic
 description: "Image-to-image with checkpoint, CLIP skip, LoRA stack, and batch variations. Generates N variations of the input image with different seeds."
 author: ""
@@ -21,16 +21,19 @@ inputs:
     name: "Input Image"
     type: image
     required: true
+    tooltip: "The image to transform. It gets encoded into latent space via VAE, then the KSampler partially re-generates it guided by your prompt and LoRAs. The denoise strength controls how much of the original survives. Use any image — photos, drawings, screenshots."
 
   - id: checkpoint
     name: "Checkpoint"
     type: checkpoint_picker
     required: true
+    tooltip: "The model that defines the output style. Realistic checkpoints (CyberRealistic, RealVisXL) keep things photorealistic. Anime checkpoints (WAI-illustrious, Pony) will stylize the image. The checkpoint's VAE is used to encode/decode — mismatching can cause color shifts."
 
   - id: loras
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5
+    tooltip: "Optional LoRAs to steer the style or concept. At low denoise (0.3-0.5) LoRAs have subtle effect since most of the original image is preserved. At higher denoise (0.6-0.8) LoRAs have more room to reshape the output. Include trigger words in the prompt."
 
   - id: clip_skip
     name: "CLIP Skip"
@@ -38,6 +41,7 @@ inputs:
     min: -12
     max: -1
     default: -2
+    tooltip: "CLIP layers to skip. -2 is standard for most models (Pony, Illustrious, many SD 1.5). -1 uses all layers for more literal prompt interpretation."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -45,12 +49,14 @@ inputs:
     required: true
     default: ""
     placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes what the output should look like. At low denoise the prompt is a gentle nudge — the original image dominates. At high denoise the prompt takes over. Quality tags help. If using LoRAs, include their trigger words here."
 
   - id: negative_prompt
     name: "Negative Prompt"
     type: text
     required: false
     default: "bad quality, worst quality, low quality"
+    tooltip: "What to avoid in the output. Works more strongly at higher denoise values. Standard negatives (bad quality, deformed, ugly) are always useful."
 
   - id: denoise
     name: "Denoise Strength"
@@ -59,6 +65,7 @@ inputs:
     max: 1.0
     step: 0.05
     default: 0.5
+    tooltip: "THE most important parameter for i2i. Controls how much of the original image is destroyed and regenerated. 0.0 = no change (identical copy). 0.2-0.3 = subtle tweaks, colors/lighting shift. 0.4-0.5 = noticeable changes, composition preserved. 0.6-0.7 = major rework, subject may shift. 0.8-1.0 = almost fully regenerated, original barely visible. Start at 0.5 and adjust."
 
   - id: batch_count
     name: "Batch Count"
@@ -66,6 +73,7 @@ inputs:
     min: 1
     max: 50
     default: 1
+    tooltip: "Number of variations to generate. Each uses a different seed but the same input image and denoise. Useful for exploring different interpretations — especially at denoise 0.4-0.6 where results vary significantly per seed. Each variation runs as a separate KSampler pass."
 
   - id: steps
     name: "Steps"
@@ -73,6 +81,7 @@ inputs:
     min: 1
     max: 100
     default: 19
+    tooltip: "Denoising steps. For i2i you can often use fewer steps than t2i since you're not starting from pure noise. 15-20 is usually enough. More steps at low denoise won't improve much — the image is already mostly formed."
 
   - id: cfg
     name: "CFG Scale"
@@ -81,6 +90,7 @@ inputs:
     max: 30.0
     step: 0.5
     default: 4.0
+    tooltip: "Prompt adherence. Low (2-5) = natural, follows the original image more. High (8+) = forces the prompt harder, can cause artifacts especially at low denoise. For i2i, lower CFG often works better than t2i because the latent already has structure."
 
   - id: sampler_name
     name: "Sampler"
@@ -95,6 +105,7 @@ inputs:
       - {label: "UniPC", value: "uni_pc"}
       - {label: "LMS", value: "lms"}
     default: "euler_ancestral"
+    tooltip: "Denoising algorithm. Euler Ancestral adds randomness — good for variety in batch runs. DPM++ 2M is deterministic and clean. For i2i at low denoise, the sampler matters less since most of the image is preserved."
 
   - id: scheduler
     name: "Scheduler"
@@ -106,11 +117,13 @@ inputs:
       - {label: "SGM Uniform", value: "sgm_uniform"}
       - {label: "Simple", value: "simple"}
     default: "normal"
+    tooltip: "Noise schedule. Normal or Karras are safe choices. Karras can produce slightly sharper results."
 
   - id: seed
     name: "Seed"
     type: seed
     default: -1
+    tooltip: "Random seed. -1 = random each time. With batch_count > 1, each variation gets a different seed (base + increment). Set a specific seed to reproduce a result, then adjust denoise or prompt to refine."
 
 outputs:
   - id: image

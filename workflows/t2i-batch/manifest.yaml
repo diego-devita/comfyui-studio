@@ -1,8 +1,8 @@
 id: t2i-batch
 category: t2i
 name: "Text to Image (Batch)"
-version: 2
-date: "2026-03-23 00:49"
+version: 3
+date: "2026-03-23 01:05"
 type: dynamic
 description: "Simple text-to-image with checkpoint, CLIP skip, LoRA stack, and native batch support. Generates N images in one pass."
 author: ""
@@ -20,11 +20,13 @@ inputs:
     name: "Checkpoint"
     type: checkpoint_picker
     required: true
+    tooltip: "The base model that defines the visual style of generated images. Realistic checkpoints produce photos, anime checkpoints produce illustrations. Choose one matching your intent — the entire output style depends on this."
 
   - id: loras
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5
+    tooltip: "Optional add-ons that modify the checkpoint's behavior. LoRAs can add specific styles, characters, concepts, or poses. Stack up to 5 with individual strength control. Include trigger words in your prompt for them to activate."
 
   - id: clip_skip
     name: "CLIP Skip"
@@ -32,6 +34,7 @@ inputs:
     min: -12
     max: -1
     default: -2
+    tooltip: "CLIP layers to skip. -2 is standard for Pony, Illustrious, and many SD 1.5 models. -1 uses all layers for more literal prompt interpretation. Check your checkpoint's recommendation."
 
   - id: positive_prompt
     name: "Positive Prompt"
@@ -39,12 +42,14 @@ inputs:
     required: true
     default: ""
     placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes what you want to generate. Start with quality tags (masterpiece, best quality), then subject, then details. More specific = more control. Include LoRA trigger words if using LoRAs. Prompt order matters — earlier words have slightly more weight."
 
   - id: negative_prompt
     name: "Negative Prompt"
     type: text
     required: false
     default: "bad quality, worst quality, low quality"
+    tooltip: "What to avoid. Standard negatives (bad quality, worst quality, deformed, ugly) improve almost every generation. Add specific exclusions as needed (e.g. 'glasses', 'watermark', 'text')."
 
   - id: resolution
     name: "Resolution"
@@ -56,6 +61,7 @@ inputs:
       illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
       flux: [{label: "1024x1024", w: 1024, h: 1024}, {label: "768x1344", w: 768, h: 1344}, {label: "1344x768", w: 1344, h: 768}]
     default: {w: 832, h: 1216}
+    tooltip: "Output image size. Must match your checkpoint's training resolution — SD 1.5 at 512px, SDXL/Pony/Illustrious at 1024px. Portrait (832x1216) for vertical, landscape (1216x832) for horizontal. Wrong resolution = distorted anatomy and poor quality."
 
   - id: batch_size
     name: "Batch Size"
@@ -63,6 +69,7 @@ inputs:
     min: 1
     max: 100
     default: 1
+    tooltip: "Number of images generated in a single KSampler pass. All share the same prompt/settings but get different noise, producing variations. Higher = more VRAM. At 1024px with SDXL, ~10-20 is safe. All images land in the same job folder."
 
   - id: steps
     name: "Steps"
@@ -70,6 +77,7 @@ inputs:
     min: 1
     max: 100
     default: 19
+    tooltip: "Denoising iterations. More steps = more refined but slower. 15-25 is the sweet spot for most models. Below 10 is noisy, above 30 rarely helps. Euler Ancestral works well with fewer steps (15-20)."
 
   - id: cfg
     name: "CFG Scale"
@@ -78,6 +86,7 @@ inputs:
     max: 30.0
     step: 0.5
     default: 4.0
+    tooltip: "How strictly the model follows the prompt. Low (2-5) = creative, natural, soft. Medium (6-8) = balanced. High (9+) = strict but can look artificial or burnt. Pony/Illustrious: 3-5. SD 1.5: 7-9. Too high causes color saturation and artifacts."
 
   - id: sampler_name
     name: "Sampler"
@@ -92,6 +101,7 @@ inputs:
       - {label: "UniPC", value: "uni_pc"}
       - {label: "LMS", value: "lms"}
     default: "euler_ancestral"
+    tooltip: "The denoising algorithm. Euler Ancestral adds randomness — every run is different, great for exploration and batch variety. DPM++ 2M converges fast and is deterministic. DPM++ SDE is a middle ground. For batch generation, Euler Ancestral gives the most diverse results."
 
   - id: scheduler
     name: "Scheduler"
@@ -103,6 +113,7 @@ inputs:
       - {label: "SGM Uniform", value: "sgm_uniform"}
       - {label: "Simple", value: "simple"}
     default: "normal"
+    tooltip: "Controls the noise removal schedule across steps. Normal is linear. Karras front-loads detail work (popular, slightly sharper). Exponential is aggressive then gentle. Most people use Normal or Karras."
 
   - id: denoise
     name: "Denoise"
@@ -111,11 +122,13 @@ inputs:
     max: 1.0
     step: 0.05
     default: 1.0
+    tooltip: "Keep at 1.0 for text-to-image — you're generating from empty latent so full denoising is needed. Values below 1.0 only make sense for img2img workflows."
 
   - id: seed
     name: "Seed"
     type: seed
     default: -1
+    tooltip: "Random seed for reproducibility. -1 = random each time. Set a specific number to get the exact same image again (same prompt, settings, and seed = same result). With batch_size > 1, each image in the batch gets unique noise."
 
 outputs:
   - id: image
