@@ -36,6 +36,40 @@
 
   main { padding: 32px 40px 64px; }
 
+  /* ── Live indicator ── */
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s;
+    user-select: none;
+  }
+  .live-indicator:hover { border-color: var(--accent); color: var(--text); }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(68,255,136,0.4); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(68,255,136,0); }
+  }
+  .live-refresh {
+    display: inline-block;
+    transition: transform 0.4s ease;
+  }
+  .live-refresh.spinning { animation: refreshSpin 0.6s linear; }
+  @keyframes refreshSpin { to { transform: rotate(360deg); } }
+
   .history-list { display: flex; flex-direction: column; gap: 12px; }
 
   .job-card {
@@ -205,6 +239,12 @@
 <!-- Header -->
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Job History</small></div>
+  <div class="live-indicator" id="liveIndicator" title="Auto-refreshing · Click to refresh now">
+    <span class="live-dot"></span>
+    <span>LIVE</span>
+    <span id="liveAgo"></span>
+    <span class="live-refresh" id="liveRefresh"><svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H352c-17.7 0-32 14.3-32 32s14.3 32 32 32h111.5c0 0 .1 0 .1 0c.4 0 .8 0 1.2-.1c3.4-.3 6.6-1.2 9.6-2.8c3-1.5 5.7-3.6 7.9-6.2c1.4-1.6 2.5-3.3 3.5-5.2c.5-.9 .9-1.9 1.3-2.9c.4-1.1 .7-2.2 .9-3.3c.4-2 .6-4.1 .6-6.2V32c0-17.7-14.3-32-32-32s-32 14.3-32 32v64.3L404.6 68.9C317.2-18.5 178.9-18.5 91.5 68.9c-24.8 24.8-42.1 55.1-52 87.6c-5.6 18.4 4.6 38 23.1 43.6s38-4.6 43.6-23.1zM406.9 309.4c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0L125.7 352H160c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.5c-0.4 0-.8 0-1.2 .1c-3.4 .3-6.6 1.2-9.6 2.8c-3 1.5-5.7 3.6-7.9 6.2c-1.4 1.6-2.5 3.3-3.5 5.2c-.5 .9-.9 1.9-1.3 2.9c-.4 1.1-.7 2.2-.9 3.3c-.4 2-.6 4.1-.6 6.2V480c0 17.7 14.3 32 32 32s32-14.3 32-32V415.7l17.1 17.1c87.4 87.4 225.7 87.4 313.1 0c24.8-24.8 42.1-55.1 52-87.6c5.6-18.4-4.6-38-23.1-43.6s-38 4.6-43.6 23.1z"/></svg></span>
+  </div>
 </header>
 
 <!-- Main content -->
@@ -348,9 +388,9 @@
           '<div class="job-info">' +
             '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
             '<div class="job-meta">' +
-              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
-              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
-              (job.duration ? '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;margin-left:1em;border-radius:3px;">' + job.duration + 's</span>' : '') +
+              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
+              '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
+              (job.duration ? '<span style="background:rgba(47,55,61,0.95);padding:0 .5em;border-radius:3px;">' + job.duration + 's</span>' : '') +
               '<span>' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
             '</div>' +
             (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
@@ -673,6 +713,33 @@
     $imgOverlay.innerHTML = '<img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">';
     $imgOverlay.style.display = 'flex';
   }
+
+  // ── Live auto-refresh ──
+  var _lastRefresh = Date.now();
+  var $liveAgo = document.getElementById('liveAgo');
+  var $liveRefresh = document.getElementById('liveRefresh');
+
+  function refreshNow() {
+    $liveRefresh.classList.add('spinning');
+    loadHistory().then(function() {
+      _lastRefresh = Date.now();
+      setTimeout(function() { $liveRefresh.classList.remove('spinning'); }, 600);
+    });
+  }
+
+  document.getElementById('liveIndicator').addEventListener('click', refreshNow);
+
+  // Update "Xs ago" label
+  setInterval(function() {
+    var s = Math.floor((Date.now() - _lastRefresh) / 1000);
+    $liveAgo.textContent = s < 2 ? '' : s + 's ago';
+  }, 1000);
+
+  // Auto-poll every 5s
+  setInterval(function() {
+    _lastRefresh = Date.now();
+    loadHistory();
+  }, 5000);
 
   loadHistory();
 })();
