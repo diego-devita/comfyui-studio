@@ -1,4 +1,5 @@
 CLAUDE.md
 tools/
-workflows/reference/
+workflows/.reference/
+catalogs/.drafts/
 __pycache__/
