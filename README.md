@@ -174,6 +174,7 @@ Application code, catalogs, and workflows live in this Git repository as source 
 | `COMFYUI_DIR` | `/workspace/ComfyUI` | ComfyUI installation path |
 | `COMFYUI_FLAGS` | `--highvram` | VRAM mode: `--highvram` (>24 GB), `--normalvram` (12-24 GB), `--lowvram` (<12 GB) |
 | `COMFYUI_EXTRA_ARGS` | _(empty)_ | Additional ComfyUI launch flags |
+| `STUDIO_PORT` | `8000` | Studio backend port |
 | `COMFYUI_PORT` | `8188` | ComfyUI port |
 | `LLAMA_SERVER_PATH` | `/opt/llama-server` | Path to llama.cpp binary |
 | `LLAMA_SERVER_PORT` | `8080` | llama-server port |

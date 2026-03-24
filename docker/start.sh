@@ -6,6 +6,7 @@ echo "=== ComfyUI Studio — starting ==="
 COMFYUI_IMAGE="/comfyui"
 COMFYUI_VOLUME="/workspace/ComfyUI"
 STUDIO_DIR="${STUDIO_DIR:-/workspace/studio}"
+STUDIO_PORT="${STUDIO_PORT:-8000}"
 
 # ── STEP 0: Bootstrap Studio app if not present ──────────────────
 if [ ! -f "${STUDIO_DIR}/backend/main.py" ]; then
@@ -69,12 +70,12 @@ echo "[3/3] Starting Studio backend on port 8000..."
 cd "${STUDIO_DIR}/backend"
 uvicorn main:app \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port ${STUDIO_PORT} \
     --workers 1 \
     2>&1 | tee -a /var/log/admin.log &
 
 echo "=== Services started ==="
-echo "    ComfyUI Studio: https://PODID-8000.proxy.runpod.net"
+echo "    ComfyUI Studio: https://PODID-${STUDIO_PORT}.proxy.runpod.net"
 echo "    ComfyUI:        https://PODID-8188.proxy.runpod.net"
 
 # Keep the container alive while any service is running

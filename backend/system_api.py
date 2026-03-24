@@ -434,7 +434,7 @@ async def system_update(request: Request):
                 os.chdir(str(BACKEND_DIR))
                 os.execv(
                     shutil.which("uvicorn"),
-                    ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"],
+                    ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"), "--workers", "1"],
                 )
             asyncio.get_event_loop().create_task(_restart())
 

@@ -1,4 +1,5 @@
 CLAUDE.md
+.context/
 tools/
 workflows/.reference/
 catalogs/.drafts/
