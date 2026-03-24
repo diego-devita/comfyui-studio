@@ -517,8 +517,8 @@
     }
     presentModels.forEach(function(m) {
       var opt = document.createElement('option');
-      opt.value = m.name || m.filename;
-      opt.textContent = m.name || m.filename;
+      opt.value = m.file;
+      opt.textContent = m.name || m.file;
       $modelSelect.appendChild(opt);
     });
     $modelSelect.disabled = false;
