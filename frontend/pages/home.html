@@ -269,7 +269,7 @@
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
     <button class="btn" id="updateBtn"><span id="updateBtnText" style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div></button>
-    <div class="header-meta">Last updated: <span id="lastUpdated">--</span> <span id="versionLinks"></span></div>
+    <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
   </div>
 </header>
 
@@ -407,23 +407,6 @@
       $lastUpdated.textContent = date;
     }
 
-    // Version links (dynamic from repo_base)
-    var repoBase = data.repo_base || '';
-    var svgExtLink = '<span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span>';
-    var svgServer = '<span class="icon icon-server icon-sm" style="vertical-align:-1px;"></span>';
-    var svgGithub = '<span class="icon icon-github icon-sm" style="vertical-align:-1px;"></span>';
-    var linksHtml = '';
-    if (repoBase) {
-      var rawUrl = repoBase + '/version.json';
-      linksHtml += ' <a href="' + rawUrl + '" target="_blank" style="text-decoration:none;margin-left:6px;" title="View raw (CDN)">' + svgExtLink + '</a>';
-      linksHtml += '<a href="#" onclick="event.preventDefault();showRemoteVersion();" style="text-decoration:none;margin-left:4px;" title="View what the pod sees">' + svgServer + '</a>';
-      if (repoBase.indexOf('raw.githubusercontent.com') >= 0) {
-        var ghUrl = repoBase.replace('raw.githubusercontent.com', 'github.com').replace(/\/([^\/]+)$/, '/blob/$1') + '/version.json';
-        linksHtml += '<a href="' + ghUrl + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="View on GitHub">' + svgGithub + '</a>';
-      }
-    }
-    document.getElementById('versionLinks').innerHTML = linksHtml;
-
     // Component table
     const compObj = data.components || {};
     // Support both array and object formats
@@ -553,23 +536,6 @@
       var content = '<div style="font-family:var(--mono);font-size:12px;max-width:700px;text-align:left;">' +
         '<h3 style="margin:0 0 12px;">' + escHtml(title) + '</h3>' +
         '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;max-height:60vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">' + escHtml(JSON.stringify(data, null, 2)) + '</pre>' +
-        '</div>';
-      showOverlay(content, 'var(--text)', null);
-    } catch (e) {
-      showOverlay('Error: ' + e.message, 'var(--error)', 5000);
-    }
-  }
-
-  window.showRemoteVersion = async function() {
-    try {
-      var resp = await apiFetch('/api/admin/system/remote-version');
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      var data = await resp.json();
-      var content = '<div style="font-family:var(--mono);font-size:12px;max-width:600px;">' +
-        '<h3 style="margin:0 0 12px;">Remote (what the pod fetches)</h3>' +
-        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;">' + escHtml(JSON.stringify(data.remote, null, 2)) + '</pre>' +
-        '<h3 style="margin:16px 0 12px;">Local (on pod)</h3>' +
-        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;">' + escHtml(JSON.stringify(data.local, null, 2)) + '</pre>' +
         '</div>';
       showOverlay(content, 'var(--text)', null);
     } catch (e) {

@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-import re
 import shutil
 import subprocess
 import threading
@@ -11,14 +10,13 @@ import time
 from pathlib import Path
 
 import httpx
-import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import (
-    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_BASE, RUNTIME_VERSION,
-    VERSION_JSON, WORKFLOWS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR,
+    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, RUNTIME_VERSION,
+    VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
 from download import _download_state, _max_concurrent, _queue_lock, _schedule_downloads
@@ -90,14 +88,6 @@ def _get_pod_ram_bytes() -> int:
     return 0
 
 
-def _github_api_url(repo_base: str, path: str) -> str:
-    """Convert raw.githubusercontent.com URL to GitHub API contents URL."""
-    m = re.match(r'https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)', repo_base)
-    if m:
-        owner, repo, branch = m.groups()
-        return f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    return None
-
 
 # ── Health endpoint ──────────────────────────────────────────────────────────
 
@@ -122,14 +112,16 @@ async def list_events(limit: int = 100, types: str = None, severity: str = None)
 
 @router.get("/api/admin/system/remote-version")
 async def remote_version():
-    """Fetch version.json from repo."""
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(f"{REPO_BASE}/version.json")
-            r.raise_for_status()
-            return {"remote": r.json(), "local": _load_version()}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to fetch: {str(e)}")
+    """Show what the repo has vs what's local."""
+    # Fetch latest
+    if REPO_DIR.exists():
+        subprocess.run(["git", "fetch", "--depth", "1", "origin", "main"],
+                       capture_output=True, cwd=str(REPO_DIR), timeout=30)
+        proc = subprocess.run(["git", "show", "origin/main:version.json"],
+                              capture_output=True, text=True, cwd=str(REPO_DIR), timeout=10)
+        if proc.returncode == 0:
+            return {"remote": json.loads(proc.stdout), "local": _load_version()}
+    raise HTTPException(500, "Cannot fetch remote version")
 
 
 # ── System status ───────────────────────────────────────────────────────────
@@ -193,7 +185,7 @@ async def system_status():
     return {
         "app_version": ver.get("app_version", "0.0.0"),
         "date": ver.get("date", ""),
-        "repo_base": REPO_BASE,
+        "repo_url": REPO_URL,
         "runtime_version": RUNTIME_VERSION,
         "min_runtime": ver.get("min_runtime", 0),
         "components": {
@@ -248,7 +240,7 @@ async def system_status():
 
 @router.post("/api/admin/system/update")
 async def system_update(request: Request):
-    """Fetch latest version.json from repo and update changed components."""
+    """Update from git repo. Selective deploy for data components."""
     try:
         skip_components = set()
         try:
@@ -257,36 +249,56 @@ async def system_update(request: Request):
         except Exception:
             pass
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get(f"{REPO_BASE}/version.json")
-            r.raise_for_status()
-            remote_ver = r.json()
+        # Step 1: git fetch to get latest remote state (no working tree change)
+        if not REPO_DIR.exists():
+            # First time — clone
+            proc = subprocess.run(
+                ["git", "clone", "--depth", "1", REPO_URL, str(REPO_DIR)],
+                capture_output=True, text=True, timeout=60
+            )
+            if proc.returncode != 0:
+                raise HTTPException(500, f"Git clone failed: {proc.stderr}")
+        else:
+            proc = subprocess.run(
+                ["git", "fetch", "--depth", "1", "origin", "main"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(REPO_DIR)
+            )
+            if proc.returncode != 0:
+                raise HTTPException(500, f"Git fetch failed: {proc.stderr}")
+
+        # Step 2: Read remote version.json from fetched ref
+        proc = subprocess.run(
+            ["git", "show", "origin/main:version.json"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(REPO_DIR)
+        )
+        if proc.returncode != 0:
+            raise HTTPException(500, "Cannot read remote version.json")
+        remote_ver = json.loads(proc.stdout)
 
         local_ver = _load_version()
 
-        # Check runtime compatibility
+        # Step 3: Runtime compatibility check
         remote_min_runtime = remote_ver.get("min_runtime", 0)
         if remote_min_runtime > RUNTIME_VERSION:
             return {
-                "updated": [],
-                "restart_needed": False,
-                "blocked": True,
-                "message": f"Update requires Docker image runtime v{remote_min_runtime} (you have v{RUNTIME_VERSION}). Pull the latest image and restart the pod.",
+                "updated": [], "restart_needed": False, "blocked": True,
+                "message": f"Update requires Docker image runtime v{remote_min_runtime} (you have v{RUNTIME_VERSION})",
                 "remote_min_runtime": remote_min_runtime,
                 "local_runtime": RUNTIME_VERSION,
             }
 
+        # Step 4: Determine what needs updating
         def _parse_ver(v):
             if isinstance(v, str):
-                try:
-                    return tuple(int(x) for x in v.split("."))
-                except (ValueError, AttributeError):
-                    return v
+                try: return tuple(int(x) for x in v.split("."))
+                except: return v
             return v
 
         to_update = {}
         for comp_name, comp_info in remote_ver.get("components", {}).items():
-            if comp_name in skip_components:
+            if comp_name in skip_components or comp_name == "runtime":
                 continue
             local_comp = local_ver.get("components", {}).get(comp_name, {})
             remote_v = comp_info.get("version", 0)
@@ -298,162 +310,91 @@ async def system_update(request: Request):
 
         if not to_update:
             return {
-                "updated": [],
-                "restart_needed": False,
+                "updated": [], "restart_needed": False,
                 "message": "Everything up to date",
                 "debug": {"local_version_json": local_ver, "remote_version_json": remote_ver},
             }
 
+        # Step 5: Enter maintenance mode
         auth._maintenance_mode = True
         updated = []
         restart_needed = False
 
-        async def _download_dir(repo_subdir: str, dest_dir: Path, dl_client):
-            """Recursively download all files from a GitHub directory."""
-            count = 0
-            api_url = _github_api_url(REPO_BASE, repo_subdir)
-            if not api_url:
-                return 0
-            api_r = await dl_client.get(api_url)
-            if api_r.status_code != 200:
-                return 0
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            for item in api_r.json():
-                if item.get("type") == "file":
-                    dl_url = item.get("download_url") or f"{REPO_BASE}/{repo_subdir}/{item['name']}"
-                    fr = await dl_client.get(dl_url)
-                    if fr.status_code == 200:
-                        (dest_dir / item["name"]).write_text(fr.text)
-                        count += 1
-                elif item.get("type") == "dir":
-                    count += await _download_dir(f"{repo_subdir}/{item['name']}", dest_dir / item["name"], dl_client)
-            return count
-
-        def _atomic_swap(new_dir: Path, target_dir: Path):
-            """Swap new_dir into target_dir atomically. Old target becomes .old."""
-            old_dir = target_dir.with_name(target_dir.name + ".old")
-            if old_dir.exists():
-                shutil.rmtree(old_dir)
-            if target_dir.exists():
-                target_dir.rename(old_dir)
-            new_dir.rename(target_dir)
-
-        def _cleanup_old():
-            """Remove .old directories left by atomic swaps."""
-            for name in ("backend.old", "www.old"):
-                old = STUDIO_DIR / name
-                if old.exists():
-                    shutil.rmtree(old)
-
         try:
-            # Phase 1: FRONTEND — download to .new, then swap
-            if "frontend" in to_update:
-                frontend_repo_dir = to_update["frontend"].get("dir", "frontend/").rstrip("/")
-                www_new = WWW_ROOT.with_name("www.new")
-                if www_new.exists():
-                    shutil.rmtree(www_new)
-                async with httpx.AsyncClient(timeout=30) as dl_client:
-                    count = await _download_dir(frontend_repo_dir, www_new, dl_client)
-                if count > 0:
-                    _atomic_swap(www_new, WWW_ROOT)
-                    updated.append("frontend")
-                elif www_new.exists():
-                    shutil.rmtree(www_new)
+            # Step 6: git reset --hard to update repo clone
+            proc = subprocess.run(
+                ["git", "reset", "--hard", "origin/main"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(REPO_DIR)
+            )
+            if proc.returncode != 0:
+                raise Exception(f"Git reset failed: {proc.stderr}")
 
-            # Phase 2: Catalogs (single files — direct overwrite, no swap needed)
-            from config import MODELS_JSON, LORAS_JSON, LLM_MODELS_JSON
-            catalog_dest_map = {
-                "catalogs/models.json": MODELS_JSON,
-                "catalogs/loras.json": LORAS_JSON,
-                "catalogs/llm-models.json": LLM_MODELS_JSON,
-            }
-            for comp_name in ("models", "loras", "llm_models"):
-                if comp_name not in to_update:
-                    continue
-                comp_info = to_update[comp_name]
-                if "file" not in comp_info:
-                    continue
-                repo_path = comp_info["file"]
-                dest = catalog_dest_map.get(repo_path)
-                if not dest:
-                    continue
-                async with httpx.AsyncClient(timeout=30) as dl_client:
-                    fr = await dl_client.get(f"{REPO_BASE}/{repo_path}")
-                if fr.status_code == 200:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_text(fr.text)
-                    updated.append(comp_name)
-
-            # Phase 3: Workflows
-            if "workflows" in to_update:
-                wf_base = f"{REPO_BASE}/workflows"
-                async with httpx.AsyncClient(timeout=30) as dl_client:
-                    idx_r = await dl_client.get(f"{wf_base}/index.json")
-                    if idx_r.status_code == 200:
-                        remote_index = idx_r.json().get("workflows", [])
-                        local_wf_index = {e["id"]: e for e in _load_workflows_index()}
-                        for rwf in remote_index:
-                            wf_id = rwf["id"]
-                            lwf = local_wf_index.get(wf_id)
-                            rwf_v = rwf.get("version", 0)
-                            lwf_v = lwf.get("version", 0) if lwf else None
-                            if not lwf or type(rwf_v) != type(lwf_v) or rwf_v > lwf_v:
-                                wf_dir = WORKFLOWS_DIR / wf_id
-                                wf_dir.mkdir(parents=True, exist_ok=True)
-                                mr = await dl_client.get(f"{wf_base}/{wf_id}/manifest.yaml")
-                                if mr.status_code == 200:
-                                    (wf_dir / "manifest.yaml").write_text(mr.text)
-                                    mdata = yaml.safe_load(mr.text) if mr.text else {}
-                                    if mdata.get("type") == "dynamic":
-                                        bdir_name = mdata.get("blocks_dir", "blocks")
-                                        bdir = wf_dir / bdir_name
-                                        bdir.mkdir(parents=True, exist_ok=True)
-                                        for stage in mdata.get("pipeline", []):
-                                            bf = stage.get("file", "")
-                                            if bf:
-                                                br = await dl_client.get(f"{wf_base}/{wf_id}/{bdir_name}/{bf}")
-                                                if br.status_code == 200:
-                                                    (bdir / bf).write_text(br.text)
-                                    else:
-                                        wr = await dl_client.get(f"{wf_base}/{wf_id}/workflow.json")
-                                        if wr.status_code == 200:
-                                            (wf_dir / "workflow.json").write_text(wr.text)
-                        WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
-                        (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
-                updated.append("workflows")
-
-            # Phase 4: BACKEND — download to .new, swap, restart (LAST)
+            # Step 7: Backend + Frontend are always updated (served from .repo/)
             if "backend" in to_update:
-                backend_repo_dir = to_update["backend"].get("dir", "backend/").rstrip("/")
-                backend_new = BACKEND_DIR.with_name("backend.new")
-                if backend_new.exists():
-                    shutil.rmtree(backend_new)
-                async with httpx.AsyncClient(timeout=30) as dl_client:
-                    count = await _download_dir(backend_repo_dir, backend_new, dl_client)
-                if count > 0:
-                    _atomic_swap(backend_new, BACKEND_DIR)
-                    updated.append("backend")
-                    restart_needed = True
-                elif backend_new.exists():
-                    shutil.rmtree(backend_new)
+                updated.append("backend")
+                restart_needed = True
+            if "frontend" in to_update:
+                updated.append("frontend")
 
-            # Save version.json
-            VERSION_JSON.parent.mkdir(parents=True, exist_ok=True)
-            VERSION_JSON.write_text(json.dumps(remote_ver, indent=2))
-            if "models" in updated or "loras" in updated or "llm_models" in updated:
+            # Step 8: Selective copy for data components (catalogs, workflows)
+            if "models" in to_update:
+                src = REPO_DIR / "catalogs" / "models.json"
+                if src.exists():
+                    CATALOGS_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src), str(CATALOGS_DIR / "models.json"))
+                    updated.append("models")
+
+            if "loras" in to_update:
+                src = REPO_DIR / "catalogs" / "loras.json"
+                if src.exists():
+                    CATALOGS_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src), str(CATALOGS_DIR / "loras.json"))
+                    updated.append("loras")
+
+            if "llm_models" in to_update:
+                src = REPO_DIR / "catalogs" / "llm-models.json"
+                if src.exists():
+                    CATALOGS_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src), str(CATALOGS_DIR / "llm-models.json"))
+                    updated.append("llm_models")
+
+            if "workflows" in to_update:
+                # Sync workflows from repo to working copy
+                src_dir = REPO_DIR / "workflows"
+                if src_dir.exists():
+                    # Copy index
+                    WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src_dir / "index.json"), str(WORKFLOWS_DIR / "index.json"))
+                    # Copy each workflow dir
+                    for wf_dir in src_dir.iterdir():
+                        if wf_dir.is_dir() and wf_dir.name != "reference":
+                            dest_wf = WORKFLOWS_DIR / wf_dir.name
+                            if dest_wf.exists():
+                                shutil.rmtree(str(dest_wf))
+                            shutil.copytree(str(wf_dir), str(dest_wf))
+                    updated.append("workflows")
+
+            # Step 9: Update local version.json
+            # Write the remote version but keep local versions for skipped components
+            merged_ver = dict(remote_ver)
+            merged_comps = dict(remote_ver.get("components", {}))
+            for comp_name in skip_components:
+                if comp_name in local_ver.get("components", {}):
+                    merged_comps[comp_name] = local_ver["components"][comp_name]
+            merged_ver["components"] = merged_comps
+
+            local_version_path = STUDIO_DIR / "version.json"
+            local_version_path.parent.mkdir(parents=True, exist_ok=True)
+            local_version_path.write_text(json.dumps(merged_ver, indent=2))
+
+            if any(c in updated for c in ("models", "loras", "llm_models")):
                 _reload_models()
 
         except Exception:
-            # If anything fails, clean up .new dirs
-            for name in ("www.new", "backend.new"):
-                p = STUDIO_DIR / name
-                if p.exists():
-                    shutil.rmtree(p)
             raise
         finally:
             if not restart_needed:
-                # No restart — clean up .old now and exit maintenance
-                _cleanup_old()
                 auth._maintenance_mode = False
 
         if updated:
@@ -478,6 +419,9 @@ async def system_update(request: Request):
             asyncio.get_event_loop().create_task(_restart())
 
         return result
+    except HTTPException:
+        auth._maintenance_mode = False
+        raise
     except Exception as e:
         auth._maintenance_mode = False
         raise HTTPException(500, f"Update failed: {str(e)}")
@@ -616,7 +560,7 @@ async def get_env_vars():
         ("RUNPOD_API_KEY", True),
         ("COMFYUI_DIR", False),
         ("COMFYUI_PORT", False),
-        ("REPO_BASE", False),
+        ("REPO_URL", False),
         ("MAX_CONCURRENT_DOWNLOADS", False),
         ("RUNPOD_POD_ID", False),
         ("RUNPOD_DC_ID", False),

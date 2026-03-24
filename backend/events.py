@@ -1,4 +1,4 @@
-"""ComfyUI Studio — EventBus, WebSocketPusher, startup consumer + frontend repair."""
+"""ComfyUI Studio — EventBus, WebSocketPusher, startup consumer."""
 
 import asyncio
 import json
@@ -6,10 +6,9 @@ import queue
 import uuid
 from pathlib import Path
 
-import httpx
 from fastapi import WebSocket
 
-from config import app, REPO_BASE, STUDIO_DIR, WWW_ROOT
+from config import app, STUDIO_DIR
 
 
 # ── Event Bus ───────────────────────────────────────────────────────────
@@ -125,7 +124,7 @@ _events.subscribe(_ws_pusher)
 @app.on_event("startup")
 async def _start_event_consumer():
     """Background task: consumes events from the thread-safe queue and dispatches to async subscribers."""
-    from catalogs import _www, _load_version
+    from catalogs import _load_version
 
     async def _consumer():
         loop = asyncio.get_event_loop()
@@ -142,30 +141,6 @@ async def _start_event_consumer():
                 await asyncio.sleep(0.1)
 
     asyncio.create_task(_consumer())
-
-    # Verify all frontend files exist -- download missing ones (fixes post-update gaps)
-    _FRONTEND_FILES = [
-        "styles.css", "home.html", "login.html", "models.html", "loras.html",
-        "workflows.html", "nodes.html", "runner.html", "queue.html",
-        "history.html", "assets.html", "settings.html", "llm.html",
-    ]
-    missing = [f for f in _FRONTEND_FILES if not _www(f).exists()]
-    if missing:
-        async def _download_missing():
-            try:
-                async with httpx.AsyncClient(timeout=30) as client:
-                    for fname in missing:
-                        r = await client.get(f"{REPO_BASE}/frontend/{fname}")
-                        if r.status_code == 200:
-                            dest = WWW_ROOT / fname
-                            dest.parent.mkdir(parents=True, exist_ok=True)
-                            dest.write_text(r.text)
-                    _events.emit("system.frontend.repaired",
-                                 f"Downloaded {len(missing)} missing frontend file(s): {', '.join(missing)}",
-                                 severity="warning", data={"files": missing})
-            except Exception:
-                pass
-        asyncio.create_task(_download_missing())
 
     # Clean up .old directories left by atomic swap update
     for old_name in ("backend.old", "www.old"):

@@ -1,11 +1,10 @@
 """ComfyUI Studio — Workflow list endpoint, readiness check, sync, install models."""
 
-import yaml
-import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+import shutil
 
-from config import COMFY_URL, REPO_BASE, WORKFLOWS_DIR
+from fastapi import APIRouter, HTTPException
+
+from config import REPO_DIR, WORKFLOWS_DIR
 from catalogs import _find_model, _reload_models
 from download import _enqueue_download
 from workflows import (
@@ -131,54 +130,39 @@ async def install_workflow_models(workflow_id: str):
 
 @router.post("/api/admin/workflows/sync")
 async def sync_workflows():
-    WORKFLOWS_REPO_BASE = f"{REPO_BASE}/workflows"
-
+    """Sync workflows from the local git repo clone."""
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get(f"{WORKFLOWS_REPO_BASE}/index.json")
-            r.raise_for_status()
-            remote_index = r.json().get("workflows", [])
+        src_dir = REPO_DIR / "workflows"
+        if not src_dir.exists():
+            raise HTTPException(500, "Repo clone not found — run Check for Updates first")
 
-            local_index = {e["id"]: e for e in _load_workflows_index()}
+        import json as _json
+        remote_index_data = _json.loads((src_dir / "index.json").read_text())
+        remote_index = remote_index_data.get("workflows", [])
 
-            updated = []
-            for remote in remote_index:
-                wf_id = remote["id"]
-                local = local_index.get(wf_id)
-                remote_v = remote.get("version", 0)
-                local_v = local.get("version", 0) if local else None
-                if not local or type(remote_v) != type(local_v) or remote_v > local_v:
-                    wf_dir = WORKFLOWS_DIR / wf_id
-                    wf_dir.mkdir(parents=True, exist_ok=True)
+        local_index = {e["id"]: e for e in _load_workflows_index()}
 
-                    mr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/manifest.yaml")
-                    mr.raise_for_status()
-                    (wf_dir / "manifest.yaml").write_text(mr.text)
-
-                    manifest_data = yaml.safe_load(mr.text) if mr.text else {}
-                    if manifest_data.get("type") == "dynamic":
-                        blocks_dir_name = manifest_data.get("blocks_dir", "blocks")
-                        blocks_dir = wf_dir / blocks_dir_name
-                        blocks_dir.mkdir(parents=True, exist_ok=True)
-                        for stage in manifest_data.get("pipeline", []):
-                            block_file = stage.get("file", "")
-                            if block_file:
-                                br = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/{blocks_dir_name}/{block_file}")
-                                if br.status_code == 200:
-                                    (blocks_dir / block_file).write_text(br.text)
-                    else:
-                        wr = await client.get(f"{WORKFLOWS_REPO_BASE}/{wf_id}/workflow.json")
-                        if wr.status_code == 200:
-                            (wf_dir / "workflow.json").write_text(wr.text)
-
+        updated = []
+        for remote in remote_index:
+            wf_id = remote["id"]
+            local = local_index.get(wf_id)
+            remote_v = remote.get("version", 0)
+            local_v = local.get("version", 0) if local else None
+            if not local or type(remote_v) != type(local_v) or remote_v > local_v:
+                src_wf = src_dir / wf_id
+                dest_wf = WORKFLOWS_DIR / wf_id
+                if src_wf.exists():
+                    if dest_wf.exists():
+                        shutil.rmtree(str(dest_wf))
+                    shutil.copytree(str(src_wf), str(dest_wf))
                     updated.append(wf_id)
 
-            if updated:
-                WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
-                idx_r = await client.get(f"{WORKFLOWS_REPO_BASE}/index.json")
-                if idx_r.status_code == 200:
-                    (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
+        if updated:
+            WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(src_dir / "index.json"), str(WORKFLOWS_DIR / "index.json"))
 
-            return {"updated": updated, "checked": len(remote_index)}
+        return {"updated": updated, "checked": len(remote_index)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"Sync failed: {str(e)}")
