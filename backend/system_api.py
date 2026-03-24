@@ -470,6 +470,7 @@ async def system_update(request: Request):
         if restart_needed:
             async def _restart():
                 await asyncio.sleep(1)
+                os.chdir(str(BACKEND_DIR))
                 os.execv(
                     shutil.which("uvicorn"),
                     ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"],
