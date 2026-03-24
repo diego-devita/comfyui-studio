@@ -46,6 +46,9 @@ body::before {
   opacity: 0.35;
 }
 
+/* ── Header ── */
+header { min-height: 140px; }
+
 /* ── Buttons ── */
 .btn {
   display: inline-flex;
