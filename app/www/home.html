@@ -312,6 +312,7 @@
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
   <a href="/admin/settings" class="nav-link"><svg width="13" height="13" viewBox="0 0 512 512" fill="currentColor" style="vertical-align:-1px;"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.4-28.2 19-44.1 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.9-6.4-30.7-15-44.1-25.4L83.1 339.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.4 28.2-19 44.1-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.9 6.4 30.7 15 44.1 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z"/></svg></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><svg width="14" height="14" viewBox="0 0 448 512" fill="currentColor"><path d="M224 0c-17.7 0-32 14.3-32 32V49.9C119.5 61.4 64 124.2 64 200v33.4c0 45.4-15.5 89.5-43.8 124.9L5.3 377c-5.8 7.2-6.9 17.1-2.9 25.4S14.8 416 24 416H424c9.2 0 17.6-5.3 21.6-13.6s2.9-18.2-2.9-25.4l-14.9-18.6C399.5 322.9 384 278.8 384 233.4V200c0-75.8-55.5-138.6-128-150.1V32c0-17.7-14.3-32-32-32zm0 512c26.5 0 48.4-16.2 57.7-38.8c3.4-8.2-1.2-17.5-9.7-20.3c-2-.6-4-.9-6-.9H182c-2 0-4 .3-6 .9c-8.5 2.8-13.1 12.1-9.7 20.3c9.3 22.6 31.2 38.8 57.7 38.8z"/></svg><span class="activity-dot" id="activityDot"></span></a>
   <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
@@ -367,6 +368,12 @@
         <div class="stat-label">LoRAs</div>
         <div class="stat-sub" id="lorasSub">-- present</div>
         <a href="/admin/loras" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="llmModelsCount">--</div>
+        <div class="stat-label">LLM Models</div>
+        <div class="stat-sub" id="llmModelsSub">-- present</div>
+        <a href="/admin/llm" class="stat-link">&#8594; Manage</a>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="workflowsCount">--</div>
@@ -516,6 +523,8 @@
   const $lorasSub     = document.getElementById('lorasSub');
   const $workflowsCount = document.getElementById('workflowsCount');
   const $workflowsSub = document.getElementById('workflowsSub');
+  const $llmModelsCount = document.getElementById('llmModelsCount');
+  const $llmModelsSub = document.getElementById('llmModelsSub');
   const $nodesCount   = document.getElementById('nodesCount');
   const $nodesSub     = document.getElementById('nodesSub');
   const $comfyStatus  = document.getElementById('comfyStatus');
@@ -575,11 +584,11 @@
       : Object.entries(compObj).map(([key, val]) => Object.assign({ name: key }, val));
     $compBody.innerHTML = '';
 
-    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', workflows: 'Workflows' };
+    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', llm_models: 'LLM Models', workflows: 'Workflows' };
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
-    var _defaultUnchecked = { loras: true };
-    var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras' };
+    var _defaultUnchecked = { loras: true, llm_models: true };
+    var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras', llm_models: '/api/admin/llm/models' };
     var svgEye = '<svg width="12" height="12" viewBox="0 0 576 512" fill="currentColor"><path d="M288 80c-65.2 0-118.8 29.6-159.9 67.7C89.6 183.5 63 226 49.4 256c13.6 30 40.2 72.5 78.6 108.3C169.2 402.4 222.8 432 288 432s118.8-29.6 159.9-67.7C486.4 328.5 513 286 526.6 256c-13.6-30-40.2-72.5-78.6-108.3C406.8 109.6 353.2 80 288 80zM95.4 112.6C142.5 68.8 207.2 32 288 32s145.5 36.8 192.6 80.6c46.8 43.5 78.1 95.4 93 131.1c3.3 7.9 3.3 16.7 0 24.6c-14.9 35.7-46.2 87.7-93 131.1C433.5 443.2 368.8 480 288 480s-145.5-36.8-192.6-80.6C48.6 355.9 17.3 303.9 2.4 268.3c-3.3-7.9-3.3-16.7 0-24.6c14.9-35.7 46.2-87.7 93-131.1zM288 192a64 64 0 1 1 0 128 64 64 0 1 1 0-128zm0 176a112 112 0 1 0 0-224 112 112 0 1 0 0 224z"/></svg>';
     components.forEach(c => {
       const row = document.createElement('tr');
@@ -611,6 +620,12 @@
     var lorasTotal = parseInt(lorasStatus) || 0;
     $lorasCount.textContent = lorasTotal;
     $lorasSub.textContent = lorasStatus;
+
+    const llmModels = compObj.llm_models || {};
+    var llmStatus = llmModels.status || '0 models';
+    var llmTotal = parseInt(llmStatus) || 0;
+    $llmModelsCount.textContent = llmTotal;
+    $llmModelsSub.textContent = llmStatus;
 
     const workflows = data.workflows || compObj.workflows || {};
     $workflowsCount.textContent = workflows.total || workflows.count || 0;
