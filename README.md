@@ -299,8 +299,9 @@ comfyui-studio/
 ```
 
 For detailed documentation, see:
-- **[`backend/README.md`](backend/README.md)** -- Backend architecture, module reference, API endpoints, dependency graph
 - **[`docker/README.md`](docker/README.md)** -- Docker build, bootstrap flow, runtime versioning, custom nodes, CI/CD
+- **[`backend/README.md`](backend/README.md)** -- Backend architecture, module reference, API endpoints, dependency graph
+- **[`catalogs/README.md`](catalogs/README.md)** -- Model catalog format, 126 models, naming conventions, base_model reference
 
 ---
 
