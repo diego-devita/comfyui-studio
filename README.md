@@ -84,6 +84,7 @@ Container image: `ghcr.io/diego-devita/comfyui-studio:latest`
 | `API_KEY` | A strong password for the web application |
 | `CIVITAI_API_KEY` | Your CivitAI API token |
 | `HF_TOKEN` | Your HuggingFace access token |
+| `RUNPOD_API_KEY` | Your RunPod API key (for disk telemetry) |
 
 Exposed ports: **8188** (ComfyUI), **8000** (Web App)
 
@@ -137,24 +138,37 @@ Application code, catalogs, and workflows live in this Git repository as source 
 
 ## Environment Variables
 
-### Authentication & Tokens
+### Authentication & API Tokens
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `API_KEY` | **Yes** | `changeme` | Password for web application login and `X-API-Key` header |
-| `CIVITAI_API_KEY` | For CivitAI models | _(empty)_ | CivitAI API token |
-| `HF_TOKEN` | For gated HF models | _(empty)_ | HuggingFace access token |
+| Variable | Default | Recommended | Description |
+|----------|---------|-------------|-------------|
+| `API_KEY` | `changeme` | **Change it** | Password for web login and `X-API-Key` header |
+| `CIVITAI_API_KEY` | _(empty)_ | **Yes** | CivitAI API token — needed to download models and fetch metadata |
+| `HF_TOKEN` | _(empty)_ | **Yes** | HuggingFace token — needed for gated models (Flux, WAN, etc.) |
+| `RUNPOD_API_KEY` | _(empty)_ | **Yes** | RunPod API key — enables disk/volume telemetry on the dashboard |
 
-### Runtime
+### Configurable
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `STUDIO_DIR` | No | `/workspace/studio` | Root directory for all Studio data on the persistent volume |
-| `RUNTIME_VERSION` | No | `3` | Docker image version (set in Dockerfile, must match `version.json` → `components.runtime.version`) |
-| `COMFYUI_FLAGS` | No | `--highvram` | ComfyUI VRAM mode (`--lowvram`, `--normalvram`, `--highvram`) |
-| `COMFYUI_EXTRA_ARGS` | No | _(empty)_ | Additional ComfyUI flags |
-| `REPO_URL` | No | `https://github.com/diego-devita/comfyui-studio.git` | Git repo for updates |
-| `MAX_CONCURRENT_DOWNLOADS` | No | `3` | Parallel model downloads (1-10, also adjustable from UI) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STUDIO_DIR` | `/workspace/studio` | Root directory for all Studio data on the persistent volume |
+| `COMFYUI_DIR` | `/workspace/ComfyUI` | ComfyUI installation path |
+| `COMFYUI_FLAGS` | `--highvram` | VRAM mode: `--highvram` (>24 GB), `--normalvram` (12-24 GB), `--lowvram` (<12 GB) |
+| `COMFYUI_EXTRA_ARGS` | _(empty)_ | Additional ComfyUI launch flags |
+| `COMFYUI_PORT` | `8188` | ComfyUI port |
+| `LLAMA_SERVER_PATH` | `/opt/llama-server` | Path to llama.cpp binary |
+| `LLAMA_SERVER_PORT` | `8080` | llama-server port |
+| `MAX_CONCURRENT_DOWNLOADS` | `3` | Parallel model downloads (1-10, also adjustable from UI) |
+
+### Read-only (set by infrastructure, do not change)
+
+| Variable | Default | Set by | Description |
+|----------|---------|--------|-------------|
+| `RUNTIME_VERSION` | `3` | Dockerfile | Docker image version — must match `version.json` → `components.runtime.version` |
+| `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Dockerfile | Git repo for updates |
+| `RUNPOD_POD_ID` | _(auto)_ | RunPod | Pod identifier — used for telemetry |
+| `RUNPOD_DC_ID` | _(auto)_ | RunPod | Datacenter ID |
+| `RUNPOD_VOLUME_ID` | _(auto)_ | RunPod | Network volume ID |
 
 ---
 
