@@ -256,9 +256,11 @@ RUN pip install \
 # ── llama.cpp server (for local LLM inference) ─────────────
 # Compiled with CUDA support — GPU acceleration works at runtime.
 # Binary installed to /opt/llama-server; configurable via LLAMA_SERVER_PATH env.
-RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp && \
+RUN CUDA_ARCHS="75;80;86;89;90;100" && \
+    git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
-    cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90;100" && \
+    cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" && \
     cmake --build build --config Release -j$(nproc) --target llama-server && \
     cp build/bin/llama-server /opt/llama-server && \
     rm -rf /tmp/llama.cpp
