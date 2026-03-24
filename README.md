@@ -9,32 +9,32 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                  DOCKER IMAGE (build time)                       │
-│                                                                  │
-│  /comfyui           ComfyUI + 37 custom nodes (baked in)        │
-│  /app/bootstrap.py  First-boot installer                        │
-│  /opt/llama-server  llama.cpp server (CUDA, SM 75-100) [optional]│
-│  /start.sh          Boot script                                 │
-│                                                                  │
-│  NOT in image: models, workflows, live app code, user data       │
-├──────────────────────────────────────────────────────────────────┤
-│              PERSISTENT VOLUME (runtime)                         │
-│                                                                  │
-│  /workspace/studio/                  ← STUDIO_DIR               │
-│    .repo/                            ← git clone (staging only)   │
-│    backend/                          ← live Python backend       │
-│    frontend/                         ← live frontend (HTML/CSS/JS)│
-│    catalogs/                         ← models, loras, llm-models │
-│    workflows/                        ← workflow library           │
-│    assets/input/ + assets/output/    ← ComfyUI I/O               │
-│    jobs/                             ← job history records        │
-│    llm/                              ← LLM models + config        │
-│    db/                               ← database files             │
-│    version.json                      ← component version tracking │
-│  /workspace/ComfyUI/                 ← copied from /comfyui       │
-│  /workspace/ComfyUI/models/          ← downloaded via Model Mgr   │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                  DOCKER IMAGE (build time)                         │
+│                                                                    │
+│  /comfyui           ComfyUI + 37 custom nodes (baked in)           │
+│  /app/bootstrap.py  First-boot installer                           │
+│  /opt/llama-server  llama.cpp server (CUDA, SM 75-100) [optional]  │
+│  /start.sh          Boot script                                    │
+│                                                                    │
+│  NOT in image: models, workflows, live app code, user data         │
+├────────────────────────────────────────────────────────────────────┤
+│              PERSISTENT VOLUME (runtime)                           │
+│                                                                    │
+│  /workspace/studio/                  ← STUDIO_DIR                  │
+│    .repo/                            ← git clone (staging only)    │
+│    backend/                          ← live Python backend         │
+│    frontend/                         ← live frontend (HTML/CSS/JS  │
+│    catalogs/                         ← models, loras, llm-models   │
+│    workflows/                        ← workflow library            │
+│    assets/input/ + assets/output/    ← ComfyUI I/O                 │
+│    jobs/                             ← job history records         │
+│    llm/                              ← LLM models + config         │
+│    db/                               ← database files              │
+│    version.json                      ← component version tracking  │
+│  /workspace/ComfyUI/                 ← copied from /comfyui        │
+│  /workspace/ComfyUI/models/          ← downloaded via Model Mgr    │
+└────────────────────────────────────────────────────────────────────┘
 
 Bootstrap flow (first boot only):
   1. bootstrap.py clones repo to STUDIO_DIR/.repo/
