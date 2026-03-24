@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import (
-    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_BASE,
+    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_BASE, RUNTIME_VERSION,
     VERSION_JSON, WORKFLOWS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
@@ -194,7 +194,14 @@ async def system_status():
         "app_version": ver.get("app_version", "0.0.0"),
         "date": ver.get("date", ""),
         "repo_base": REPO_BASE,
+        "runtime_version": RUNTIME_VERSION,
+        "min_runtime": ver.get("min_runtime", 0),
         "components": {
+            "runtime": {
+                "version": RUNTIME_VERSION,
+                "date": ver.get("components", {}).get("runtime", {}).get("date", ""),
+                "status": f"Docker image v{RUNTIME_VERSION}",
+            },
             "backend": {
                 "version": ver.get("components", {}).get("backend", {}).get("version", "0.0.0"),
                 "date": ver.get("components", {}).get("backend", {}).get("date", ""),
@@ -255,6 +262,18 @@ async def system_update(request: Request):
             remote_ver = r.json()
 
         local_ver = _load_version()
+
+        # Check runtime compatibility
+        remote_min_runtime = remote_ver.get("min_runtime", 0)
+        if remote_min_runtime > RUNTIME_VERSION:
+            return {
+                "updated": [],
+                "restart_needed": False,
+                "blocked": True,
+                "message": f"Update requires Docker image runtime v{remote_min_runtime} (you have v{RUNTIME_VERSION}). Pull the latest image and restart the pod.",
+                "remote_min_runtime": remote_min_runtime,
+                "local_runtime": RUNTIME_VERSION,
+            }
 
         def _parse_ver(v):
             if isinstance(v, str):

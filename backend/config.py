@@ -14,6 +14,7 @@ app = FastAPI(title="ComfyUI Studio")
 API_KEY = os.environ.get("API_KEY", "changeme")
 CIVITAI_API_KEY = os.environ.get("CIVITAI_API_KEY", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
+RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
 
 # ── Studio directory (single root for all studio files) ──────────────────────
 
