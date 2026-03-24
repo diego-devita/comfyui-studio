@@ -81,42 +81,6 @@
   .comp-table th:last-child { text-align: center; }
 
   /* ── Toggle Switch ── */
-  .toggle {
-    position: relative;
-    display: inline-block;
-    width: 32px;
-    height: 18px;
-    vertical-align: middle;
-  }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .toggle-slider {
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.08);
-    border-radius: 9px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .toggle-slider::before {
-    content: '';
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    left: 2px;
-    bottom: 2px;
-    background: var(--muted);
-    border-radius: 50%;
-    transition: all 0.2s;
-  }
-  .toggle input:checked + .toggle-slider {
-    background: rgba(232, 255, 71, 0.15);
-    border-color: var(--accent);
-  }
-  .toggle input:checked + .toggle-slider::before {
-    transform: translateX(14px);
-    background: var(--accent);
-  }
 
   .status-dot {
     display: inline-block;
@@ -472,6 +436,7 @@
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
     var _defaultUnchecked = { loras: true, llm_models: true };
+    var _noToggle = { runtime: true };  // not updatable via check for updates
     var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras', llm_models: '/api/admin/llm/models' };
     var svgEye = '<span class="icon icon-eye icon-sm"></span>';
     components.forEach(c => {
@@ -481,16 +446,20 @@
       const displayDate = c.date || (typeof date === 'string' ? date : '--');
       const color = statusDotColor(c.status || 'ok');
       const displayVersion = typeof c.version === 'number' ? '#' + c.version : (c.version || '--');
-      var checked = _defaultUnchecked[c.name] ? '' : 'checked';
       var eyeHtml = _viewableComps[c.name]
         ? ' <span style="cursor:pointer;opacity:0.4;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="showCatalogOverlay(\'' + _viewableComps[c.name] + '\',\'' + escHtml(displayName) + '\')" title="View catalog">' + svgEye + '</span>'
         : '';
+      var toggleHtml = '';
+      if (!_noToggle[c.name]) {
+        var checked = _defaultUnchecked[c.name] ? '' : 'checked';
+        toggleHtml = '<label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label>';
+      }
       row.innerHTML =
         '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
         '<td>' + dotHtml(color, displayStatus) + '</td>' +
-        '<td><label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label></td>';
+        '<td>' + toggleHtml + '</td>';
       $compBody.appendChild(row);
     });
 
