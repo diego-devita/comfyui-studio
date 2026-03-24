@@ -84,7 +84,6 @@ Container image: `ghcr.io/diego-devita/comfyui-studio:latest`
 | `API_KEY` | A strong password for the web application |
 | `CIVITAI_API_KEY` | Your CivitAI API token |
 | `HF_TOKEN` | Your HuggingFace access token |
-| `RUNPOD_API_KEY` | Your RunPod API key (for disk telemetry) |
 
 Exposed ports: **8188** (ComfyUI), **8000** (Web App)
 
@@ -145,7 +144,6 @@ Application code, catalogs, and workflows live in this Git repository as source 
 | `API_KEY` | `changeme` | **Change it** | Password for web login and `X-API-Key` header |
 | `CIVITAI_API_KEY` | _(empty)_ | **Yes** | CivitAI API token — needed to download models and fetch metadata |
 | `HF_TOKEN` | _(empty)_ | **Yes** | HuggingFace token — needed for gated models (Flux, WAN, etc.) |
-| `RUNPOD_API_KEY` | _(empty)_ | **Yes** | RunPod API key — enables disk/volume telemetry on the dashboard |
 
 ### Configurable
 
@@ -166,6 +164,7 @@ Application code, catalogs, and workflows live in this Git repository as source 
 |----------|---------|--------|-------------|
 | `RUNTIME_VERSION` | `3` | Dockerfile | Docker image version — must match `version.json` → `components.runtime.version` |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Dockerfile | Git repo for updates |
+| `RUNPOD_API_KEY` | _(auto)_ | RunPod | Used for volume size telemetry |
 | `RUNPOD_POD_ID` | _(auto)_ | RunPod | Pod identifier — used for telemetry |
 | `RUNPOD_DC_ID` | _(auto)_ | RunPod | Datacenter ID |
 | `RUNPOD_VOLUME_ID` | _(auto)_ | RunPod | Network volume ID |
