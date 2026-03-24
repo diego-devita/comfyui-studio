@@ -1,6 +1,6 @@
 # ComfyUI Studio
 
-A web-based management platform for AI image and video generation built on ComfyUI. Runs as a Docker container on RunPod (or any NVIDIA GPU machine) with a dedicated interface for managing models, LoRAs, workflows, custom nodes, an LLM assistant, and running generation jobs -- without touching the ComfyUI graph editor. The Docker image provides ComfyUI + 35 custom nodes + performance optimizations. The web application updates live from the Git repository without rebuilding.
+A web-based management platform for AI image and video generation built on ComfyUI. Runs as a Docker container on RunPod (or any NVIDIA GPU machine) with a dedicated interface for managing models, LoRAs, workflows, custom nodes, an LLM assistant, and running generation jobs -- without touching the ComfyUI graph editor. The Docker image provides ComfyUI + 37 custom nodes + performance optimizations. The web application updates live from the Git repository without rebuilding.
 
 Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 to B200 via build arguments.
 
@@ -12,7 +12,7 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 ┌──────────────────────────────────────────────────────────────────┐
 │                  DOCKER IMAGE (build time)                       │
 │                                                                  │
-│  /comfyui           ComfyUI + 35 custom nodes (baked in)        │
+│  /comfyui           ComfyUI + 37 custom nodes (baked in)        │
 │  /app/bootstrap.py  First-boot installer                        │
 │  /opt/llama-server  llama.cpp server (CUDA, SM 75-100) [optional]│
 │  /start.sh          Boot script                                 │
