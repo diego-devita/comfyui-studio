@@ -57,7 +57,7 @@ ASSETS_OUTPUT_DIR = ASSETS_DIR / "output"
 LLM_DIR = STUDIO_DIR / "llm"
 LLM_MODELS_DIR = LLM_DIR / "models"
 LLM_CONFIG_PATH = LLM_DIR / "config.json"
-LLAMA_SERVER_PATH = Path(os.environ.get("LLAMA_SERVER_PATH", "/workspace/llama-server"))
+LLAMA_SERVER_PATH = Path(os.environ.get("LLAMA_SERVER_PATH", "/opt/llama-server"))
 LLAMA_SERVER_PORT = int(os.environ.get("LLAMA_SERVER_PORT", "8080"))
 
 # DB

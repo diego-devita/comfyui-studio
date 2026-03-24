@@ -14,9 +14,9 @@ if [ ! -f "${STUDIO_DIR}/backend/main.py" ]; then
     if [ $? -ne 0 ]; then
         echo "      Bootstrap failed. Check logs."
         # If runtime incompatible, serve error page
-        if [ -f "${STUDIO_DIR}/www/pages/error.html" ]; then
+        if [ -f "${STUDIO_DIR}/frontend/pages/error.html" ]; then
             echo "      Serving error page on port 8000..."
-            cd "${STUDIO_DIR}/www/pages"
+            cd "${STUDIO_DIR}/frontend/pages"
             python3 -m http.server 8000 &
             wait $!
         fi
@@ -37,6 +37,9 @@ else
 fi
 
 # ── STEP 2: Start ComfyUI ────────────────────────────────────────
+# Create asset directories
+mkdir -p "${STUDIO_DIR}/assets/input" "${STUDIO_DIR}/assets/output"
+
 echo "[2/3] Starting ComfyUI on port 8188..."
 cd "${COMFYUI_VOLUME}"
 python main.py \
@@ -47,13 +50,7 @@ python main.py \
     --output-directory "${STUDIO_DIR}/assets/output" \
     ${COMFYUI_FLAGS:---highvram} \
     ${COMFYUI_EXTRA_ARGS:-} \
-    > /var/log/comfyui.log 2>&1 &
-
-COMFY_PID=$!
-echo "      ComfyUI PID: ${COMFY_PID}"
-
-# Create asset directories
-mkdir -p "${STUDIO_DIR}/assets/input" "${STUDIO_DIR}/assets/output"
+    2>&1 | tee -a /var/log/comfyui.log &
 
 echo "      Waiting for ComfyUI..."
 for i in $(seq 1 60); do
@@ -74,14 +71,11 @@ uvicorn main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --workers 1 \
-    > /var/log/admin.log 2>&1 &
-
-ADMIN_PID=$!
-echo "      Studio PID: ${ADMIN_PID}"
+    2>&1 | tee -a /var/log/admin.log &
 
 echo "=== Services started ==="
 echo "    ComfyUI Studio: https://PODID-8000.proxy.runpod.net"
 echo "    ComfyUI:        https://PODID-8188.proxy.runpod.net"
 
-# Keep the container alive — exit if ComfyUI dies
-wait ${COMFY_PID}
+# Keep the container alive while any service is running
+wait

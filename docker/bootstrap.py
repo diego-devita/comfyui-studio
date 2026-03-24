@@ -119,6 +119,7 @@ def main():
     # Version.json (local working copy)
     local_ver = os.path.join(STUDIO_DIR, "version.json")
     shutil.copy2(version_path, local_ver)
+    log("  Copied version.json")
 
     # Step 4: Create runtime directories
     for d in ["assets/input", "assets/output", "db", "jobs", "llm/models"]:

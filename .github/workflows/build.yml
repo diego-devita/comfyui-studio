@@ -5,7 +5,9 @@ on:
     branches: [ main ]
     paths-ignore:
       - 'workflows/**'
-      - 'app/**'
+      - 'backend/**'
+      - 'frontend/**'
+      - 'catalogs/**'
       - 'version.json'
       - '*.md'
   workflow_dispatch:
@@ -48,6 +50,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
