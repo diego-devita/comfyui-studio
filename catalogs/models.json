@@ -1,1 +1,1999 @@
-{"version":0,"date":"","categories":[]}
+{
+  "version": 24,
+  "date": "2026-03-24 21:30",
+  "categories": [
+    {
+      "id": "checkpoints",
+      "name": "Checkpoints",
+      "models": [
+        {
+          "name": "Stable Diffusion v1.5 [EMA FP16]",
+          "file": "v1-5-pruned-emaonly.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 4.0,
+          "tags": [
+            "sd15",
+            "base"
+          ],
+          "hf_repo": "Comfy-Org/stable-diffusion-v1-5-archive",
+          "hf_file": "v1-5-pruned-emaonly.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "FLUX.1-dev FP8 [FLUX]",
+          "file": "flux1-dev-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 11.6,
+          "tags": [
+            "flux",
+            "fp8"
+          ],
+          "hf_repo": "Comfy-Org/flux1-dev",
+          "hf_file": "flux1-dev-fp8.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-schnell FP8 [FLUX]",
+          "file": "flux1-schnell-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 11.6,
+          "tags": [
+            "flux",
+            "fp8",
+            "fast"
+          ],
+          "hf_repo": "Comfy-Org/flux1-schnell",
+          "hf_file": "flux1-schnell-fp8.safetensors",
+          "base_model": "FLUX.1"
+        }
+      ]
+    },
+    {
+      "id": "diffusion_models",
+      "name": "Diffusion Models",
+      "models": [
+        {
+          "name": "FLUX.1-dev [FLUX FP16]",
+          "file": "flux1-dev.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.8,
+          "tags": [
+            "flux"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-dev",
+          "hf_file": "flux1-dev.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-schnell [FLUX FP16]",
+          "file": "flux1-schnell.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.8,
+          "tags": [
+            "flux",
+            "fast"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-schnell",
+          "hf_file": "flux1-schnell.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-Fill-dev [FLUX FP16]",
+          "file": "flux1-fill-dev.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.8,
+          "tags": [
+            "flux",
+            "inpainting"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-Fill-dev",
+          "hf_file": "flux1-fill-dev.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-Redux-dev [FLUX FP16]",
+          "file": "flux1-redux-dev.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 0.2,
+          "tags": [
+            "flux",
+            "style"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-Redux-dev",
+          "hf_file": "flux1-redux-dev.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-Depth-dev [FLUX FP16]",
+          "file": "flux1-depth-dev.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.8,
+          "tags": [
+            "flux",
+            "controlnet",
+            "depth"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-Depth-dev",
+          "hf_file": "flux1-depth-dev.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "FLUX.1-Canny-dev [FLUX FP16]",
+          "file": "flux1-canny-dev.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.8,
+          "tags": [
+            "flux",
+            "controlnet",
+            "canny"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-Canny-dev",
+          "hf_file": "flux1-canny-dev.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "WAN 2.1 I2V 480p 14B [FP16]",
+          "file": "wan2.1_i2v_480p_14B_fp16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 28.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V High Noise LightX2V [FP16]",
+          "file": "wan2.2_i2v_A14b_high_noise_lightx2v.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 28.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp32"
+          ],
+          "hf_repo": "lightx2v/Wan2.2-Official-Models",
+          "hf_file": "wan2.2_i2v_A14b_high_noise_lightx2v.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V Low Noise LightX2V [FP16]",
+          "file": "wan2.2_i2v_A14b_low_noise_lightx2v.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 28.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp32"
+          ],
+          "hf_repo": "lightx2v/Wan2.2-Official-Models",
+          "hf_file": "wan2.2_i2v_A14b_low_noise_lightx2v.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V High Noise 14B [FP8]",
+          "file": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 13.3,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp8"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V Low Noise 14B [FP8]",
+          "file": "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 13.3,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp8"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V High Noise 14B [FP16]",
+          "file": "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 28.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp16"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V Low Noise 14B [FP16]",
+          "file": "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 28.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp16"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V High Noise 14B Kijai [FP8]",
+          "file": "Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
+          "dest": "diffusion_models/WanVideo/2_2",
+          "source": "huggingface",
+          "size_gb": 15.0,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp8",
+            "kijai"
+          ],
+          "hf_repo": "Kijai/WanVideo_comfy_fp8_scaled",
+          "hf_file": "I2V/Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V Low Noise 14B Kijai [FP8]",
+          "file": "Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors",
+          "dest": "diffusion_models/WanVideo/2_2",
+          "source": "huggingface",
+          "size_gb": 15.0,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "fp8",
+            "kijai"
+          ],
+          "hf_repo": "Kijai/WanVideo_comfy_fp8_scaled",
+          "hf_file": "I2V/Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "Stable Diffusion XL Base 1.0 [FP16]",
+          "file": "sd_xl_base_1.0.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 6.9,
+          "tags": [
+            "sdxl",
+            "base"
+          ],
+          "hf_repo": "stabilityai/stable-diffusion-xl-base-1.0",
+          "hf_file": "sd_xl_base_1.0.safetensors",
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "SDXL Turbo 1.0 [FP16]",
+          "file": "sd_xl_turbo_1.0.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 6.9,
+          "tags": [
+            "sdxl",
+            "fast"
+          ],
+          "hf_repo": "stabilityai/sdxl-turbo",
+          "hf_file": "sd_xl_turbo_1.0.safetensors",
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "WAN 2.2 I2V High Noise 14B [GGUF Q8]",
+          "file": "wan2.2_i2v_high_noise_14B_Q8_0.gguf",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 14.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "gguf",
+            "q8"
+          ],
+          "hf_repo": "bullerwins/Wan2.2-I2V-A14B-GGUF",
+          "hf_file": "wan2.2_i2v_high_noise_14B_Q8_0.gguf",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.2 I2V Low Noise 14B [GGUF Q8]",
+          "file": "wan2.2_i2v_low_noise_14B_Q8_0.gguf",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 14.6,
+          "tags": [
+            "wan",
+            "video",
+            "i2v",
+            "gguf",
+            "q8"
+          ],
+          "hf_repo": "bullerwins/Wan2.2-I2V-A14B-GGUF",
+          "hf_file": "wan2.2_i2v_low_noise_14B_Q8_0.gguf",
+          "base_model": "WAN"
+        },
+        {
+          "name": "HunyuanVideo T2V 720p [FP8]",
+          "file": "hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 12.3,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "t2v"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo T2V 720p [BF16]",
+          "file": "hunyuan_video_720_cfgdistill_bf16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.9,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_720_cfgdistill_bf16.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "t2v"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo I2V 720p [FP8]",
+          "file": "hunyuan_video_I2V_720_fixed_fp8_e4m3fn.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 12.3,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_I2V_720_fixed_fp8_e4m3fn.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "i2v"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo I2V 720p [BF16]",
+          "file": "hunyuan_video_I2V_720_fixed_bf16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 23.9,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_I2V_720_fixed_bf16.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "i2v"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo FramePack I2V [FP8]",
+          "file": "FramePackI2V_HY_fp8_e4m3fn.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 15.2,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "FramePackI2V_HY_fp8_e4m3fn.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "i2v",
+            "framepack"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo Custom 720p [FP8 Scaled]",
+          "file": "hunyuan_video_custom_720p_fp8_scaled.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 12.3,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_custom_720p_fp8_scaled.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "video"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo I2V [GGUF Q4_K_S]",
+          "file": "hunyuan_video_I2V-Q4_K_S.gguf",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 7.2,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_I2V-Q4_K_S.gguf",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "i2v",
+            "gguf"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo I2V [GGUF Q8]",
+          "file": "hunyuan_video_I2V-Q8_0.gguf",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 13.0,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_I2V-Q8_0.gguf",
+          "tags": [
+            "hunyuanvideo",
+            "video",
+            "i2v",
+            "gguf"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "CogVideoX 1.0 5B I2V [BF16]",
+          "file": "CogVideoX_1_0_5b_I2V_bf16.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 10.5,
+          "hf_repo": "Kijai/CogVideoX-comfy",
+          "hf_file": "CogVideoX_1_0_5b_I2V_bf16.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "i2v"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "CogVideoX 1.5 5B I2V [BF16]",
+          "file": "CogVideoX_1_5_5b_I2V_bf16.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 10.4,
+          "hf_repo": "Kijai/CogVideoX-comfy",
+          "hf_file": "CogVideoX_1_5_5b_I2V_bf16.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "i2v"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "CogVideoX 1.5 5B T2V [BF16]",
+          "file": "CogVideoX_1_5_5b_T2V_bf16.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 10.4,
+          "hf_repo": "Kijai/CogVideoX-comfy",
+          "hf_file": "CogVideoX_1_5_5b_T2V_bf16.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "t2v"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "CogVideoX Fun 1.1 5B Control [FP8]",
+          "file": "CogVideoX_Fun_1_1_5b_Control_fp8_e4m3fn.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 5.2,
+          "hf_repo": "Kijai/CogVideoX-comfy",
+          "hf_file": "CogVideoX_Fun_1_1_5b_Control_fp8_e4m3fn.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "control",
+            "fp8"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "CogVideoX 5B I2V [GGUF Q4]",
+          "file": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 3.3,
+          "hf_repo": "Kijai/CogVideoX_GGUF",
+          "hf_file": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "i2v",
+            "gguf"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "CogVideoX 1.5 5B I2V [GGUF Q4]",
+          "file": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
+          "dest": "diffusion_models/CogVideo",
+          "source": "huggingface",
+          "size_gb": 4.1,
+          "hf_repo": "Kijai/CogVideoX_GGUF",
+          "hf_file": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
+          "tags": [
+            "cogvideox",
+            "video",
+            "i2v",
+            "gguf"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "LTX-Video 2B v0.9.5 [BF16]",
+          "file": "ltx-video-2b-v0.9.5.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 5.9,
+          "hf_repo": "Lightricks/LTX-Video",
+          "hf_file": "ltx-video-2b-v0.9.5.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video",
+            "t2v",
+            "i2v"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "LTX-Video 2B v0.9.1 [BF16]",
+          "file": "ltx-video-2b-v0.9.1.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 5.3,
+          "hf_repo": "Lightricks/LTX-Video",
+          "hf_file": "ltx-video-2b-v0.9.1.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "LTX-2 19B Dev [FP8]",
+          "file": "ltx-2-19b-dev-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 25.2,
+          "hf_repo": "Lightricks/LTX-2",
+          "hf_file": "ltx-2-19b-dev-fp8.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video",
+            "fp8"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "LTX-2 19B Distilled [FP8]",
+          "file": "ltx-2-19b-distilled-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 25.2,
+          "hf_repo": "Lightricks/LTX-2",
+          "hf_file": "ltx-2-19b-distilled-fp8.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video",
+            "fp8",
+            "distilled"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "WAN 2.1 T2V 14B [BF16]",
+          "file": "wan2.1_t2v_14B_bf16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 26.6,
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.1_t2v_14B_bf16.safetensors",
+          "tags": [
+            "wan",
+            "video",
+            "t2v"
+          ],
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.1 T2V 1.3B [BF16]",
+          "file": "wan2.1_t2v_1.3B_bf16.safetensors",
+          "dest": "diffusion_models",
+          "source": "huggingface",
+          "size_gb": 2.6,
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors",
+          "tags": [
+            "wan",
+            "video",
+            "t2v",
+            "1.3b"
+          ],
+          "base_model": "WAN"
+        },
+        {
+          "name": "LTX-2.3 22B Dev [FP8]",
+          "file": "ltx-2.3-22b-dev-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 27.1,
+          "hf_repo": "Lightricks/LTX-2.3-fp8",
+          "hf_file": "ltx-2.3-22b-dev-fp8.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video",
+            "fp8"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "LTX-2.3 22B Distilled [FP8]",
+          "file": "ltx-2.3-22b-distilled-fp8.safetensors",
+          "dest": "checkpoints",
+          "source": "huggingface",
+          "size_gb": 27.5,
+          "hf_repo": "Lightricks/LTX-2.3-fp8",
+          "hf_file": "ltx-2.3-22b-distilled-fp8.safetensors",
+          "tags": [
+            "ltxvideo",
+            "video",
+            "fp8",
+            "distilled"
+          ],
+          "base_model": "LTX-Video"
+        }
+      ]
+    },
+    {
+      "id": "loras",
+      "name": "LoRAs",
+      "models": [
+        {
+          "name": "FLUX.1-Depth-dev LoRA [FLUX]",
+          "file": "flux1-depth-dev-lora.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 0.4,
+          "tags": [
+            "flux",
+            "controlnet",
+            "depth"
+          ],
+          "base_model": "FLUX.1",
+          "hf_repo": "black-forest-labs/FLUX.1-Depth-dev-lora",
+          "hf_file": "flux1-depth-dev-lora.safetensors"
+        },
+        {
+          "name": "FLUX.1-Canny-dev LoRA [FLUX]",
+          "file": "flux1-canny-dev-lora.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 0.4,
+          "tags": [
+            "flux",
+            "controlnet",
+            "canny"
+          ],
+          "base_model": "FLUX.1",
+          "hf_repo": "black-forest-labs/FLUX.1-Canny-dev-lora",
+          "hf_file": "flux1-canny-dev-lora.safetensors"
+        },
+        {
+          "name": "WAN 2.2 LightX2V 4-step LoRA High [WAN I2V]",
+          "file": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 1.14,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "4step"
+          ],
+          "base_model": "wan-i2v-14b",
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
+        },
+        {
+          "name": "WAN 2.2 LightX2V 4-step LoRA Low [WAN I2V]",
+          "file": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 1.14,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "4step"
+          ],
+          "base_model": "wan-i2v-14b",
+          "hf_repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "hf_file": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
+        },
+        {
+          "name": "LightX2V CFG+Step Distill LoRA Kijai [WAN I2V BF16]",
+          "file": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+          "dest": "loras/WanVideo/Lightx2v",
+          "source": "huggingface",
+          "size_gb": 0.74,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "kijai"
+          ],
+          "base_model": "wan-i2v-14b",
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
+        },
+        {
+          "name": "Seko-V1 4-step LoRA High [WAN I2V]",
+          "file": "seko_v1_i2v_high_noise_model.safetensors",
+          "dest": "loras/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1",
+          "source": "huggingface",
+          "size_gb": 1.23,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "4step",
+            "seko"
+          ],
+          "base_model": "wan-i2v-14b",
+          "hf_repo": "lightx2v/Wan2.2-Lightning",
+          "hf_file": "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors"
+        },
+        {
+          "name": "Seko-V1 4-step LoRA Low [WAN I2V]",
+          "file": "seko_v1_i2v_low_noise_model.safetensors",
+          "dest": "loras/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1",
+          "source": "huggingface",
+          "size_gb": 1.23,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "4step",
+            "seko"
+          ],
+          "base_model": "wan-i2v-14b",
+          "hf_repo": "lightx2v/Wan2.2-Lightning",
+          "hf_file": "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors"
+        },
+        {
+          "name": "LightX2V Unified LoRA [WAN 2.1 I2V]",
+          "file": "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 0.7,
+          "tags": [
+            "wan",
+            "video",
+            "lightx2v",
+            "unified"
+          ],
+          "base_model": "wan-i2v-14b",
+          "pair_id": "lightx2v-unified",
+          "pair_role": "both",
+          "hf_repo": "lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v",
+          "hf_file": "loras/Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+        },
+        {
+          "name": "SVI v2 PRO High LoRA [WAN I2V]",
+          "file": "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 2.28,
+          "tags": [
+            "wan",
+            "video",
+            "svi",
+            "kijai"
+          ],
+          "base_model": "wan-i2v-14b",
+          "pair_id": "svi-v2-pro",
+          "pair_role": "high",
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "LoRAs/Stable-Video-Infinity/v2.0/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+        },
+        {
+          "name": "SVI v2 PRO Low LoRA [WAN I2V]",
+          "file": "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 2.28,
+          "tags": [
+            "wan",
+            "video",
+            "svi",
+            "kijai"
+          ],
+          "base_model": "wan-i2v-14b",
+          "pair_id": "svi-v2-pro",
+          "pair_role": "low",
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "LoRAs/Stable-Video-Infinity/v2.0/SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
+        },
+        {
+          "name": "IP-Adapter FaceID Plus V2 LoRA [SDXL]",
+          "file": "ip-adapter-faceid-plusv2_sdxl_lora.safetensors",
+          "dest": "loras",
+          "source": "huggingface",
+          "size_gb": 0.35,
+          "tags": [
+            "sdxl",
+            "ipadapter",
+            "faceid"
+          ],
+          "base_model": "SDXL 1.0",
+          "hf_repo": "h94/IP-Adapter-FaceID",
+          "hf_file": "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"
+        }
+      ]
+    },
+    {
+      "id": "vae",
+      "name": "VAE",
+      "models": [
+        {
+          "name": "FLUX.1 VAE [FLUX]",
+          "file": "ae.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.3,
+          "tags": [
+            "flux"
+          ],
+          "hf_repo": "black-forest-labs/FLUX.1-schnell",
+          "hf_file": "ae.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "SD 1.5 VAE ft-mse-840000",
+          "file": "vae-ft-mse-840000-ema-pruned.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.3,
+          "tags": [
+            "sd15",
+            "sd20"
+          ],
+          "hf_repo": "stabilityai/sd-vae-ft-mse-original",
+          "hf_file": "vae-ft-mse-840000-ema-pruned.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "WAN 2.1 VAE [FP16]",
+          "file": "wan_2.1_vae.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "tags": [
+            "wan",
+            "video"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/vae/wan_2.1_vae.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.1 VAE [FP32]",
+          "file": "Wan2_1_VAE_fp32.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "tags": [
+            "wan",
+            "video",
+            "fp32"
+          ],
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "Wan2_1_VAE_fp32.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "WAN 2.1 VAE [BF16]",
+          "file": "Wan2_1_VAE_bf16.safetensors",
+          "dest": "vae/wanvideo",
+          "source": "huggingface",
+          "size_gb": 0.25,
+          "tags": [
+            "wan",
+            "video",
+            "bf16",
+            "kijai"
+          ],
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "Wan2_1_VAE_bf16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "HunyuanVideo VAE [BF16]",
+          "file": "hunyuan_video_vae_bf16.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_vae_bf16.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "vae"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "HunyuanVideo VAE [FP32]",
+          "file": "hunyuan_video_vae_fp32.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "hf_repo": "Kijai/HunyuanVideo_comfy",
+          "hf_file": "hunyuan_video_vae_fp32.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "vae"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "CogVideoX VAE [BF16]",
+          "file": "cogvideox_vae_bf16.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.4,
+          "hf_repo": "Kijai/CogVideoX-comfy",
+          "hf_file": "cogvideox_vae_bf16.safetensors",
+          "tags": [
+            "cogvideox",
+            "vae"
+          ],
+          "base_model": "CogVideoX"
+        },
+        {
+          "name": "SDXL VAE [FP16 Fix]",
+          "file": "sdxl_vae.safetensors",
+          "dest": "vae",
+          "source": "huggingface",
+          "size_gb": 0.3,
+          "hf_repo": "madebyollin/sdxl-vae-fp16-fix",
+          "hf_file": "sdxl_vae.safetensors",
+          "tags": [
+            "sdxl",
+            "vae"
+          ],
+          "base_model": "SDXL 1.0"
+        }
+      ]
+    },
+    {
+      "id": "text_encoders",
+      "name": "Text Encoders",
+      "models": [
+        {
+          "name": "CLIP-L [FLUX]",
+          "file": "clip_l.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 0.2,
+          "tags": [
+            "flux",
+            "clip"
+          ],
+          "hf_repo": "comfyanonymous/flux_text_encoders",
+          "hf_file": "clip_l.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "T5-XXL [FLUX FP16]",
+          "file": "t5xxl_fp16.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 9.5,
+          "tags": [
+            "flux",
+            "t5"
+          ],
+          "hf_repo": "comfyanonymous/flux_text_encoders",
+          "hf_file": "t5xxl_fp16.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "T5-XXL [FLUX FP8]",
+          "file": "t5xxl_fp8_e4m3fn.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 4.8,
+          "tags": [
+            "flux",
+            "t5",
+            "fp8"
+          ],
+          "hf_repo": "comfyanonymous/flux_text_encoders",
+          "hf_file": "t5xxl_fp8_e4m3fn.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "CLIP ViT-L/14 [SD 1.5]",
+          "file": "clip-vit-large-patch14.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 0.6,
+          "tags": [
+            "sd15",
+            "sd20",
+            "clip"
+          ],
+          "hf_repo": "openai/clip-vit-large-patch14",
+          "hf_file": "model.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "UMT5-XXL [WAN FP8]",
+          "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 4.8,
+          "tags": [
+            "wan",
+            "video",
+            "fp8"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "UMT5-XXL [WAN FP32]",
+          "file": "wan21UMT5XxlFP32_fp32.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 11.0,
+          "tags": [
+            "wan",
+            "video",
+            "fp32"
+          ],
+          "hf_repo": "LS110824/text_encoders",
+          "hf_file": "wan21UMT5XxlFP32_fp32.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "UMT5-XXL [WAN BF16]",
+          "file": "umt5-xxl-enc-bf16.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 11.4,
+          "tags": [
+            "wan",
+            "video",
+            "bf16",
+            "kijai"
+          ],
+          "hf_repo": "Kijai/WanVideo_comfy",
+          "hf_file": "umt5-xxl-enc-bf16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "UMT5-XXL [WAN FP16]",
+          "file": "umt5_xxl_fp16.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 9.5,
+          "tags": [
+            "wan",
+            "video",
+            "fp16"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "LLaVA-LLaMA3 [HunyuanVideo FP8]",
+          "file": "llava_llama3_fp8_scaled.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 8.5,
+          "hf_repo": "Comfy-Org/HunyuanVideo_repackaged",
+          "hf_file": "split_files/text_encoders/llava_llama3_fp8_scaled.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "text-encoder"
+          ],
+          "base_model": "HunyuanVideo"
+        },
+        {
+          "name": "LLaVA-LLaMA3 [HunyuanVideo FP16]",
+          "file": "llava_llama3_fp16.safetensors",
+          "dest": "text_encoders",
+          "source": "huggingface",
+          "size_gb": 15.0,
+          "hf_repo": "Comfy-Org/HunyuanVideo_repackaged",
+          "hf_file": "split_files/text_encoders/llava_llama3_fp16.safetensors",
+          "tags": [
+            "hunyuanvideo",
+            "text-encoder"
+          ],
+          "base_model": "HunyuanVideo"
+        }
+      ]
+    },
+    {
+      "id": "clip_vision",
+      "name": "CLIP Vision",
+      "models": [
+        {
+          "name": "CLIP Vision H [WAN]",
+          "file": "clip_vision_h.safetensors",
+          "dest": "clip_vision",
+          "source": "huggingface",
+          "size_gb": 1.7,
+          "tags": [
+            "wan",
+            "video"
+          ],
+          "hf_repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "hf_file": "split_files/clip_vision/clip_vision_h.safetensors",
+          "base_model": "WAN"
+        },
+        {
+          "name": "SigCLIP Vision 384 [FLUX]",
+          "file": "sigclip_vision_patch14_384.safetensors",
+          "dest": "clip_vision",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "tags": [
+            "flux"
+          ],
+          "hf_repo": "Comfy-Org/sigclip_vision_384",
+          "hf_file": "sigclip_vision_patch14_384.safetensors",
+          "base_model": "FLUX.1"
+        },
+        {
+          "name": "CLIP Vision H ViT-H/14 [IP-Adapter]",
+          "file": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+          "dest": "clip_vision",
+          "source": "huggingface",
+          "size_gb": 2.4,
+          "tags": [
+            "ipadapter",
+            "sdxl",
+            "sd15"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/image_encoder/model.safetensors",
+          "base_model": "SDXL 1.0"
+        }
+      ]
+    },
+    {
+      "id": "controlnet",
+      "name": "ControlNet",
+      "models": [
+        {
+          "name": "ControlNet v1.1 Depth [SD 1.5 FP16]",
+          "file": "control_v11f1p_sd15_depth_fp16.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 1.4,
+          "tags": [
+            "sd15",
+            "depth"
+          ],
+          "hf_repo": "comfyanonymous/ControlNet-v1-1_fp16_safetensors",
+          "hf_file": "control_v11f1p_sd15_depth_fp16.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "ControlNet v1.1 Canny [SD 1.5 FP16]",
+          "file": "control_v11f1p_sd15_canny_fp16.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 1.4,
+          "tags": [
+            "sd15",
+            "canny"
+          ],
+          "hf_repo": "comfyanonymous/ControlNet-v1-1_fp16_safetensors",
+          "hf_file": "control_v11f1p_sd15_canny_fp16.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "ControlNet v1.1 OpenPose [SD 1.5 FP16]",
+          "file": "control_v11f1p_sd15_openpose_fp16.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 1.4,
+          "tags": [
+            "sd15",
+            "openpose"
+          ],
+          "hf_repo": "comfyanonymous/ControlNet-v1-1_fp16_safetensors",
+          "hf_file": "control_v11f1p_sd15_openpose_fp16.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "ControlNet Union SDXL ProMax [12 modes]",
+          "file": "diffusion_pytorch_model_promax.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 2.3,
+          "hf_repo": "xinsir/controlnet-union-sdxl-1.0",
+          "hf_file": "diffusion_pytorch_model_promax.safetensors",
+          "tags": [
+            "controlnet",
+            "sdxl",
+            "union"
+          ],
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "ControlNet Depth Mid [SDXL]",
+          "file": "diffusers_xl_depth_mid.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "hf_repo": "lllyasviel/sd_control_collection",
+          "hf_file": "diffusers_xl_depth_mid.safetensors",
+          "tags": [
+            "controlnet",
+            "sdxl",
+            "depth"
+          ],
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "ControlNet Canny Mid [SDXL]",
+          "file": "diffusers_xl_canny_mid.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "hf_repo": "lllyasviel/sd_control_collection",
+          "hf_file": "diffusers_xl_canny_mid.safetensors",
+          "tags": [
+            "controlnet",
+            "sdxl",
+            "canny"
+          ],
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "ControlNet v1.1 Lineart [SD 1.5]",
+          "file": "control_v11p_sd15_lineart.pth",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 1.4,
+          "hf_repo": "lllyasviel/ControlNet-v1-1",
+          "hf_file": "control_v11p_sd15_lineart.pth",
+          "tags": [
+            "controlnet",
+            "sd1.5",
+            "lineart"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "ControlNet v1.1 Tile [SD 1.5]",
+          "file": "control_v11f1e_sd15_tile.pth",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 1.4,
+          "hf_repo": "lllyasviel/ControlNet-v1-1",
+          "hf_file": "control_v11f1e_sd15_tile.pth",
+          "tags": [
+            "controlnet",
+            "sd1.5",
+            "tile"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "ControlNet OpenPose [SDXL]",
+          "file": "diffusion_pytorch_model.safetensors",
+          "dest": "controlnet",
+          "source": "huggingface",
+          "size_gb": 2.3,
+          "hf_repo": "xinsir/controlnet-openpose-sdxl-1.0",
+          "hf_file": "diffusion_pytorch_model.safetensors",
+          "tags": [
+            "controlnet",
+            "sdxl",
+            "openpose"
+          ],
+          "base_model": "SDXL 1.0"
+        }
+      ]
+    },
+    {
+      "id": "ipadapter",
+      "name": "IP-Adapter",
+      "models": [
+        {
+          "name": "IP-Adapter Plus [SDXL]",
+          "file": "ip-adapter-plus_sdxl_vit-h.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.8,
+          "tags": [
+            "sdxl",
+            "style"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "IP-Adapter Plus Face [SDXL]",
+          "file": "ip-adapter-plus-face_sdxl_vit-h.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.8,
+          "tags": [
+            "sdxl",
+            "face"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors",
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "IP-Adapter Plus [SD 1.5]",
+          "file": "ip-adapter-plus_sd15.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.1,
+          "tags": [
+            "sd15",
+            "style"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter-plus_sd15.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter FaceID Plus V2 [SDXL]",
+          "file": "ip-adapter-faceid-plusv2_sdxl.bin",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.8,
+          "tags": [
+            "sdxl",
+            "face"
+          ],
+          "hf_repo": "h94/IP-Adapter-FaceID",
+          "hf_file": "ip-adapter-faceid-plusv2_sdxl.bin",
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "IP-Adapter Plus Face [SD 1.5]",
+          "file": "ip-adapter-plus-face_sd15.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.1,
+          "tags": [
+            "sd15",
+            "ipadapter",
+            "face"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter-plus-face_sd15.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter Full Face [SD 1.5]",
+          "file": "ip-adapter-full-face_sd15.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.04,
+          "tags": [
+            "sd15",
+            "ipadapter",
+            "face"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter-full-face_sd15.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter [SD 1.5]",
+          "file": "ip-adapter_sd15.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.04,
+          "tags": [
+            "sd15",
+            "ipadapter"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter_sd15.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter Light v1.1 [SD 1.5]",
+          "file": "ip-adapter_sd15_light_v11.bin",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.04,
+          "tags": [
+            "sd15",
+            "ipadapter"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter_sd15_light_v11.bin",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter ViT-G [SD 1.5]",
+          "file": "ip-adapter_sd15_vit-G.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.04,
+          "tags": [
+            "sd15",
+            "ipadapter"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "models/ip-adapter_sd15_vit-G.safetensors",
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "IP-Adapter [SDXL]",
+          "file": "ip-adapter_sdxl_vit-h.safetensors",
+          "dest": "ipadapter",
+          "source": "huggingface",
+          "size_gb": 0.65,
+          "tags": [
+            "sdxl",
+            "ipadapter"
+          ],
+          "hf_repo": "h94/IP-Adapter",
+          "hf_file": "sdxl_models/ip-adapter_sdxl_vit-h.safetensors",
+          "base_model": "SDXL 1.0"
+        }
+      ]
+    },
+    {
+      "id": "upscalers",
+      "name": "Upscalers",
+      "models": [
+        {
+          "name": "4x Foolhardy Remacri",
+          "file": "4x_foolhardy_Remacri.pth",
+          "dest": "upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.067,
+          "tags": [
+            "4x",
+            "general"
+          ],
+          "hf_repo": "FacehugmanIII/4x_foolhardy_Remacri",
+          "hf_file": "4x_foolhardy_Remacri.pth"
+        },
+        {
+          "name": "4x UltraSharp",
+          "file": "4x-UltraSharp.pth",
+          "dest": "upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.067,
+          "tags": [
+            "4x",
+            "sharp"
+          ],
+          "hf_repo": "Kim2091/UltraSharp",
+          "hf_file": "4x-UltraSharp.pth"
+        },
+        {
+          "name": "RealESRGAN x4",
+          "file": "RealESRGAN_x4plus.pth",
+          "dest": "upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.064,
+          "tags": [
+            "4x",
+            "general"
+          ],
+          "hf_repo": "ai-forever/Real-ESRGAN",
+          "hf_file": "RealESRGAN_x4.pth"
+        },
+        {
+          "name": "RealESRGAN x4 Anime",
+          "file": "RealESRGAN_x4plus_anime_6B.pth",
+          "dest": "upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.064,
+          "tags": [
+            "4x",
+            "anime"
+          ],
+          "hf_repo": "ai-forever/Real-ESRGAN",
+          "hf_file": "RealESRGAN_x4.pth"
+        },
+        {
+          "name": "LTX-2.3 Spatial Upscaler 2x",
+          "file": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors",
+          "dest": "latent_upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "hf_repo": "Lightricks/LTX-2.3",
+          "hf_file": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors",
+          "tags": [
+            "ltxvideo",
+            "upscaler",
+            "spatial"
+          ],
+          "base_model": "LTX-Video"
+        },
+        {
+          "name": "LTX-2.3 Temporal Upscaler 2x",
+          "file": "ltx-2.3-temporal-upscaler-x2-1.0.safetensors",
+          "dest": "latent_upscale_models",
+          "source": "huggingface",
+          "size_gb": 0.2,
+          "hf_repo": "Lightricks/LTX-2.3",
+          "hf_file": "ltx-2.3-temporal-upscaler-x2-1.0.safetensors",
+          "tags": [
+            "ltxvideo",
+            "upscaler",
+            "temporal"
+          ],
+          "base_model": "LTX-Video"
+        }
+      ]
+    },
+    {
+      "id": "embeddings",
+      "name": "Embeddings",
+      "models": [
+        {
+          "name": "EasyNegative [SD 1.5 FP16]",
+          "file": "easynegative.safetensors",
+          "dest": "embeddings",
+          "source": "civitai",
+          "size_gb": 0.001,
+          "tags": [
+            "sd15",
+            "negative"
+          ],
+          "civitai_version_id": 9208,
+          "civitai_model_id": 7808,
+          "civitai_file_id": 8955,
+          "civitai_base_model": "SD 1.5",
+          "civitai_version": "EasyNegative",
+          "civitai_type": "TextualInversion",
+          "trainedWords": [
+            "easynegative"
+          ],
+          "civitai_tags": [
+            "anime",
+            "negative",
+            "negative embedding",
+            "textual inversion",
+            "embedding",
+            "tool"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "veryBadImageNegative v1.3 [SD 1.5 FP16]",
+          "file": "verybadimagenegative_v1.3.pt",
+          "dest": "embeddings",
+          "source": "civitai",
+          "size_gb": 0.001,
+          "tags": [
+            "sd15",
+            "negative"
+          ],
+          "civitai_version_id": 25820,
+          "civitai_model_id": 11772,
+          "civitai_file_id": 21434,
+          "civitai_base_model": "SD 1.5",
+          "civitai_version": "veryBadImageNegative_v1.3",
+          "civitai_type": "TextualInversion",
+          "trainedWords": [
+            "verybadimagenegative_v1.3"
+          ],
+          "civitai_tags": [
+            "negative",
+            "negative embedding"
+          ],
+          "name_locked": true,
+          "base_model": "SD 1.5"
+        }
+      ]
+    },
+    {
+      "id": "detectors",
+      "name": "Detectors",
+      "models": [
+        {
+          "name": "Face YOLOv8m [Ultralytics]",
+          "file": "face_yolov8m.pt",
+          "dest": "ultralytics/bbox",
+          "source": "huggingface",
+          "size_gb": 0.05,
+          "tags": [
+            "face",
+            "detection",
+            "ultralytics"
+          ],
+          "hf_repo": "Bingsu/adetailer",
+          "hf_file": "face_yolov8m.pt"
+        }
+      ]
+    },
+    {
+      "id": "animatediff",
+      "name": "AnimateDiff",
+      "models": [
+        {
+          "name": "AnimateDiff v3 Motion Module [SD 1.5]",
+          "file": "v3_sd15_mm.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.6,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v3_sd15_mm.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff v2 Motion Module [SD 1.5]",
+          "file": "mm_sd_v15_v2.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.7,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "mm_sd_v15_v2.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff v1.4 Motion Module [SD 1.5]",
+          "file": "mm_sd_v14.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.6,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "mm_sd_v14.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff v1.5 Motion Module [SD 1.5]",
+          "file": "mm_sd_v15.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.6,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "mm_sd_v15.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Lightning 4-step [SD 1.5]",
+          "file": "animatediff_lightning_4step_comfyui.safetensors",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "hf_repo": "ByteDance/AnimateDiff-Lightning",
+          "hf_file": "animatediff_lightning_4step_comfyui.safetensors",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion",
+            "fast"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Lightning 8-step [SD 1.5]",
+          "file": "animatediff_lightning_8step_comfyui.safetensors",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "hf_repo": "ByteDance/AnimateDiff-Lightning",
+          "hf_file": "animatediff_lightning_8step_comfyui.safetensors",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion",
+            "fast"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff SDXL v1.0 Beta [SDXL]",
+          "file": "mm_sdxl_v10_beta.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.9,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "mm_sdxl_v10_beta.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "motion",
+            "sdxl"
+          ],
+          "base_model": "SDXL 1.0"
+        },
+        {
+          "name": "AnimateDiff v3 Adapter [SD 1.5]",
+          "file": "v3_sd15_adapter.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.1,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v3_sd15_adapter.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "adapter"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera ZoomIn [SD 1.5]",
+          "file": "v2_lora_ZoomIn.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_ZoomIn.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera ZoomOut [SD 1.5]",
+          "file": "v2_lora_ZoomOut.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_ZoomOut.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera PanLeft [SD 1.5]",
+          "file": "v2_lora_PanLeft.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_PanLeft.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera PanRight [SD 1.5]",
+          "file": "v2_lora_PanRight.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_PanRight.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera TiltUp [SD 1.5]",
+          "file": "v2_lora_TiltUp.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_TiltUp.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff Camera TiltDown [SD 1.5]",
+          "file": "v2_lora_TiltDown.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v2_lora_TiltDown.ckpt",
+          "tags": [
+            "animatediff",
+            "camera",
+            "lora"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff v3 SparseCtrl RGB [SD 1.5]",
+          "file": "v3_sd15_sparsectrl_rgb.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.9,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v3_sd15_sparsectrl_rgb.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "sparsectrl"
+          ],
+          "base_model": "SD 1.5"
+        },
+        {
+          "name": "AnimateDiff v3 SparseCtrl Scribble [SD 1.5]",
+          "file": "v3_sd15_sparsectrl_scribble.ckpt",
+          "dest": "animatediff_models",
+          "source": "huggingface",
+          "size_gb": 1.9,
+          "hf_repo": "guoyww/animatediff",
+          "hf_file": "v3_sd15_sparsectrl_scribble.ckpt",
+          "tags": [
+            "animatediff",
+            "video",
+            "sparsectrl"
+          ],
+          "base_model": "SD 1.5"
+        }
+      ]
+    },
+    {
+      "id": "segmentation",
+      "name": "Segmentation",
+      "models": [
+        {
+          "name": "SAM 2.1 Hiera Large [FP16]",
+          "file": "sam2.1_hiera_large-fp16.safetensors",
+          "dest": "sam2",
+          "source": "huggingface",
+          "size_gb": 0.4,
+          "hf_repo": "Kijai/sam2-safetensors",
+          "hf_file": "sam2.1_hiera_large-fp16.safetensors",
+          "tags": [
+            "sam2",
+            "segmentation"
+          ],
+          "base_model": ""
+        },
+        {
+          "name": "SAM 2.1 Hiera Base Plus [FP16]",
+          "file": "sam2.1_hiera_base_plus-fp16.safetensors",
+          "dest": "sam2",
+          "source": "huggingface",
+          "size_gb": 0.2,
+          "hf_repo": "Kijai/sam2-safetensors",
+          "hf_file": "sam2.1_hiera_base_plus-fp16.safetensors",
+          "tags": [
+            "sam2",
+            "segmentation"
+          ],
+          "base_model": ""
+        },
+        {
+          "name": "SAM 2.1 Hiera Small [FP16]",
+          "file": "sam2.1_hiera_small-fp16.safetensors",
+          "dest": "sam2",
+          "source": "huggingface",
+          "size_gb": 0.1,
+          "hf_repo": "Kijai/sam2-safetensors",
+          "hf_file": "sam2.1_hiera_small-fp16.safetensors",
+          "tags": [
+            "sam2",
+            "segmentation"
+          ],
+          "base_model": ""
+        },
+        {
+          "name": "SAM 2.1 Hiera Tiny [FP16]",
+          "file": "sam2.1_hiera_tiny-fp16.safetensors",
+          "dest": "sam2",
+          "source": "huggingface",
+          "size_gb": 0.07,
+          "hf_repo": "Kijai/sam2-safetensors",
+          "hf_file": "sam2.1_hiera_tiny-fp16.safetensors",
+          "tags": [
+            "sam2",
+            "segmentation"
+          ],
+          "base_model": ""
+        }
+      ]
+    },
+    {
+      "id": "faceswap",
+      "name": "Face Swap",
+      "models": [
+        {
+          "name": "InsightFace inswapper_128 [ONNX]",
+          "file": "inswapper_128.onnx",
+          "dest": "insightface",
+          "source": "huggingface",
+          "size_gb": 0.5,
+          "hf_repo": "ezioruan/inswapper_128.onnx",
+          "hf_file": "inswapper_128.onnx",
+          "tags": [
+            "faceswap",
+            "insightface"
+          ],
+          "base_model": ""
+        }
+      ]
+    }
+  ]
+}

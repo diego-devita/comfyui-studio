@@ -18,7 +18,7 @@ This directory contains the model catalogs that drive the Model Manager, LoRA Ma
 
 ### Summary
 
-**108 models** across **16 categories**, covering all features advertised by ComfyUI Studio.
+**126 models** across **14 categories**, covering all features advertised by ComfyUI Studio.
 
 Every model in this catalog has a verified download source (HuggingFace or CivitAI) and uses the standardized metadata format described below.
 
@@ -26,36 +26,36 @@ Every model in this catalog has a verified download source (HuggingFace or Civit
 
 | Feature | Models | Categories | What's included |
 |---------|--------|------------|-----------------|
-| **WAN 2.1 / 2.2** | 27 | Diffusion, VAE, Text Enc, CLIP Vision, LoRAs | I2V high/low noise in FP8, FP16, BF16, GGUF Q8; Kijai + LightX2V variants; 3 VAE formats; 4 text encoder formats; SVI Pro, Seko, LightX2V LoRAs |
+| **WAN 2.1 / 2.2** | 29 | Diffusion, VAE, Text Enc, CLIP Vision, LoRAs | I2V + T2V (14B + 1.3B) in FP8, FP16, BF16, GGUF Q8; Kijai + LightX2V variants; 3 VAE formats; 4 text encoder formats; SVI Pro, Seko, LightX2V LoRAs |
 | **Flux** | 15 | Checkpoints, Diffusion, VAE, Text Enc, CLIP Vision, LoRAs | dev + schnell (FP8 + FP16); Fill, Redux, Depth, Canny; VAE; CLIP-L + T5-XXL (FP8 + FP16); SigCLIP; Depth + Canny LoRAs |
 | **HunyuanVideo** | 12 | Diffusion, VAE, Text Enc | T2V + I2V (FP8 + BF16); FramePack I2V; Custom 720p; GGUF Q4 + Q8; VAE (BF16 + FP32); LLaVA-LLaMA3 text encoder (FP8 + FP16) |
 | **CogVideoX** | 7 | Diffusion, VAE | 1.0 + 1.5 I2V, 1.5 T2V (BF16); Fun Control (FP8); GGUF Q4; VAE |
-| **AnimateDiff** | 7 | AnimateDiff | Motion modules v1.4, v1.5, v2, v3; Lightning 4-step + 8-step; SDXL beta; v3 adapter |
-| **LTX Video** | 4 | Diffusion | v0.9.1, v0.9.5 (2B BF16); LTX-2 19B dev + distilled (FP8) |
-| **SDXL** | 10 | Diffusion, ControlNet, IP-Adapter | Base 1.0 + Turbo; Union ControlNet ProMax (12 modes) + Depth/Canny Mid; IP-Adapter (4 variants) + FaceID LoRA |
-| **SD 1.5** | 14 | Checkpoints, VAE, Text Enc, ControlNet, IP-Adapter, Embeddings | Base checkpoint; VAE ft-mse; CLIP ViT-L/14; ControlNet Depth/Canny/OpenPose; IP-Adapter (6 variants); EasyNegative + veryBadImageNegative |
+| **AnimateDiff** | 16 | AnimateDiff | Motion modules v1.4-v3; Lightning 4/8-step; SDXL beta; v3 adapter; 6 camera LoRAs; SparseCtrl RGB + Scribble |
+| **LTX Video** | 8 | Diffusion, Upscalers | v0.9.1, v0.9.5 (2B BF16); LTX-2 19B dev + distilled (FP8); LTX-2.3 22B dev + distilled (FP8); spatial + temporal upsamplers |
+| **SDXL** | 9 | Diffusion, VAE, ControlNet, IP-Adapter | Base 1.0 + Turbo; VAE FP16; Union ControlNet ProMax + Depth/Canny/OpenPose; IP-Adapter (4 variants) + FaceID LoRA |
+| **SD 1.5** | 11 | Checkpoints, VAE, Text Enc, ControlNet, IP-Adapter, Embeddings | Base checkpoint; VAE ft-mse; CLIP ViT-L/14; ControlNet Depth/Canny/OpenPose/Lineart/Tile; IP-Adapter (6 variants); EasyNegative + veryBadImageNegative |
 | **Segmentation** | 4 | Segmentation | SAM 2.1 Hiera: Large, Base Plus, Small, Tiny (all FP16) |
 | **Face Swap** | 1 | Face Swap | InsightFace inswapper_128 (ONNX) for ReActor |
-| **Upscale** | 4 | Upscalers | 4x Foolhardy Remacri, 4x UltraSharp, RealESRGAN x4, RealESRGAN x4 Anime |
+| **Upscale** | 6 | Upscalers | 4x Remacri, 4x UltraSharp, RealESRGAN x4, RealESRGAN x4 Anime, LTX spatial + temporal |
 | **Detection** | 1 | Detectors | Face YOLOv8m (Ultralytics) |
-| | **108 total** | **16 categories** | |
+| | **126 total** | **14 categories** | |
 
 ### Categories
 
 | Category | Count | Description |
 |----------|-------|-------------|
 | Checkpoints | 3 | Full model files (SD 1.5, Flux FP8 dev/schnell) |
-| Diffusion Models | 35 | Diffusion UNets and transformers (Flux, WAN, HunyuanVideo, CogVideoX, LTX, SDXL) |
+| Diffusion Models | 41 | Diffusion UNets and transformers (Flux, WAN, HunyuanVideo, CogVideoX, LTX, SDXL) |
 | LoRAs | 11 | Technical LoRAs (Flux ControlNet, WAN acceleration/quality, IP-Adapter FaceID) |
-| VAE | 8 | Variational autoencoders (Flux, SD 1.5, WAN, HunyuanVideo, CogVideoX) |
+| VAE | 9 | Variational autoencoders (Flux, SD 1.5, SDXL, WAN, HunyuanVideo, CogVideoX) |
 | Text Encoders | 10 | CLIP, T5-XXL, UMT5-XXL, LLaVA-LLaMA3 in multiple precisions |
 | CLIP Vision | 3 | Visual encoders for WAN, Flux, IP-Adapter |
-| ControlNet | 6 | SD 1.5 (Depth, Canny, OpenPose) + SDXL (Union ProMax, Depth Mid, Canny Mid) |
+| ControlNet | 9 | SD 1.5 (Depth, Canny, OpenPose, Lineart, Tile) + SDXL (Union ProMax, Depth, Canny, OpenPose) |
 | IP-Adapter | 10 | Image prompt adapters for SD 1.5 (6) and SDXL (4) |
-| Upscalers | 4 | Super-resolution models (4x) |
+| Upscalers | 6 | Super-resolution (4x) + LTX spatial/temporal upsamplers |
 | Embeddings | 2 | Negative prompt embeddings for SD 1.5 |
 | Detectors | 1 | Face detection (YOLOv8) for FaceDetailer |
-| AnimateDiff | 7 | Motion modules for SD 1.5 / SDXL video animation |
+| AnimateDiff | 16 | Motion modules v1.4-v3, Lightning, camera LoRAs, SparseCtrl, SDXL beta |
 | Segmentation | 4 | SAM 2.1 segment-anything models |
 | Face Swap | 1 | InsightFace model for ReActor face swap |
 
