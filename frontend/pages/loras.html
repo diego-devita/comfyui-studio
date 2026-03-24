@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — LoRAs</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  /* ── Status badge override (icon-only, no border/padding) ── */
+  .status-badge {
+    font-size: 16px;
+    cursor: help;
+    flex-shrink: 0;
+    align-self: flex-start;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+    font-family: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    padding: 0;
+    border: none;
+  }
+  .status-badge.present     { color: var(--success); }
+  .status-badge.missing     { color: var(--muted); }
+  .status-badge.queued      { color: var(--queued); animation: pulse 2s ease-in-out infinite; }
+  .status-badge.downloading { color: var(--accent); }
+  .status-badge.error       { color: var(--error); }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link active">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>LoRAs</small></div>
+  <div class="header-actions"></div>
+</header>
+
+<!-- Status bar -->
+<div class="status-bar" id="statusBar">
+  <span class="stat stat--downloading" id="statDownloading">0 downloading</span>
+  <span class="stat stat--queued" id="statQueued">0 queued</span>
+  <span class="stat stat--present" id="statPresent">0 / 0 present</span>
+  <span class="stat stat--disk" id="statDisk">--</span>
+  <span class="stat stat--concurrent">
+    Parallel: <select id="maxConcurrent"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
+  </span>
+</div>
+
+<!-- Filter panel -->
+<div class="filter-panel">
+  <div class="filter-row" style="display:none;">
+    <span class="filter-label">Categories</span>
+    <div id="categoryFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row" style="display:none;">
+    <span class="filter-label">Tags</span>
+    <div id="tagFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Base Model</span>
+    <div id="baseModelFilters" class="tag-group"></div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Status</span>
+    <div id="statusFilters" class="tag-group">
+      <button class="filter-tag active" data-status="present">&#10003; present</button>
+      <button class="filter-tag active" data-status="missing">&#10005; missing</button>
+      <button class="filter-tag active" data-status="queued">&#9719; queued</button>
+      <button class="filter-tag active" data-status="downloading">&#8595; downloading</button>
+      <button class="filter-tag active" data-status="error">&#9888; error</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">Sort</span>
+    <div class="sort-group" id="sortGroup">
+      <button class="sort-btn active" data-sort="name">Name <span class="sort-arrow">&#9650;</span></button>
+      <button class="sort-btn" data-sort="size">Size</button>
+      <button class="sort-btn" data-sort="status">Status</button>
+    </div>
+    <span class="filter-label" style="margin-left:auto">View</span>
+    <div class="view-group" id="viewGroup">
+      <button class="view-btn active" data-view="extended">Extended</button>
+      <button class="view-btn" data-view="compact">Compact</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search LoRAs...">
+  </div>
+</div>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading LoRAs...
+  </div>
+</main>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let categories = [];
+  let activeCategories = new Set();
+  let activeTags = new Set();
+  let activeStatuses = new Set(['present', 'missing', 'queued', 'downloading', 'error']);
+  let activeBaseModels = new Set();
+  let currentSort = 'name';
+  let sortAscending = true;
+  let currentView = 'extended';
+  let searchQuery = '';
+  let pollTimer = null;
+  const cardMap = {};
+  const sectionMap = {};
+  let allTags = [];
+
+  // ── DOM refs ──
+  const $searchInput  = document.getElementById('searchInput');
+  const $main         = document.getElementById('mainContent');
+  const $loading      = document.getElementById('loadingState');
+  const $categoryFilters = document.getElementById('categoryFilters');
+  const $tagFilters   = document.getElementById('tagFilters');
+  const $statusFilters = document.getElementById('statusFilters');
+  const $sortGroup    = document.getElementById('sortGroup');
+  const $viewGroup    = document.getElementById('viewGroup');
+  const $statDownloading = document.getElementById('statDownloading');
+  const $statQueued   = document.getElementById('statQueued');
+  const $statPresent  = document.getElementById('statPresent');
+  const $statDisk     = document.getElementById('statDisk');
+  const $maxConcurrent = document.getElementById('maxConcurrent');
+
+  // ── Page-specific utilities ──
+  function fmtSize(gb) {
+    if (!gb) return '--';
+    if (gb < 0.01) return (gb * 1024).toFixed(0) + ' MB';
+    return gb + ' GB';
+  }
+
+  function makeSourceLink(url, model) {
+    if (!url) return '';
+    if (url.includes('civitai.com/api/download/models/')) {
+      // Use civitai_model_id if available (correct), otherwise extract version ID
+      if (model && model.civitai_model_id) {
+        const match = url.match(/models\/(\d+)/);
+        var vid = match ? match[1] : '';
+        return 'https://civitai.com/models/' + model.civitai_model_id + (vid ? '?modelVersionId=' + vid : '');
+      }
+      const match = url.match(/models\/(\d+)/);
+      if (match) return 'https://civitai.com/models/?modelVersionId=' + match[1];
+    }
+    return url;
+  }
+
+  function statusOrder(status) {
+    const order = { downloading: 0, queued: 1, error: 2, missing: 3, present: 4 };
+    return order[status] !== undefined ? order[status] : 5;
+  }
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await apiFetch('/api/admin/loras');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      handleModelData(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Initial load error:', e);
+      }
+    }
+  }
+
+  // Make loadModels an alias for initialLoad (used by sync handler)
+  var loadModels = initialLoad;
+
+  // ── Tag extraction ──
+  function extractAllTags(cats) {
+    const freq = {};
+    for (const cat of cats) {
+      for (const m of cat.models) {
+        for (const t of (m.tags || [])) {
+          freq[t] = (freq[t] || 0) + 1;
+        }
+      }
+    }
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .map(e => e[0]);
+  }
+
+  // ── Build filter UI ──
+  function buildCategoryFilters(cats) {
+    $categoryFilters.innerHTML = '';
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.category = cat.id;
+      btn.textContent = cat.name;
+      if (activeCategories.has(cat.id)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeCategories.has(cat.id)) {
+          activeCategories.delete(cat.id);
+          btn.classList.remove('active');
+        } else {
+          activeCategories.add(cat.id);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $categoryFilters.appendChild(btn);
+    });
+  }
+
+  function buildBaseModelFilters(cats) {
+    var $el = document.getElementById('baseModelFilters');
+    $el.innerHTML = '';
+    var bms = new Set();
+    cats.forEach(function(cat) {
+      cat.models.forEach(function(m) {
+        var bm = m.base_model || m.civitai_base_model || '';
+        bms.add(bm || '(none)');
+      });
+    });
+    Array.from(bms).sort().forEach(function(bm) {
+      var btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.baseModel = bm;
+      btn.textContent = bm;
+      if (activeBaseModels.has(bm)) btn.classList.add('active');
+      btn.addEventListener('click', function() {
+        if (activeBaseModels.has(bm)) {
+          activeBaseModels.delete(bm);
+          btn.classList.remove('active');
+        } else {
+          activeBaseModels.add(bm);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $el.appendChild(btn);
+    });
+  }
+
+  function buildTagFilters(tags) {
+    $tagFilters.innerHTML = '';
+    const top20 = tags.slice(0, 20);
+    top20.forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag';
+      btn.dataset.tag = tag;
+      btn.textContent = tag;
+      if (activeTags.has(tag)) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (activeTags.has(tag)) {
+          activeTags.delete(tag);
+          btn.classList.remove('active');
+        } else {
+          activeTags.add(tag);
+          btn.classList.add('active');
+        }
+        applyFiltersAndSort();
+      });
+      $tagFilters.appendChild(btn);
+    });
+  }
+
+  // Status filter click handlers
+  $statusFilters.querySelectorAll('.filter-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const status = btn.dataset.status;
+      if (activeStatuses.has(status)) {
+        activeStatuses.delete(status);
+        btn.classList.remove('active');
+      } else {
+        activeStatuses.add(status);
+        btn.classList.add('active');
+      }
+      applyFiltersAndSort();
+    });
+  });
+
+  // Sort button click handlers
+  $sortGroup.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sort = btn.dataset.sort;
+      if (currentSort === sort) {
+        sortAscending = !sortAscending;
+      } else {
+        currentSort = sort;
+        sortAscending = true;
+      }
+      // Update active states
+      $sortGroup.querySelectorAll('.sort-btn').forEach(b => {
+        b.classList.remove('active');
+        const arrow = b.querySelector('.sort-arrow');
+        if (arrow) arrow.remove();
+      });
+      btn.classList.add('active');
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow' + (sortAscending ? '' : ' desc');
+      arrow.innerHTML = '&#9650;';
+      btn.appendChild(arrow);
+      sortCards();
+    });
+  });
+
+  // View toggle click handlers
+  $viewGroup.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (currentView === view) return;
+      currentView = view;
+      $viewGroup.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyView();
+    });
+  });
+
+  // Search handler
+  $searchInput.addEventListener('input', () => {
+    searchQuery = $searchInput.value.trim().toLowerCase();
+    applyFiltersAndSort();
+  });
+
+  // Concurrent downloads handler
+  $maxConcurrent.addEventListener('change', async () => {
+    const val = parseInt($maxConcurrent.value, 10);
+    try {
+      await apiFetch('/api/admin/settings', {
+        method: 'PUT',
+        body: { max_concurrent_downloads: val }
+      });
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Failed to update concurrent setting:', e);
+      }
+    }
+  });
+
+  // ── Data handling ──
+  function handleModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+
+    // Attach _category and _searchText to each model
+    cats.forEach(cat => {
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    allTags = extractAllTags(cats);
+    buildCategoryFilters(cats);
+    buildBaseModelFilters(cats);
+    buildTagFilters(allTags);
+    cats.forEach(buildSection);
+    cats.forEach(cat => {
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
+    }
+
+    applyFiltersAndSort();
+    _autoPoll(data.stats);
+  }
+
+  function mergeModelData(data) {
+    const cats = data.categories || [];
+    categories = cats;
+
+    cats.forEach(cat => {
+      cat.models.forEach(m => {
+        m._category = cat.id;
+        m._searchText = [m.name, m.file, ...(m.tags || [])].join(' ').toLowerCase();
+      });
+    });
+
+    const newTags = extractAllTags(cats);
+    if (newTags.join(',') !== allTags.join(',')) {
+      allTags = newTags;
+      buildTagFilters(allTags);
+    }
+
+    cats.forEach(cat => {
+      if (!sectionMap[cat.id]) buildSection(cat);
+      cat.models.forEach(m => updateCard(cat.id, m));
+    });
+
+    if (data.stats) updateStatusBar(data.stats);
+    if (data.settings && data.settings.max_concurrent_downloads != null) {
+      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
+    }
+
+    applyFiltersAndSort();
+
+    // Auto-manage polling: only poll when something is active
+    _autoPoll(data.stats);
+  }
+
+  function _autoPoll(stats) {
+    const st = stats || {};
+    const busy = (st.downloading_count || 0) + (st.queued_count || 0);
+    if (busy > 0) {
+      if (!pollTimer) startPolling();
+    } else {
+      stopPolling();
+    }
+  }
+
+  // ── Status bar ──
+  function updateStatusBar(stats) {
+    if (!stats) return;
+
+    const dlCount = stats.downloading_count || 0;
+    const dlSpeed = stats.total_speed_bytes || 0;
+    if (dlCount > 0 && dlSpeed > 0) {
+      $statDownloading.textContent = dlCount + ' downloading @ ' + fmtBytes(dlSpeed) + '/s';
+    } else if (dlCount > 0) {
+      $statDownloading.textContent = dlCount + ' downloading';
+    } else {
+      $statDownloading.textContent = '0 downloading';
+    }
+
+    const queuedCount = stats.queued_count || 0;
+    $statQueued.textContent = queuedCount + ' queued';
+
+    const presentCount = stats.present_count || 0;
+    const totalCount = stats.total_count || 0;
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
+
+    const modelBytes = stats.models_bytes;
+    const freeBytes = stats.free_bytes;
+    if (modelBytes != null && freeBytes != null) {
+      $statDisk.textContent = 'LoRAs: ' + fmtBytes(modelBytes) + ' \u00b7 Free: ' + fmtBytes(freeBytes);
+    }
+  }
+
+  function computeStatusBarFromData() {
+    let dlCount = 0, queuedCount = 0, presentCount = 0, totalCount = 0;
+    categories.forEach(cat => {
+      cat.models.forEach(m => {
+        totalCount++;
+        if (m.status === 'downloading') dlCount++;
+        else if (m.status === 'queued') queuedCount++;
+        else if (m.status === 'present') presentCount++;
+      });
+    });
+    $statDownloading.textContent = dlCount + ' downloading';
+    $statQueued.textContent = queuedCount + ' queued';
+    $statPresent.textContent = presentCount + ' / ' + totalCount + ' present';
+  }
+
+  // ── Sections ──
+  function buildSection(cat) {
+    if (sectionMap[cat.id]) return;
+
+    const section = document.createElement('section');
+    section.className = 'category-section';
+    section.dataset.category = cat.id;
+
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = '<h2 class="section-title">' + escHtml(cat.name) + '</h2><span class="section-count"></span>';
+    section.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+    grid.dataset.grid = cat.id;
+    section.appendChild(grid);
+
+    $main.appendChild(section);
+    sectionMap[cat.id] = section;
+  }
+
+  // ── Filter logic ──
+  function isCardVisible(model) {
+    if (activeCategories.size > 0 && !activeCategories.has(model._category)) return false;
+    if (activeTags.size > 0) {
+      const modelTags = new Set(model.tags || []);
+      for (const t of activeTags) {
+        if (!modelTags.has(t)) return false;
+      }
+    }
+    if (activeStatuses.size > 0 && !activeStatuses.has(model.status)) return false;
+    if (activeBaseModels.size > 0) {
+      var bm = model.base_model || model.civitai_base_model || '(none)';
+      if (!activeBaseModels.has(bm)) return false;
+    }
+    if (searchQuery && !model._searchText.includes(searchQuery)) return false;
+    return true;
+  }
+
+  function applyFiltersAndSort() {
+    // Apply visibility
+    Object.values(cardMap).forEach(entry => {
+      const visible = isCardVisible(entry.model);
+      if (visible) {
+        entry.el.classList.remove('card-hidden');
+      } else {
+        entry.el.classList.add('card-hidden');
+      }
+    });
+
+    // Sort cards
+    sortCards();
+
+    // Update section visibility and counts
+    updateSectionVisibility();
+  }
+
+  function sortCards() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const cards = [...grid.children].sort((a, b) => {
+        const entryA = cardMap[a.dataset.file];
+        const entryB = cardMap[b.dataset.file];
+        if (!entryA || !entryB) return 0;
+        const ma = entryA.model;
+        const mb = entryB.model;
+        let cmp = 0;
+        if (currentSort === 'name') cmp = ma.name.localeCompare(mb.name);
+        else if (currentSort === 'size') cmp = (ma.size_gb || 0) - (mb.size_gb || 0);
+        else if (currentSort === 'status') cmp = statusOrder(ma.status) - statusOrder(mb.status);
+        return sortAscending ? cmp : -cmp;
+      });
+      cards.forEach(c => grid.appendChild(c));
+    }
+  }
+
+  function updateSectionVisibility() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+      const visibleCards = grid.querySelectorAll('.model-card:not(.card-hidden)');
+      const count = visibleCards.length;
+      const countEl = section.querySelector('.section-count');
+      if (countEl) countEl.textContent = '(' + count + ' shown)';
+      if (count === 0) {
+        section.classList.add('section-hidden');
+      } else {
+        section.classList.remove('section-hidden');
+      }
+    }
+  }
+
+  function applyView() {
+    Object.values(sectionMap).forEach(section => {
+      const grid = section.querySelector('.card-grid');
+      if (!grid) return;
+      if (currentView === 'compact') {
+        grid.classList.add('compact');
+      } else {
+        grid.classList.remove('compact');
+      }
+    });
+  }
+
+  // ── Cards ──
+  function createCard(catId, m) {
+    const card = document.createElement('div');
+    card.className = 'model-card';
+    card.dataset.file = m.file;
+    card.dataset.category = catId;
+
+    const sourceUrl = makeSourceLink(m.url, m);
+    // Old source link replaced by model-links badges
+
+    card.innerHTML =
+      '<div class="card-top">' +
+        '<div class="card-info">' +
+          '<div class="card-name" data-ref="name"></div>' +
+          '<div class="card-meta" data-ref="meta"></div>' +
+        '</div>' +
+        '<span class="card-compact-size" data-ref="compactSize"></span>' +
+        '<span class="card-compact-source" data-ref="compactSource"></span>' +
+        '<div class="status-badge missing" data-ref="badge" title="Missing">\u2715</div>' +
+      '</div>' +
+      '<div class="card-tags" data-ref="tags"></div>' +
+      '<div class="progress-wrap" data-ref="progress">' +
+        '<div class="progress-bar"><div class="progress-fill" data-ref="fill"></div></div>' +
+        '<div class="progress-meta">' +
+          '<span data-ref="pct">&mdash;</span>' +
+          '<span data-ref="pbytes">&mdash;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-error" data-ref="error"></div>' +
+      '<div class="card-actions">' +
+        '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
+      '</div>';
+
+    // Cache refs
+    const refs = {};
+    card.querySelectorAll('[data-ref]').forEach(el => {
+      refs[el.dataset.ref] = el;
+    });
+
+    // Set static content
+    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye icon-sm"></span></span>';
+
+    const sizeStr = fmtSize(m.size_gb);
+    const sourceClass = (m.source || '').toLowerCase();
+    const sourceName = escHtml(m.source || 'unknown');
+    const badgeClass = ['civitai', 'huggingface'].includes(sourceClass) ? sourceClass : 'other';
+    var bmVal = m.base_model || m.civitai_base_model || '';
+    var baseModelHtml = bmVal ? ' <span class="base-model-pill" title="Base model: ' + escHtml(bmVal) + '">' + escHtml(bmVal) + '</span>' : '';
+
+    // Build model links
+    var linksHtml = '<div class="model-links">';
+    if (m.civitai_version_id) {
+      var vid = m.civitai_version_id;
+      var mid = m.civitai_model_id;
+      linksHtml += '<a class="model-link" href="https://civitai.com/api/download/models/' + vid + '" target="_blank" title="Direct download URL">download</a>';
+      if (mid) {
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '?modelVersionId=' + vid + '" target="_blank" title="View version on CivitAI">version</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '" target="_blank" title="View model page on CivitAI">model</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/model-versions/' + vid + '" target="_blank" title="CivitAI version API">api:ver</a>';
+        linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/models/' + mid + '" target="_blank" title="CivitAI model API">api:model</a>';
+      }
+    } else if (m.hf_repo) {
+      var repo = m.hf_repo;
+      var hfFile = m.hf_file || '';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/resolve/main/' + hfFile + '" target="_blank" title="Direct download URL">download</a>';
+        linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '/blob/main/' + hfFile + '" target="_blank" title="View file on HuggingFace">file</a>';
+      }
+      linksHtml += '<a class="model-link" href="https://huggingface.co/' + repo + '" target="_blank" title="View repo on HuggingFace">repo</a>';
+      linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '" target="_blank" title="HuggingFace repo API">api:repo</a>';
+      if (hfFile) {
+        linksHtml += '<a class="model-link" href="https://huggingface.co/api/models/' + repo + '/tree/main/' + hfFile + '" target="_blank" title="HuggingFace file API">api:file</a>';
+      }
+    }
+    linksHtml += '</div>';
+
+    refs.meta.innerHTML = '<span>' + escHtml(sizeStr) + '</span>' +
+      '<span class="source-badge ' + badgeClass + '" title="Source: ' + sourceName + '">' + sourceName + '</span>' +
+      baseModelHtml +
+      linksHtml;
+
+    // Compact-mode columns
+    refs.compactSize.textContent = sizeStr;
+    const compactSourceEl = refs.compactSource;
+    compactSourceEl.innerHTML = '<span class="source-badge ' + badgeClass + '">' + sourceName + '</span>';
+
+    refs.tags.innerHTML = '';
+
+    refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+
+    const grid = document.querySelector('[data-grid="' + catId + '"]');
+    if (grid) grid.appendChild(card);
+
+    const entry = { el: card, refs: refs, model: m };
+    cardMap[m.file] = entry;
+    return entry;
+  }
+
+  function updateCard(catId, m) {
+    let entry = cardMap[m.file];
+    if (!entry) {
+      entry = createCard(catId, m);
+    }
+
+    entry.model = m;
+
+    const { el, refs } = entry;
+    const badge = refs.badge;
+    const progress = refs.progress;
+    const fill = refs.fill;
+    const pct = refs.pct;
+    const pbytes = refs.pbytes;
+    const btn = refs.actionBtn;
+    const errorEl = refs.error;
+
+    // Reset status classes
+    el.classList.remove('status-downloading', 'status-error', 'status-present', 'status-missing', 'status-queued');
+    el.classList.add('status-' + m.status);
+
+    badge.className = 'status-badge ' + m.status;
+
+    // Reset compact progress
+    el.style.setProperty('--compact-progress', '0%');
+
+    switch (m.status) {
+      case 'present':
+        badge.textContent = '\u2713';
+        badge.title = 'Installed';
+        btn.className = 'btn btn--sm btn--danger';
+        btn.disabled = false;
+        btn.innerHTML = '\uD83D\uDDD1 Delete';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'missing':
+        badge.textContent = '\u2715';
+        badge.title = 'Missing';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u2193 Download';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'queued':
+        badge.textContent = '\u25F7';
+        badge.title = 'Queued';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Queued...';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        errorEl.classList.remove('visible');
+        break;
+
+      case 'downloading':
+        badge.textContent = '\u2193';
+        badge.title = 'Downloading';
+        btn.className = 'btn btn--sm';
+        btn.disabled = true;
+        btn.textContent = 'Downloading...';
+        progress.classList.add('visible');
+        errorEl.classList.remove('visible');
+
+        if (m.expected_bytes && m.expected_bytes > 0 && m.progress != null) {
+          fill.classList.remove('indeterminate');
+          fill.style.width = m.progress.toFixed(1) + '%';
+          el.style.setProperty('--compact-progress', m.progress.toFixed(1) + '%');
+
+          const speedStr = m.speed_bytes ? ' \u00b7 ' + fmtBytes(m.speed_bytes) + '/s' : '';
+          pct.textContent = m.progress.toFixed(1) + '%' + speedStr;
+        } else {
+          fill.classList.add('indeterminate');
+          fill.style.width = '';
+          el.style.setProperty('--compact-progress', '50%');
+
+          const speedStr = m.speed_bytes ? fmtBytes(m.speed_bytes) + '/s' : '...';
+          pct.textContent = speedStr;
+        }
+
+        const dlBytes = m.on_disk_bytes || 0;
+        if (m.expected_bytes && m.expected_bytes > 0) {
+          pbytes.textContent = fmtBytes(dlBytes) + ' / ' + fmtBytes(m.expected_bytes);
+        } else {
+          pbytes.textContent = fmtBytes(dlBytes);
+        }
+        break;
+
+      case 'error':
+        badge.textContent = '\u26A0';
+        badge.title = 'Error';
+        btn.className = 'btn btn--sm';
+        btn.disabled = false;
+        btn.innerHTML = '\u21BB Retry';
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+        if (m.error) {
+          errorEl.textContent = m.error;
+          errorEl.classList.add('visible');
+        } else {
+          errorEl.classList.remove('visible');
+        }
+        break;
+    }
+  }
+
+  // ── Card actions ──
+  async function handleCardAction(filename) {
+    const entry = cardMap[filename];
+    if (!entry) return;
+    const m = entry.model;
+    const btn = entry.refs.actionBtn;
+
+    if (m.status === 'missing' || m.status === 'error') {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner sm"></span> Starting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          showToast('Download error: ' + (err.detail || err.error || resp.status), 5000, 'error');
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        } else {
+          startPolling();
+        }
+      } catch (e) {
+        if (e.message !== 'auth') {
+          showToast('Error: ' + e.message, 5000, 'error');
+          btn.disabled = false;
+          btn.textContent = m.status === 'error' ? '\u21BB Retry' : '\u2193 Download';
+        }
+      }
+    } else if (m.status === 'present') {
+      if (!await studioConfirm('Delete ' + m.name + ' (' + m.file + ')?', {danger: true, yes: 'Delete'})) return;
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+      try {
+        const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(filename), { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          showToast('Delete error: ' + (err.detail || err.error || resp.status), 5000, 'error');
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      } catch (e) {
+        if (e.message !== 'auth') {
+          showToast('Error: ' + e.message, 5000, 'error');
+          btn.disabled = false;
+          btn.innerHTML = '\uD83D\uDDD1 Delete';
+        }
+      }
+    }
+  }
+
+  // ── Batch downloads ──
+  async function downloadMissing(filenames) {
+    if (!filenames.length) return;
+    try {
+      const resp = await apiFetch('/api/admin/models/download-batch', {
+        method: 'POST',
+        body: { filenames: filenames }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        showToast('Batch download error: ' + (err.detail || err.error || resp.status), 5000, 'error');
+      } else {
+        startPolling();
+      }
+    } catch (e) {
+      if (e.message !== 'auth') {
+        showToast('Error: ' + e.message, 5000, 'error');
+      }
+    }
+  }
+
+  // ── Polling ──
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollModels, 3000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollModels() {
+    try {
+      const resp = await apiFetch('/api/admin/loras');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      mergeModelData(data);
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Poll error:', e);
+      }
+    }
+  }
+
+  // ── Model JSON viewer ──
+  var $jsonOverlay = document.createElement('div');
+  $jsonOverlay.className = 'json-viewer-overlay';
+  $jsonOverlay.innerHTML = '<div class="json-viewer-box">' +
+    '<div class="json-viewer-header">' +
+      '<span class="json-viewer-title">Model JSON</span>' +
+      '<span style="cursor:pointer;opacity:0.4;font-size:12px;margin-left:8px;position:relative;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="var el=this;var text=document.getElementById(\'modelJsonContent\').textContent;navigator.clipboard.writeText(text).then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" title="Copy JSON"><span class="icon icon-copy icon-sm"></span></span>' +
+      '<button onclick="this.closest(\'div\').parentElement.parentElement.style.display=\'\'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>' +
+    '</div>' +
+    '<pre id="modelJsonContent" class="json-viewer-pre"></pre>' +
+  '</div>';
+  $jsonOverlay.addEventListener('click', function(e) { if (e.target === $jsonOverlay) $jsonOverlay.style.display = ''; });
+  document.body.appendChild($jsonOverlay);
+
+  window.showModelJson = function(el) {
+    var data = el.dataset.model;
+    try {
+      var obj = JSON.parse(data);
+      document.getElementById('modelJsonContent').textContent = JSON.stringify(obj, null, 2);
+    } catch(e) {
+      document.getElementById('modelJsonContent').textContent = data;
+    }
+    $jsonOverlay.style.display = 'block';
+  };
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Job Queue</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  main { max-width: 960px; margin: 0 auto; }
+
+  /* ── Progress Panel ── */
+  .queue-progress {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .queue-progress-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .progress-step {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .progress-bar-fill.indeterminate {
+    width: 30%;
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { margin-left: 0%; }
+    50% { margin-left: 70%; }
+    100% { margin-left: 0%; }
+  }
+  .progress-meta {
+    font-size: 11px;
+  }
+  .progress-idle {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── Preview area (expandable) ── */
+  .preview-toggle {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    margin-top: 8px;
+    padding: 4px 0;
+    transition: color 0.15s;
+    user-select: none;
+  }
+  .preview-toggle:hover { color: var(--text); }
+  .preview-toggle::after { content: ' \25BC'; font-size: 8px; }
+  .preview-toggle.open::after { content: ' \25B2'; }
+
+  .preview-area {
+    display: none;
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .preview-area.open { display: block; }
+
+  .preview-live {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .preview-live img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .preview-live-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .preview-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .preview-strip::-webkit-scrollbar { height: 4px; }
+  .preview-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .preview-strip-item {
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+  .preview-strip-item:hover { border-color: var(--accent); }
+  .preview-strip-item img {
+    display: block;
+    height: 64px;
+    width: auto;
+  }
+  .preview-strip-item .strip-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.7);
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--text);
+    padding: 2px 4px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Queue Job Cards ── */
+  .queue-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .job-card {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+  }
+  .job-card.is-running { border-left: 3px solid var(--accent); }
+
+  .job-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .job-thumb-placeholder {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border-radius: 4px;
+  }
+
+  .job-title { margin-bottom: 2px; }
+  .job-meta { gap: 12px; }
+  .job-prompt {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .job-status {
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+  .job-status.running { animation: pulse 2s ease-in-out infinite; }
+
+  .empty-state {
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  /* ── Detail Overlay (queue variant: flex + opacity) ── */
+  .job-detail-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    padding: 0;
+    overflow-y: visible;
+  }
+  .job-detail-overlay.visible { opacity: 1; pointer-events: auto; display: flex; }
+  .job-detail-box {
+    background: var(--bg);
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .job-detail-box::-webkit-scrollbar { width: 6px; }
+  .job-detail-box::-webkit-scrollbar-track { background: transparent; }
+  .job-detail-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  .job-detail-box::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+  .job-detail-box .close-btn {
+    position: absolute; top: 12px; right: 16px;
+    font-size: 22px;
+  }
+  .detail-table {
+    margin-top: 16px;
+    margin-bottom: 0;
+  }
+  .detail-table td {
+    padding: 8px 12px;
+  }
+  .detail-table td:first-child {
+    width: 140px;
+  }
+  .detail-table td:last-child {
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link active">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Job Queue</small></div>
+  <div class="live-indicator" id="liveIndicator" title="Auto-refreshing · Click to refresh now">
+    <span class="live-dot"></span>
+    <span>LIVE</span>
+    <div class="live-bar" id="liveBar"></div>
+  </div>
+</header>
+
+<main>
+  <!-- Telemetry -->
+  <div class="telemetry-panel" id="telemetryPanel"></div>
+
+  <!-- Progress Panel -->
+  <div class="queue-progress" id="queueProgress">
+    <div class="queue-progress-title">Current Job</div>
+    <div class="progress-idle" id="progressIdle"></div>
+    <div id="progressActive" style="display:none;">
+      <div class="progress-step" id="progressStep"></div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="progressPct"></span>
+        <span id="progressElapsed"></span>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="progressJobId"></div>
+      <div class="preview-toggle" id="previewToggle">Preview</div>
+      <div class="preview-area" id="previewArea">
+        <div class="preview-live" id="previewLive">
+          <div class="preview-live-label">Sampler output</div>
+          <img id="previewImg" style="display:none;">
+        </div>
+        <div class="preview-live-label" style="margin-top:8px;">Node outputs</div>
+        <div class="preview-strip" id="previewStrip"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job List -->
+  <div class="queue-list" id="queueList"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">No jobs in queue</div>
+</main>
+
+<!-- Detail Overlay -->
+<div class="job-detail-overlay" id="detailOverlay">
+  <div class="job-detail-box" id="detailBox"></div>
+</div>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── Page-specific date format (dd/mm hh:mm) ──
+  function fmtDateShort(d) {
+    if (!d) return '--';
+    var dt = new Date(d);
+    if (isNaN(dt)) return String(d).substring(0, 16);
+    var dd = String(dt.getDate()).padStart(2, '0');
+    var mm = String(dt.getMonth() + 1).padStart(2, '0');
+    var hh = String(dt.getHours()).padStart(2, '0');
+    var mi = String(dt.getMinutes()).padStart(2, '0');
+    return dd + '/' + mm + ' ' + hh + ':' + mi;
+  }
+
+  function fmtElapsed(startedAt) {
+    if (!startedAt) return '';
+    var start = new Date(startedAt).getTime();
+    var now = Date.now();
+    var secs = Math.floor((now - start) / 1000);
+    if (secs < 60) return secs + 's';
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    return m + 'm ' + s + 's';
+  }
+
+  // ── DOM refs ──
+  var $telemetryPanel = document.getElementById('telemetryPanel');
+  var $queueList = document.getElementById('queueList');
+  var $emptyState = document.getElementById('emptyState');
+  var $progressIdle = document.getElementById('progressIdle');
+  var $progressActive = document.getElementById('progressActive');
+  var $progressStep = document.getElementById('progressStep');
+  var $progressFill = document.getElementById('progressFill');
+  var $progressPct = document.getElementById('progressPct');
+  var $progressElapsed = document.getElementById('progressElapsed');
+  var $progressJobId = document.getElementById('progressJobId');
+  var $overlay = document.getElementById('detailOverlay');
+  var $detailBox = document.getElementById('detailBox');
+
+  // ── Telemetry (same as home/runner) ──
+  function makeGauge(id, label) {
+    return '<div class="gauge-card" id="' + id + '">' +
+      '<div class="gauge-ring">' +
+        '<svg viewBox="0 0 80 80"><circle class="gauge-bg" /><circle class="gauge-fill" /></svg>' +
+        '<div class="gauge-value">--</div>' +
+      '</div>' +
+      '<div class="gauge-label">' + label + '</div>' +
+      '<div class="gauge-sub">&nbsp;</div>' +
+    '</div>';
+  }
+
+  function updateGauge(id, pct, sub) {
+    var card = document.getElementById(id);
+    if (!card) return;
+    var fill = card.querySelector('.gauge-fill');
+    var val = card.querySelector('.gauge-value');
+    var subEl = card.querySelector('.gauge-sub');
+    var p = Math.max(0, Math.min(100, pct || 0));
+    var offset = 213.6 - (213.6 * p / 100);
+    fill.style.strokeDashoffset = offset;
+    fill.classList.remove('warn', 'crit');
+    if (p > 85) fill.classList.add('crit');
+    else if (p > 65) fill.classList.add('warn');
+    val.textContent = Math.round(p) + '%';
+    if (sub) subEl.textContent = sub;
+  }
+
+  async function pollTelemetry() {
+    try {
+      var resp = await apiFetch('/api/admin/telemetry');
+      if (!resp.ok) return;
+      var d = await resp.json();
+
+      $telemetryPanel.style.background = 'rgba(232, 255, 71, 0.03)';
+      setTimeout(function() { $telemetryPanel.style.background = ''; }, 300);
+
+      if (!$telemetryPanel.innerHTML) {
+        $telemetryPanel.innerHTML =
+          makeGauge('gGpu', 'GPU Load') +
+          makeGauge('gVram', 'VRAM') +
+          makeGauge('gRam', 'System RAM') +
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
+      }
+
+      if (d.gpu) {
+        updateGauge('gGpu', d.gpu.util_percent, d.gpu.name + (d.gpu.temp_c ? ' \u00b7 ' + d.gpu.temp_c + '\u00b0C' : ''));
+        updateGauge('gVram', d.gpu.vram_percent, fmtGB(d.gpu.vram_used) + ' / ' + fmtGB(d.gpu.vram_total));
+      }
+      updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
+      updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
+    } catch (_) {}
+  }
+
+  // ── Elapsed timer ──
+  var _runningStartedAt = null;
+  var _elapsedTimer = null;
+
+  function startElapsedTimer(startedAt) {
+    _runningStartedAt = startedAt;
+    if (_elapsedTimer) clearInterval(_elapsedTimer);
+    _elapsedTimer = setInterval(function() {
+      $progressElapsed.textContent = fmtElapsed(_runningStartedAt);
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null; }
+    _runningStartedAt = null;
+  }
+
+  // ── Shared progress panel updater ──
+  var _wsConnected = false;
+
+  function fmtEta(sec) {
+    if (sec == null || sec <= 0) return '';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return '~' + (m > 0 ? m + 'm' : '') + s + 's';
+  }
+
+  function updateProgressPanel(runningJob, firstJob) {
+    if (runningJob) {
+      var p = runningJob.progress || {};
+      $progressIdle.style.display = 'none';
+      $progressActive.style.display = '';
+
+      // Line 1: Node + step detail
+      var stepLine = p.node_title || 'Processing...';
+      if (p.total_steps > 0) {
+        stepLine = (p.node_title || 'Processing') + ' \u00b7 step ' + p.step + '/' + p.total_steps;
+        if (p.step_rate) stepLine += ' \u00b7 ' + p.step_rate + ' it/s';
+        var stepEta = fmtEta(p.eta_seconds);
+        if (stepEta) stepLine += ' \u00b7 ' + stepEta;
+      }
+      $progressStep.textContent = stepLine;
+
+      // Progress bar
+      $progressFill.classList.remove('indeterminate');
+      $progressFill.style.width = (p.percent || 0) + '%';
+
+      // Line 2: Global percent + nodes
+      var pctLine = (p.percent || 0) + '%';
+      var eff = p.effective_total || p.total_nodes || 0;
+      if (eff > 0) {
+        pctLine += ' \u00b7 node ' + (p.nodes_done || 0) + '/' + eff;
+        if (p.cached_count > 0) pctLine += ' (' + p.cached_count + ' cached)';
+      }
+      $progressPct.textContent = pctLine;
+
+      // Job ID line (stable)
+      $progressJobId.textContent = (runningJob.workflow_name || runningJob.workflow_id || '') +
+        ' \u00b7 ' + (runningJob.prompt_id || '').substring(0, 12) + '...';
+
+    } else if (firstJob) {
+      $progressIdle.style.display = 'none';
+      $progressActive.style.display = '';
+      $progressStep.textContent = 'Queued \u2014 waiting for execution slot...';
+      $progressFill.classList.add('indeterminate');
+      $progressFill.style.width = '';
+      $progressPct.textContent = '';
+      $progressJobId.textContent = (firstJob.workflow_name || firstJob.workflow_id || '') +
+        ' \u00b7 ' + (firstJob.prompt_id || '').substring(0, 12) + '...';
+    }
+  }
+
+  // ── Queue polling ──
+  var _pollTimer = null;
+
+  async function pollQueue() {
+    try {
+      var resp = await apiFetch('/api/admin/queue');
+      if (!resp.ok) return;
+      var jobs = await resp.json();
+
+      if (jobs.length === 0) {
+        $queueList.innerHTML = '';
+        $emptyState.style.display = '';
+        document.getElementById('queueProgress').style.display = 'none';
+        stopElapsedTimer();
+        return;
+      }
+
+      $emptyState.style.display = 'none';
+      document.getElementById('queueProgress').style.display = '';
+
+      // Find running job
+      var runningJob = null;
+      for (var i = 0; i < jobs.length; i++) {
+        if (jobs[i].progress && jobs[i].progress.status === 'running') {
+          runningJob = jobs[i];
+          break;
+        }
+      }
+
+      // Update progress panel — ONLY if WS is not connected (WS is primary source)
+      if (!_wsConnected) {
+        updateProgressPanel(runningJob, jobs[0]);
+      } else if (!runningJob) {
+        // Even with WS, if no running job show queued state
+        updateProgressPanel(null, jobs[0]);
+      }
+      // Always update elapsed timer from poll data (more reliable for started_at)
+      if (runningJob) {
+        var elapsed_ref = runningJob.started_at || runningJob.queued_at;
+        if (elapsed_ref && (!_runningStartedAt || _runningStartedAt !== elapsed_ref)) {
+          startElapsedTimer(elapsed_ref);
+        }
+      } else if (jobs[0] && jobs[0].queued_at) {
+        if (!_runningStartedAt || _runningStartedAt !== jobs[0].queued_at) {
+          startElapsedTimer(jobs[0].queued_at);
+        }
+      } else {
+        stopElapsedTimer();
+      }
+
+      // Render job cards
+      renderJobCards(jobs);
+
+    } catch (e) {
+      if (e.message !== 'auth') console.error('Queue poll error:', e);
+    }
+  }
+
+  function renderJobCards(jobs) {
+    $queueList.innerHTML = '';
+    jobs.forEach(function(job) {
+      var card = document.createElement('div');
+      card.className = 'job-card';
+      var isRunning = job.progress && job.progress.status === 'running';
+      if (isRunning) card.classList.add('is-running');
+
+      card.onclick = function() { showDetail(job); };
+
+      var thumbHtml;
+      if (job.input_image) {
+        thumbHtml = '<img class="job-thumb" src="/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#9654;</div>\'">';
+      } else {
+        thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+      }
+
+      var prompt = job.params && job.params.positive_prompt ? job.params.positive_prompt : '';
+      if (!prompt && job.params && job.params.scenes && job.params.scenes.length > 0) {
+        prompt = job.params.scenes[0].prompt || '';
+      }
+      if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
+
+      var statusCls = isRunning ? 'running' : 'queued';
+      var statusText = isRunning ? 'running' : 'queued';
+
+      card.innerHTML =
+        thumbHtml +
+        '<div class="job-info">' +
+          '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
+          '<div class="job-meta">' +
+            '<span class="pill"><b>Q</b> ' + fmtDateShort(job.queued_at) + '</span>' +
+            (job.started_at ? '<span class="pill"><b>S</b> ' + fmtDateShort(job.started_at) + '</span>' : '') +
+            '<span style="color:bisque;">' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+          '</div>' +
+          (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
+        '</div>' +
+        '<div class="job-status ' + statusCls + '">' + statusText + '</div>';
+
+      $queueList.appendChild(card);
+    });
+  }
+
+  // ── Detail overlay ──
+  function showDetail(job) {
+    var rows = '';
+    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + copyBtn(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
+    rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
+    rows += '<tr><td>Status</td><td>' + escHtml(job.status || (job.progress ? job.progress.status : '?')) + '</td></tr>';
+    rows += '<tr><td>Queued</td><td>' + fmtDateShort(job.queued_at) + '</td></tr>';
+    if (job.started_at) rows += '<tr><td>Started</td><td>' + fmtDateShort(job.started_at) + '</td></tr>';
+
+    // Workflow params
+    rows += '<tr><td colspan="2" class="divider-accent"></td></tr>';
+    if (job.input_image) {
+      var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
+      rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
+        ' <span style="cursor:pointer;position:relative;display:inline-block;opacity:0.4;" onmouseenter="this.style.opacity=0.8;this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.style.opacity=0.4;this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
+        '<span class="icon icon-image icon-lg" style="vertical-align:-2px;"></span>' +
+        '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
+        '</span></td></tr>';
+    }
+    if (job.params) {
+      for (var key in job.params) {
+        var val = job.params[key];
+        if (key.startsWith('_')) continue;
+        if (key === 'positive_prompt' || key === 'negative_prompt') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap">' + escHtml(String(val)) + copyBtn(String(val)) + '</td></tr>';
+        } else if (typeof val === 'object') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap" style="font-size:11px;">' + escHtml(JSON.stringify(val, null, 2)) + '</td></tr>';
+        } else {
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(String(val)) + '</td></tr>';
+        }
+      }
+    }
+
+    $detailBox.innerHTML =
+      '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
+      '<h2>Job Details</h2>' +
+      '<table class="detail-table">' + rows + '</table>';
+
+    $overlay.classList.add('visible');
+  }
+
+  $overlay.addEventListener('click', function(e) {
+    if (e.target === $overlay) $overlay.classList.remove('visible');
+  });
+
+  // ── Image fullscreen overlay ──
+  var $imgOverlay = document.createElement('div');
+  $imgOverlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;cursor:pointer;';
+  $imgOverlay.addEventListener('click', function() { $imgOverlay.style.display = 'none'; });
+  document.body.appendChild($imgOverlay);
+
+  window.showImageFullscreen = function(url) {
+    $imgOverlay.innerHTML = '<img src="' + url + '" class="fullscreen-img">';
+    $imgOverlay.style.display = 'flex';
+  };
+
+  // ── Preview toggle ──
+  var $previewToggle = document.getElementById('previewToggle');
+  var $previewArea = document.getElementById('previewArea');
+  var $previewImg = document.getElementById('previewImg');
+  var $previewStrip = document.getElementById('previewStrip');
+  var _previewOpen = true;
+  if ($previewArea) $previewArea.classList.add('open');
+  if ($previewToggle) $previewToggle.classList.add('open');
+
+  $previewToggle.addEventListener('click', function() {
+    _previewOpen = !_previewOpen;
+    $previewArea.classList.toggle('open', _previewOpen);
+    $previewToggle.classList.toggle('open', _previewOpen);
+  });
+
+  // ── WebSocket for real-time progress + preview ──
+  var _ws = null;
+  var _wsRetry = null;
+  var _lastNodeOutputs = {};
+
+  function connectWS() {
+    if (_ws && _ws.readyState <= 1) return;
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    _ws = new WebSocket(proto + '//' + location.host + '/api/run/ws');
+
+    _actWs.onopen = function() { $actDot.classList.add('connected'); };
+    _ws.onmessage = function(e) {
+      if (typeof e.data === 'string') {
+        // JSON progress update
+        try {
+          var data = JSON.parse(e.data);
+          handleWSProgress(data);
+        } catch (_) {}
+      } else {
+        // Binary preview frame (JPEG)
+        if (_previewOpen) {
+          var blob = new Blob([e.data], { type: 'image/jpeg' });
+          var url = URL.createObjectURL(blob);
+          $previewImg.onload = function() { URL.revokeObjectURL(url); };
+          $previewImg.src = url;
+          $previewImg.style.display = '';
+        }
+      }
+    };
+
+    _ws.onopen = function() { _wsConnected = true; };
+    _ws.onclose = function() {
+      _ws = null;
+      _wsConnected = false;
+      if (!_wsRetry) _wsRetry = setTimeout(function() { _wsRetry = null; connectWS(); }, 3000);
+    };
+    _ws.onerror = function() { /* onclose will fire */ };
+  }
+
+  function handleWSProgress(data) {
+    var status = data.status;
+    if (status === 'running') {
+      document.getElementById('queueProgress').style.display = '';
+
+      var fakeJob = {
+        progress: data,
+        workflow_name: data.workflow_name || '',
+        workflow_id: data.workflow_id || '',
+        prompt_id: data.prompt_id || '',
+      };
+      updateProgressPanel(fakeJob, null);
+
+      // Update node output strip
+      var outputs = data.node_outputs || {};
+      if (JSON.stringify(Object.keys(outputs)) !== JSON.stringify(Object.keys(_lastNodeOutputs))) {
+        _lastNodeOutputs = outputs;
+        renderNodeStrip(outputs);
+      }
+    }
+  }
+
+  function renderNodeStrip(outputs) {
+    var html = '';
+    for (var nid in outputs) {
+      var node = outputs[nid];
+      var items = node.items || [];
+      items.forEach(function(item) {
+        if (item.media === 'image') {
+          var src = '/api/comfyui/view?filename=' + encodeURIComponent(item.filename) +
+            '&type=' + encodeURIComponent(item.type) +
+            (item.subfolder ? '&subfolder=' + encodeURIComponent(item.subfolder) : '');
+          html += '<div class="preview-strip-item" onclick="showImageFullscreen(\'' + src.replace(/'/g, "\\'") + '\')">' +
+            '<img src="' + src + '">' +
+            '<div class="strip-label">' + escHtml(node.node_title) + '</div>' +
+          '</div>';
+        }
+      });
+    }
+    $previewStrip.innerHTML = html || '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);">No node outputs yet</span>';
+  }
+
+  // ── Live indicator bar ──
+  var POLL_MS = 2000;
+  var $liveBar = document.getElementById('liveBar');
+
+  function startLiveBar() {
+    $liveBar.style.transition = 'none';
+    $liveBar.style.transform = 'scaleX(0)';
+    $liveBar.offsetHeight;
+    $liveBar.style.transition = 'transform ' + POLL_MS + 'ms linear';
+    $liveBar.style.transform = 'scaleX(1)';
+  }
+
+  document.getElementById('liveIndicator').addEventListener('click', function() {
+    pollQueue();
+    startLiveBar();
+  });
+
+  // ── Boot ──
+  pollTelemetry();
+  setInterval(pollTelemetry, 3000);
+
+  // Queue poll + live bar
+  pollQueue();
+  startLiveBar();
+  _pollTimer = setInterval(function() { pollQueue(); startLiveBar(); }, POLL_MS);
+
+  // Start WebSocket
+  connectWS();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Home</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  /* Home page: logo has no small, uses version-tag instead */
+  .logo { white-space: normal; }
+
+  .version-tag {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--muted);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-left: 14px;
+  }
+  .header-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  main { max-width: 960px; margin: 0 auto; }
+
+  /* ── Telemetry Accordion ── */
+  .telemetry-accordion {
+    margin-bottom: 24px;
+  }
+  .telemetry-toggle {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    cursor: pointer;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    transition: border-color 0.15s;
+  }
+  .telemetry-toggle:hover { border-color: var(--accent); }
+  .telemetry-toggle::after { content: ' \25BC'; font-size: 9px; }
+  .telemetry-toggle.open::after { content: ' \25B2'; }
+  .telemetry-toggle.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+  /* ── Component Table ── */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+  .comp-table th,
+  .comp-table td {
+    padding: 12px 20px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .comp-table th {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(20, 20, 32, 0.8);
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table td { color: var(--text); }
+  .comp-table td:last-child { text-align: center; }
+  .comp-table th:last-child { text-align: center; }
+
+  /* ── Toggle Switch ── */
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+    vertical-align: middle;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.08);
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .toggle input:checked + .toggle-slider {
+    background: rgba(232, 255, 71, 0.15);
+    border-color: var(--accent);
+  }
+  .toggle input:checked + .toggle-slider::before {
+    transform: translateX(14px);
+    background: var(--accent);
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .status-dot.green { background: var(--success); }
+  .status-dot.orange { background: var(--queued); }
+  .status-dot.red { background: var(--error); }
+
+  /* ── Update (in header) ── */
+  .header-update {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .header-update .btn {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+  }
+  .header-update .header-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .header-update .header-meta a,
+  .header-update .header-meta a:visited { color: var(--accent); }
+  /* ── Update button progress fill ── */
+  #updateBtn {
+    position: relative;
+    overflow: hidden;
+  }
+  #updateBtn:not(:hover):not(:disabled) {
+    background: transparent;
+  }
+  .update-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 0%;
+    background: var(--accent);
+    opacity: 0;
+  }
+  .update-bar.animating {
+    transition: width 15s linear;
+    width: 100%;
+    animation: barPulse 2s ease-in-out infinite;
+  }
+  @keyframes barPulse {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.4; }
+  }
+  .update-badge {
+    font-size: 10px;
+    margin-left: 6px;
+    opacity: 0.7;
+  }
+
+  /* ── Update overlay ── */
+  .update-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .update-overlay.visible { opacity: 1; pointer-events: auto; }
+  .update-overlay-box {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 1em 2em;
+    border: solid 1px;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    animation: overlayFlash 1s ease;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  @keyframes overlayFlash {
+    0% { background: rgba(232,255,71,0.15); }
+    100% { background: var(--surface); }
+  }
+
+  /* ── Stat Cards ── */
+  .stat-cards {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+  .stat-card {
+    flex: 1 1 0;
+    min-width: 140px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 16px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: #3a3a4a; }
+  .stat-card .stat-value {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 28px;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+  .stat-card .stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .stat-card .stat-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .stat-card .stat-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s;
+  }
+  .stat-card .stat-link:hover { opacity: 0.8; }
+
+  /* ── System Info ── */
+  .sys-info {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sys-info .status-dot { vertical-align: middle; }
+  .sys-info a, .sys-info a:visited { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .stat-cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link active">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
+  <div class="header-update">
+    <button class="btn" id="updateBtn"><span id="updateBtnText" style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div></button>
+    <div class="header-meta">Last updated: <span id="lastUpdated">--</span> <span id="versionLinks"></span></div>
+  </div>
+</header>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading system status...
+  </div>
+
+  <div id="dashContent" style="display:none;">
+    <!-- Stat Cards -->
+    <div class="stat-cards" id="statCards">
+      <div class="stat-card">
+        <div class="stat-value" id="modelsCount">--</div>
+        <div class="stat-label">Models</div>
+        <div class="stat-sub" id="modelsSub">-- present</div>
+        <a href="/admin/models" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="lorasCount">--</div>
+        <div class="stat-label">LoRAs</div>
+        <div class="stat-sub" id="lorasSub">-- present</div>
+        <a href="/admin/loras" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="llmModelsCount">--</div>
+        <div class="stat-label">LLM Models</div>
+        <div class="stat-sub" id="llmModelsSub">-- present</div>
+        <a href="/admin/llm" class="stat-link">&#8594; Manage</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="workflowsCount">--</div>
+        <div class="stat-label">Workflows</div>
+        <div class="stat-sub" id="workflowsSub">-- ready</div>
+        <a href="/admin/workflows" class="stat-link">&#8594; Browse</a>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="nodesCount">--</div>
+        <div class="stat-label">Nodes</div>
+        <div class="stat-sub" id="nodesSub">packages</div>
+        <a href="/admin/nodes" class="stat-link">&#8594; View</a>
+      </div>
+    </div>
+
+    <!-- Telemetry Accordion -->
+    <div class="telemetry-accordion" id="telemetryAccordion">
+      <div class="telemetry-toggle" id="telemetryToggle">Telemetry</div>
+      <div class="telemetry-panel" id="telemetryPanel" style="display:none;"></div>
+    </div>
+
+    <!-- Component Table -->
+    <table class="comp-table" id="compTable">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Update</th>
+        </tr>
+      </thead>
+      <tbody id="compBody">
+      </tbody>
+    </table>
+
+    <!-- System Info -->
+    <div class="sys-info" id="sysInfo">
+      <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
+      <div id="diskInfo">Disk: --</div>
+    </div>
+  </div>
+</main>
+
+<!-- Update Overlay -->
+<div class="update-overlay" id="updateOverlay">
+  <div class="update-overlay-box" id="updateOverlayBox"></div>
+</div>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── DOM refs ──
+  const $loading      = document.getElementById('loadingState');
+  const $dash         = document.getElementById('dashContent');
+  const $compBody     = document.getElementById('compBody');
+  const $versionTag   = document.getElementById('versionTag');
+  const $lastUpdated  = document.getElementById('lastUpdated');
+  const $updateBtn    = document.getElementById('updateBtn');
+  const $updateBtnText = document.getElementById('updateBtnText');
+  const $updateBar    = document.getElementById('updateBar');
+  const $updateOverlay = document.getElementById('updateOverlay');
+  const $updateOverlayBox = document.getElementById('updateOverlayBox');
+  const $modelsCount  = document.getElementById('modelsCount');
+  const $modelsSub    = document.getElementById('modelsSub');
+  const $lorasCount   = document.getElementById('lorasCount');
+  const $lorasSub     = document.getElementById('lorasSub');
+  const $workflowsCount = document.getElementById('workflowsCount');
+  const $workflowsSub = document.getElementById('workflowsSub');
+  const $llmModelsCount = document.getElementById('llmModelsCount');
+  const $llmModelsSub = document.getElementById('llmModelsSub');
+  const $nodesCount   = document.getElementById('nodesCount');
+  const $nodesSub     = document.getElementById('nodesSub');
+  const $comfyStatus  = document.getElementById('comfyStatus');
+  const $diskInfo     = document.getElementById('diskInfo');
+
+  // ── Status dot helper ──
+  function dotHtml(color, text) {
+    return '<span class="status-dot ' + color + '"></span>' + escHtml(text);
+  }
+
+  function statusDotColor(status) {
+    if (!status) return 'orange';
+    const s = status.toLowerCase();
+    if (s === 'running' || s === 'ok' || s === 'loaded' || s === 'ready') return 'green';
+    if (s === 'error' || s === 'failed' || s === 'stopped') return 'red';
+    return 'orange';
+  }
+
+  // ── Render status ──
+  function renderStatus(data) {
+    // Version
+    const version = data.app_version || data.version || '0.0.0';
+    $versionTag.textContent = 'v' + version;
+
+    // Date
+    const date = data.date || data.updated_at || '2026-03-21';
+    if (typeof date === 'string' && date.length >= 10) {
+      var parts = date.substring(0, 10).split('-');
+      var time = date.substring(11, 16) || '';
+      $lastUpdated.textContent = parts[2] + '/' + parts[1] + '/' + parts[0] + (time ? ' ' + time : '');
+    } else {
+      $lastUpdated.textContent = date;
+    }
+
+    // Version links (dynamic from repo_base)
+    var repoBase = data.repo_base || '';
+    var svgExtLink = '<span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span>';
+    var svgServer = '<span class="icon icon-server icon-sm" style="vertical-align:-1px;"></span>';
+    var svgGithub = '<span class="icon icon-github icon-sm" style="vertical-align:-1px;"></span>';
+    var linksHtml = '';
+    if (repoBase) {
+      var rawUrl = repoBase + '/version.json';
+      linksHtml += ' <a href="' + rawUrl + '" target="_blank" style="text-decoration:none;margin-left:6px;" title="View raw (CDN)">' + svgExtLink + '</a>';
+      linksHtml += '<a href="#" onclick="event.preventDefault();showRemoteVersion();" style="text-decoration:none;margin-left:4px;" title="View what the pod sees">' + svgServer + '</a>';
+      if (repoBase.indexOf('raw.githubusercontent.com') >= 0) {
+        var ghUrl = repoBase.replace('raw.githubusercontent.com', 'github.com').replace(/\/([^\/]+)$/, '/blob/$1') + '/version.json';
+        linksHtml += '<a href="' + ghUrl + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="View on GitHub">' + svgGithub + '</a>';
+      }
+    }
+    document.getElementById('versionLinks').innerHTML = linksHtml;
+
+    // Component table
+    const compObj = data.components || {};
+    // Support both array and object formats
+    const components = Array.isArray(compObj)
+      ? compObj
+      : Object.entries(compObj).map(([key, val]) => Object.assign({ name: key }, val));
+    $compBody.innerHTML = '';
+
+    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', llm_models: 'LLM Models', workflows: 'Workflows' };
+    const statusMap = { running: 'Running', loaded: 'Loaded' };
+
+    var _defaultUnchecked = { loras: true, llm_models: true };
+    var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras', llm_models: '/api/admin/llm/models' };
+    var svgEye = '<span class="icon icon-eye icon-sm"></span>';
+    components.forEach(c => {
+      const row = document.createElement('tr');
+      const displayName = labelMap[c.name] || c.name || '--';
+      const displayStatus = c.status_text || statusMap[c.status] || c.status || '--';
+      const displayDate = c.date || (typeof date === 'string' ? date : '--');
+      const color = statusDotColor(c.status || 'ok');
+      const displayVersion = typeof c.version === 'number' ? '#' + c.version : (c.version || '--');
+      var checked = _defaultUnchecked[c.name] ? '' : 'checked';
+      var eyeHtml = _viewableComps[c.name]
+        ? ' <span style="cursor:pointer;opacity:0.4;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="showCatalogOverlay(\'' + _viewableComps[c.name] + '\',\'' + escHtml(displayName) + '\')" title="View catalog">' + svgEye + '</span>'
+        : '';
+      row.innerHTML =
+        '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
+        '<td>' + escHtml(displayVersion) + '</td>' +
+        '<td>' + escHtml(displayDate) + '</td>' +
+        '<td>' + dotHtml(color, displayStatus) + '</td>' +
+        '<td><label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label></td>';
+      $compBody.appendChild(row);
+    });
+
+    // Stat cards
+    const models = data.models || compObj.models || {};
+    $modelsCount.textContent = models.total || models.count || 0;
+    $modelsSub.textContent = (models.present || 0) + ' present';
+
+    const loras = compObj.loras || {};
+    var lorasStatus = loras.status || '0 loras';
+    var lorasTotal = parseInt(lorasStatus) || 0;
+    $lorasCount.textContent = lorasTotal;
+    $lorasSub.textContent = lorasStatus;
+
+    const llmModels = compObj.llm_models || {};
+    var llmStatus = llmModels.status || '0 models';
+    var llmTotal = parseInt(llmStatus) || 0;
+    $llmModelsCount.textContent = llmTotal;
+    $llmModelsSub.textContent = llmStatus;
+
+    const workflows = data.workflows || compObj.workflows || {};
+    $workflowsCount.textContent = workflows.total || workflows.count || 0;
+    $workflowsSub.textContent = (workflows.ready || workflows.count || 0) + ' ready';
+
+    const nodes = data.nodes || {};
+    $nodesCount.textContent = nodes.total_packages || 0;
+    $nodesSub.textContent = 'custom node packages';
+
+    // ComfyUI status
+    const comfy = data.comfyui || {};
+    const comfyRunning = comfy.status === 'running' || comfy.running === true;
+    const comfyPort = comfy.port || 8188;
+    if (comfyRunning) {
+      var comfyUrl = location.origin.replace(/-\d+\./, '-' + comfyPort + '.');
+      $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort) + ' <a href="' + comfyUrl + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open ComfyUI"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
+    } else {
+      $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: ' + (comfy.status || 'Not running'));
+    }
+
+    // Disk info
+    const disk = data.disk || {};
+    if (disk.total_bytes > 0) {
+      const usedStr = fmtBytes(disk.used_bytes || 0);
+      const totalStr = fmtBytes(disk.total_bytes);
+      const freeStr = fmtBytes(disk.free_bytes || 0);
+      $diskInfo.textContent = 'Disk: ' + usedStr + ' / ' + totalStr + ' \u00b7 ' + freeStr + ' free';
+    } else {
+      $diskInfo.textContent = 'Disk: --';
+    }
+  }
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await apiFetch('/api/admin/system/status');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      renderStatus(data);
+      $loading.style.display = 'none';
+      $dash.style.display = '';
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $loading.innerHTML = '<span style="color:var(--error)">Failed to load system status: ' + escHtml(e.message) + '</span>';
+      }
+    }
+  }
+
+  // ── Overlay ──
+  var _overlayTimer = null;
+  function showOverlay(text, color, duration) {
+    if (_overlayTimer) { clearTimeout(_overlayTimer); _overlayTimer = null; }
+    if (text.indexOf('<') >= 0) { $updateOverlayBox.innerHTML = text; }
+    else { $updateOverlayBox.textContent = text; }
+    $updateOverlayBox.style.color = color || 'var(--text)';
+    $updateOverlayBox.style.borderColor = color || 'var(--border)';
+    $updateOverlayBox.style.animation = 'none';
+    $updateOverlayBox.offsetHeight;
+    $updateOverlayBox.style.animation = 'overlayFlash 1s ease';
+    $updateOverlay.classList.add('visible');
+    if (duration) {
+      _overlayTimer = setTimeout(function() {
+        $updateOverlay.classList.remove('visible');
+      }, duration);
+    }
+  }
+  window.showCatalogOverlay = async function(apiUrl, title) {
+    try {
+      var resp = await apiFetch(apiUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      var content = '<div style="font-family:var(--mono);font-size:12px;max-width:700px;text-align:left;">' +
+        '<h3 style="margin:0 0 12px;">' + escHtml(title) + '</h3>' +
+        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;max-height:60vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">' + escHtml(JSON.stringify(data, null, 2)) + '</pre>' +
+        '</div>';
+      showOverlay(content, 'var(--text)', null);
+    } catch (e) {
+      showOverlay('Error: ' + e.message, 'var(--error)', 5000);
+    }
+  }
+
+  window.showRemoteVersion = async function() {
+    try {
+      var resp = await apiFetch('/api/admin/system/remote-version');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      var content = '<div style="font-family:var(--mono);font-size:12px;max-width:600px;">' +
+        '<h3 style="margin:0 0 12px;">Remote (what the pod fetches)</h3>' +
+        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;">' + escHtml(JSON.stringify(data.remote, null, 2)) + '</pre>' +
+        '<h3 style="margin:16px 0 12px;">Local (on pod)</h3>' +
+        '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;">' + escHtml(JSON.stringify(data.local, null, 2)) + '</pre>' +
+        '</div>';
+      showOverlay(content, 'var(--text)', null);
+    } catch (e) {
+      showOverlay('Error: ' + e.message, 'var(--error)', 5000);
+    }
+  }
+
+  function hideOverlay() {
+    if (_overlayTimer) { clearTimeout(_overlayTimer); _overlayTimer = null; }
+    $updateOverlay.classList.remove('visible');
+  }
+  $updateOverlay.addEventListener('click', hideOverlay);
+
+  // ── Check for Updates (with auto-retry polling) ──
+  var _updatePolling = false;
+  var _updatePollTimer = null;
+  var MAX_ATTEMPTS = 20;
+  var POLL_INTERVAL = 15;
+
+  function stopUpdatePolling() {
+    _updatePolling = false;
+    if (_updatePollTimer) { clearTimeout(_updatePollTimer); _updatePollTimer = null; }
+    $updateBar.classList.remove('animating');
+    $updateBar.style.width = '';
+    $updateBtn.disabled = false;
+    $updateBtnText.textContent = 'Check for Updates';
+  }
+
+  function startBar() {
+    $updateBar.classList.remove('animating');
+    $updateBar.style.width = '';
+    $updateBar.offsetHeight;
+    $updateBar.classList.add('animating');
+  }
+
+  function setBtnWaiting(attempt) {
+    $updateBtn.disabled = false;
+    $updateBtnText.innerHTML = 'Stop <span class="update-badge">' + attempt + '/' + MAX_ATTEMPTS + '</span>';
+  }
+
+  async function doUpdateCheck(attempt) {
+    if (!_updatePolling) return;
+
+    $updateBtn.disabled = true;
+    $updateBtnText.innerHTML = '<span class="spinner sm"></span> Checking...';
+
+    try {
+      // Read component toggles to build skip list
+      var skipComponents = [];
+      document.querySelectorAll('#compBody input[data-comp]').forEach(function(cb) {
+        if (!cb.checked) skipComponents.push(cb.dataset.comp);
+      });
+      var resp = await apiFetch('/api/admin/system/update', {
+        method: 'POST',
+        body: { skip_components: skipComponents },
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showOverlay('Error: ' + (err.detail || err.error || resp.status), 'var(--error)', 5000);
+        stopUpdatePolling();
+        return;
+      }
+
+      var data = await resp.json();
+      if (data.updated && data.updated.length > 0) {
+        stopUpdatePolling();
+        if (data.restart_needed) {
+          showOverlay('Updated: ' + data.updated.join(', ') + ' — restarting...', 'var(--success)', null);
+          $updateBtn.disabled = true;
+          $updateBtnText.innerHTML = '<span class="spinner sm"></span> Restarting...';
+          for (var i = 0; i < 30; i++) {
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            try {
+              var check = await apiFetch('/api/admin/system/status');
+              if (check.ok) { location.reload(); return; }
+            } catch (_) {}
+          }
+          showOverlay('Backend did not come back. Try refreshing manually.', 'var(--error)', null);
+          $updateBtn.disabled = false;
+          $updateBtnText.textContent = 'Check for Updates';
+          return;
+        }
+        showOverlay('Updated: ' + data.updated.join(', '), 'var(--success)', 5000);
+        initialLoad();
+        return;
+      }
+
+      // No updates — show overlay, then retry or stop
+      showOverlay('Everything is up to date.', 'var(--muted)', 5000);
+
+      if (attempt >= MAX_ATTEMPTS) {
+        showOverlay('No updates found after ' + MAX_ATTEMPTS + ' attempts.', 'var(--muted)', 5000);
+        stopUpdatePolling();
+        return;
+      }
+
+      // Wait state: badge in button, bar animating
+      setBtnWaiting(attempt);
+      startBar();
+
+      _updatePollTimer = setTimeout(function() {
+        if (_updatePolling) doUpdateCheck(attempt + 1);
+      }, POLL_INTERVAL * 1000);
+
+    } catch (e) {
+      if (e.message !== 'auth') {
+        showOverlay('Error: ' + e.message, 'var(--error)', 5000);
+      }
+      stopUpdatePolling();
+    }
+  }
+
+  $updateBtn.addEventListener('click', function() {
+    if (_updatePolling) {
+      stopUpdatePolling();
+    } else {
+      _updatePolling = true;
+      doUpdateCheck(1);
+    }
+  });
+
+  // ── Telemetry ──
+  const $telemetryPanel = document.getElementById('telemetryPanel');
+
+  function makeGauge(id, label) {
+    return '<div class="gauge-card" id="' + id + '">' +
+      '<div class="gauge-ring">' +
+        '<svg viewBox="0 0 80 80"><circle class="gauge-bg" /><circle class="gauge-fill" /></svg>' +
+        '<div class="gauge-value">--</div>' +
+      '</div>' +
+      '<div class="gauge-label">' + label + '</div>' +
+      '<div class="gauge-sub">&nbsp;</div>' +
+    '</div>';
+  }
+
+  function updateGauge(id, pct, sub) {
+    var card = document.getElementById(id);
+    if (!card) return;
+    var fill = card.querySelector('.gauge-fill');
+    var val = card.querySelector('.gauge-value');
+    var subEl = card.querySelector('.gauge-sub');
+    var p = Math.max(0, Math.min(100, pct || 0));
+    var offset = 213.6 - (213.6 * p / 100);
+    fill.style.strokeDashoffset = offset;
+    fill.classList.remove('warn', 'crit');
+    if (p > 85) fill.classList.add('crit');
+    else if (p > 65) fill.classList.add('warn');
+    val.textContent = Math.round(p) + '%';
+    if (sub) subEl.textContent = sub;
+  }
+
+  async function pollTelemetry() {
+    try {
+      var resp = await apiFetch('/api/admin/telemetry');
+      if (!resp.ok) return;
+      var d = await resp.json();
+
+      // Heartbeat flash on data received
+      $telemetryPanel.style.background = 'rgba(232, 255, 71, 0.03)';
+      setTimeout(function() { $telemetryPanel.style.background = ''; }, 300);
+
+      if (!$telemetryPanel.innerHTML) {
+        $telemetryPanel.innerHTML =
+          makeGauge('gGpu', 'GPU Load') +
+          makeGauge('gVram', 'VRAM') +
+          makeGauge('gRam', 'System RAM') +
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
+      }
+
+      if (d.gpu) {
+        updateGauge('gGpu', d.gpu.util_percent, d.gpu.name + (d.gpu.temp_c ? ' \u00b7 ' + d.gpu.temp_c + '\u00b0C' : ''));
+        updateGauge('gVram', d.gpu.vram_percent, fmtGB(d.gpu.vram_used) + ' / ' + fmtGB(d.gpu.vram_total));
+      }
+      updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
+      updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
+    } catch (_) {}
+  }
+
+  // ── Telemetry Accordion ──
+  var $telemetryToggle = document.getElementById('telemetryToggle');
+  var _telemetryTimer = null;
+
+  function startTelemetryPolling() {
+    if (_telemetryTimer) return;
+    pollTelemetry();
+    _telemetryTimer = setInterval(pollTelemetry, 3000);
+  }
+
+  function stopTelemetryPolling() {
+    if (_telemetryTimer) { clearInterval(_telemetryTimer); _telemetryTimer = null; }
+  }
+
+  $telemetryToggle.addEventListener('click', function() {
+    var open = $telemetryPanel.style.display !== 'none';
+    if (open) {
+      $telemetryPanel.style.display = 'none';
+      $telemetryToggle.classList.remove('open');
+      stopTelemetryPolling();
+    } else {
+      $telemetryPanel.style.display = '';
+      $telemetryToggle.classList.add('open');
+      startTelemetryPolling();
+    }
+  });
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

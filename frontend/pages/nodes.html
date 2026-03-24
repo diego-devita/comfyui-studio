@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Node Manager</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  /* ── Search Bar ── */
+  .search-bar {
+    margin-bottom: 24px;
+  }
+  .search-bar .search-input {
+    width: 100%;
+  }
+
+  /* ── Package Card ── */
+  .pkg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pkg-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px 24px;
+    transition: border-color 0.25s ease;
+  }
+  .pkg-card:hover {
+    border-color: #3a3a4a;
+  }
+
+  .pkg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .pkg-header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pkg-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .pkg-name.core { color: var(--accent); }
+
+  .pkg-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .pkg-url:hover { color: var(--text); }
+
+  .pkg-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .pkg-chevron {
+    font-size: 12px;
+    color: var(--muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .pkg-chevron.open { transform: rotate(90deg); }
+
+  /* ── Node List ── */
+  .pkg-nodes {
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .pkg-nodes.visible { display: flex; }
+
+  .node-pill {
+    padding: 3px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    border-radius: 12px;
+    background: #1e1e2e;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .node-pill.highlight {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, 0.06);
+  }
+  .node-pill.search-match {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(232, 255, 71, 0.08);
+  }
+
+  /* ── Install Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.9);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.hidden { display: none; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 32px;
+    width: 480px;
+    max-width: 90vw;
+  }
+  .modal-box h3 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  .modal-box p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .modal-box label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .modal-input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-bottom: 20px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-input::placeholder { color: var(--muted); }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal-error {
+    color: var(--error);
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  /* ── Restart Banner ── */
+  .restart-banner {
+    display: none;
+    background: rgba(232, 255, 71, 0.08);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-card);
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    align-items: center;
+    gap: 10px;
+  }
+  .restart-banner.visible { display: flex; }
+</style>
+</head>
+<body>
+
+<!-- Install Custom Node Modal -->
+<div class="modal-overlay hidden" id="installModal">
+  <div class="modal-box">
+    <h3>Install Custom Node</h3>
+    <p>Enter the Git repository URL for the custom node package.</p>
+    <label for="repoUrl">Repository URL</label>
+    <input type="text" class="modal-input" id="repoUrl" placeholder="https://github.com/user/ComfyUI-CustomNode">
+    <div class="modal-error" id="installError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelInstallBtn" style="border-color:var(--border);color:var(--muted);">Cancel</button>
+      <button class="btn" id="confirmInstallBtn">Install</button>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link active">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Node Manager</small></div>
+  <div class="header-actions">
+    <button class="btn" id="installNodeBtn">Install Custom Node</button>
+  </div>
+</header>
+
+<!-- Main content -->
+<main id="mainContent">
+  <div class="restart-banner" id="restartBanner">
+    A restart of ComfyUI is required for newly installed nodes to take effect.
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search nodes...">
+  </div>
+
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading nodes...
+  </div>
+
+  <div class="pkg-list" id="pkgList" style="display:none;"></div>
+
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>No node packages found.</p>
+  </div>
+</main>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let packages = [];
+  let searchQuery = '';
+
+  // ── DOM refs ──
+  const $loading      = document.getElementById('loadingState');
+  const $pkgList      = document.getElementById('pkgList');
+  const $emptyState   = document.getElementById('emptyState');
+  const $searchInput  = document.getElementById('searchInput');
+  const $installNodeBtn = document.getElementById('installNodeBtn');
+  const $installModal = document.getElementById('installModal');
+  const $repoUrl      = document.getElementById('repoUrl');
+  const $installError = document.getElementById('installError');
+  const $cancelInstallBtn = document.getElementById('cancelInstallBtn');
+  const $confirmInstallBtn = document.getElementById('confirmInstallBtn');
+  const $restartBanner = document.getElementById('restartBanner');
+
+  // ── Initial load ──
+  async function initialLoad() {
+    try {
+      const resp = await apiFetch('/api/admin/nodes');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      handleNodeData(data);
+      $loading.style.display = 'none';
+    } catch (e) {
+      if (e.message !== 'auth') {
+        console.error('Initial load error:', e);
+      }
+    }
+  }
+
+  // ── Data handling ──
+  function handleNodeData(data) {
+    packages = Array.isArray(data) ? data : (data.packages || []);
+    // Sort: core first, then alphabetical
+    packages.sort((a, b) => {
+      const aCore = (a.name || '').toLowerCase().includes('comfyui core') || a.is_core;
+      const bCore = (b.name || '').toLowerCase().includes('comfyui core') || b.is_core;
+      if (aCore && !bCore) return -1;
+      if (!aCore && bCore) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    renderPackages();
+  }
+
+  function renderPackages() {
+    $pkgList.innerHTML = '';
+
+    const filteredPackages = getFilteredPackages();
+
+    if (filteredPackages.length === 0) {
+      $pkgList.style.display = 'none';
+      $emptyState.style.display = '';
+      $emptyState.querySelector('p').textContent = searchQuery
+        ? 'No nodes matching "' + searchQuery + '".'
+        : 'No node packages found.';
+      return;
+    }
+
+    $emptyState.style.display = 'none';
+    $pkgList.style.display = '';
+
+    filteredPackages.forEach(entry => {
+      $pkgList.appendChild(createPackageCard(entry.pkg, entry.matchingNodes));
+    });
+  }
+
+  function getFilteredPackages() {
+    if (!searchQuery) {
+      return packages.map(pkg => ({ pkg, matchingNodes: null }));
+    }
+    const results = [];
+    for (const pkg of packages) {
+      const nodes = pkg.nodes || [];
+      const matchingNodes = nodes.filter(n => {
+        const name = (typeof n === 'string' ? n : (n.name || n.class_name || '')).toLowerCase();
+        return name.includes(searchQuery);
+      });
+      const pkgNameMatch = (pkg.name || '').toLowerCase().includes(searchQuery);
+      if (matchingNodes.length > 0 || pkgNameMatch) {
+        results.push({ pkg, matchingNodes: matchingNodes.length > 0 ? matchingNodes : null });
+      }
+    }
+    return results;
+  }
+
+  function createPackageCard(pkg, matchingNodes) {
+    const card = document.createElement('div');
+    card.className = 'pkg-card';
+
+    const nodes = pkg.nodes || [];
+    const nodeCount = nodes.length;
+    const isCore = (pkg.name || '').toLowerCase().includes('comfyui core') || pkg.is_core;
+    const repoUrl = pkg.url || pkg.repo_url || '';
+
+    const nameClass = isCore ? 'pkg-name core' : 'pkg-name';
+
+    card.innerHTML =
+      '<div class="pkg-header">' +
+        '<div class="pkg-header-left">' +
+          '<div class="' + nameClass + '">' + escHtml(pkg.name || pkg.id || 'Unknown Package') + '</div>' +
+          (repoUrl ? '<a class="pkg-url" href="' + escHtml(repoUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();">' + escHtml(repoUrl) + '</a>' : '') +
+        '</div>' +
+        '<span class="pkg-count">' + nodeCount + ' node' + (nodeCount !== 1 ? 's' : '') + '</span>' +
+        '<span class="pkg-chevron">&#9654;</span>' +
+      '</div>' +
+      '<div class="pkg-nodes">' +
+        buildNodePills(nodes, matchingNodes) +
+      '</div>';
+
+    const header = card.querySelector('.pkg-header');
+    const nodesPanel = card.querySelector('.pkg-nodes');
+    const chevron = card.querySelector('.pkg-chevron');
+
+    // Auto-expand if there are search matches
+    if (matchingNodes && matchingNodes.length > 0) {
+      nodesPanel.classList.add('visible');
+      chevron.classList.add('open');
+    }
+
+    header.addEventListener('click', () => {
+      const isVisible = nodesPanel.classList.contains('visible');
+      nodesPanel.classList.toggle('visible');
+      chevron.classList.toggle('open');
+    });
+
+    return card;
+  }
+
+  function buildNodePills(nodes, matchingNodes) {
+    const matchSet = matchingNodes ? new Set(matchingNodes.map(n => typeof n === 'string' ? n : (n.name || n.class_name))) : null;
+    return nodes.map(n => {
+      const name = typeof n === 'string' ? n : (n.name || n.class_name || 'unknown');
+      const isMatch = matchSet && matchSet.has(name);
+      const cls = isMatch ? 'node-pill search-match' : 'node-pill';
+      return '<span class="' + cls + '">' + escHtml(name) + '</span>';
+    }).join('');
+  }
+
+  // ── Search ──
+  $searchInput.addEventListener('input', () => {
+    searchQuery = $searchInput.value.trim().toLowerCase();
+    renderPackages();
+  });
+
+  // ── Install Custom Node ──
+  $installNodeBtn.addEventListener('click', () => {
+    $installModal.classList.remove('hidden');
+    $repoUrl.value = '';
+    $installError.style.display = 'none';
+    $repoUrl.focus();
+  });
+
+  $cancelInstallBtn.addEventListener('click', () => {
+    $installModal.classList.add('hidden');
+  });
+
+  $installModal.addEventListener('click', (e) => {
+    if (e.target === $installModal) {
+      $installModal.classList.add('hidden');
+    }
+  });
+
+  $repoUrl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doInstall();
+  });
+
+  $confirmInstallBtn.addEventListener('click', doInstall);
+
+  async function doInstall() {
+    const url = $repoUrl.value.trim();
+    if (!url) {
+      $installError.textContent = 'Please enter a repository URL.';
+      $installError.style.display = 'block';
+      return;
+    }
+
+    $confirmInstallBtn.disabled = true;
+    $confirmInstallBtn.innerHTML = '<span class="spinner sm"></span> Installing...';
+    $installError.style.display = 'none';
+
+    try {
+      const resp = await apiFetch('/api/admin/nodes/install', {
+        method: 'POST',
+        body: { url: url }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        $installError.textContent = err.detail || err.error || 'Install failed (HTTP ' + resp.status + ')';
+        $installError.style.display = 'block';
+        $confirmInstallBtn.disabled = false;
+        $confirmInstallBtn.textContent = 'Install';
+        return;
+      }
+
+      $installModal.classList.add('hidden');
+      $confirmInstallBtn.disabled = false;
+      $confirmInstallBtn.textContent = 'Install';
+
+      // Show restart banner
+      $restartBanner.classList.add('visible');
+
+      // Refresh node list
+      try {
+        const nodesResp = await apiFetch('/api/admin/nodes');
+        if (nodesResp.ok) {
+          const data = await nodesResp.json();
+          handleNodeData(data);
+        }
+      } catch (_) { /* ignore refresh error */ }
+
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $installError.textContent = 'Error: ' + e.message;
+        $installError.style.display = 'block';
+      }
+      $confirmInstallBtn.disabled = false;
+      $confirmInstallBtn.textContent = 'Install';
+    }
+  }
+
+  // ── Boot ──
+  initialLoad();
+
+})();
+</script>
+</body>
+</html>

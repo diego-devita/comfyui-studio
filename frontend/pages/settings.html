@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Settings</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  main { max-width: 800px; margin: 0 auto; }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .env-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .env-table th,
+  .env-table td {
+    padding: 10px 16px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .env-table th {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(20, 20, 32, 0.8);
+  }
+  .env-table tr:last-child td { border-bottom: none; }
+  .env-key { color: var(--text); font-weight: 700; }
+  .env-value { color: var(--text); word-break: break-all; }
+  .env-value.masked { color: var(--muted); }
+  .env-value.not-set { color: var(--muted); font-style: italic; }
+  .env-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .env-dot.set { background: var(--success); }
+  .env-dot.unset { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link active"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Settings</small></div>
+</header>
+
+<main>
+  <div class="section-title">Environment Variables</div>
+  <table class="env-table" id="envTable">
+    <thead>
+      <tr>
+        <th>Variable</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody id="envBody">
+      <tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── Load env vars ──
+  var $envBody = document.getElementById('envBody');
+
+  async function loadEnv() {
+    try {
+      var resp = await apiFetch('/api/admin/settings/env');
+      if (!resp.ok) return;
+      var vars = await resp.json();
+      $envBody.innerHTML = '';
+      vars.forEach(function(v) {
+        var row = document.createElement('tr');
+        var valClass = !v.set ? 'env-value not-set' : (v.sensitive ? 'env-value masked' : 'env-value');
+        var valText = !v.set ? '(not set)' : v.value;
+        var dotClass = v.set ? 'env-dot set' : 'env-dot unset';
+        row.innerHTML =
+          '<td><span class="' + dotClass + '"></span><span class="env-key">' + escHtml(v.key) + '</span></td>' +
+          '<td class="' + valClass + '">' + escHtml(valText) + '</td>';
+        $envBody.appendChild(row);
+      });
+    } catch (e) {
+      if (e.message !== 'auth') $envBody.innerHTML = '<tr><td colspan="2" style="color:var(--error);">Failed to load</td></tr>';
+    }
+  }
+
+  // ── Boot ──
+  loadEnv();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — History</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  .live-refresh {
+    display: inline-block;
+    transition: transform 0.4s ease;
+  }
+  .live-refresh.spinning { animation: refreshSpin 0.6s linear; }
+  @keyframes refreshSpin { to { transform: rotate(360deg); } }
+
+  .history-list { display: flex; flex-direction: column; gap: 12px; }
+
+  /* History job-card: 4-column with checkbox */
+  .job-card {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 20px 60px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    text-decoration: none;
+    color: var(--text);
+  }
+  .job-card.selected { border-color: var(--error); background: rgba(255,68,102,0.05); }
+
+  .job-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .job-check:hover { border-color: var(--error); }
+  .job-check:checked {
+    background: var(--error);
+    border-color: var(--error);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2.5-2.5a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+    background-size: 12px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .job-check-placeholder { width: 16px; }
+
+  .job-thumb {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--bg);
+  }
+  .job-thumb-placeholder {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 20px;
+  }
+
+  .job-meta span { white-space: nowrap; }
+
+  .job-prompt {
+    max-width: 500px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link active">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+<!-- Header -->
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Job History</small></div>
+  <div class="live-indicator" id="liveIndicator" title="Auto-refreshing · Click to refresh now">
+    <span class="live-dot"></span>
+    <span>LIVE</span>
+    <div class="live-bar" id="liveBar"></div>
+  </div>
+</header>
+
+<!-- Main content -->
+<main>
+  <div class="loading-state" id="loadingState">
+    <span class="spinner"></span>
+    Loading history...
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>No jobs found. Run a workflow to see history here.</p>
+  </div>
+
+  <div id="historyToolbar" class="select-toolbar" style="display:none;">
+    <div class="select-toolbar-left">
+      <label class="select-all-label">
+        <input type="checkbox" class="select-all-cb" id="histSelectAll"> Select all
+      </label>
+      <span class="select-count" id="histSelectCount"></span>
+    </div>
+    <button class="btn btn--danger btn--sm" id="histDeleteBtn" style="visibility:hidden;">Delete selected</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</main>
+
+<!-- Detail Overlay -->
+<div class="job-detail-overlay" id="detailOverlay">
+  <div class="job-detail-box" id="detailBox"></div>
+</div>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  const $loading = document.getElementById('loadingState');
+  const $empty = document.getElementById('emptyState');
+  const $list = document.getElementById('historyList');
+  const $overlay = document.getElementById('detailOverlay');
+  const $detailBox = document.getElementById('detailBox');
+
+  var _lastJobIds = [];
+
+  async function loadHistory() {
+    try {
+      const resp = await apiFetch('/api/admin/history');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const jobs = await resp.json();
+
+      $loading.style.display = 'none';
+
+      if (!jobs.length) {
+        $empty.style.display = '';
+        document.getElementById('historyToolbar').style.display = 'none';
+        return;
+      }
+      $empty.style.display = 'none';
+
+      // Check if list changed — only rebuild if new jobs appeared
+      var newIds = jobs.map(function(j) { return j.prompt_id; });
+      if (JSON.stringify(newIds) === JSON.stringify(_lastJobIds)) return;
+      _lastJobIds = newIds;
+
+      $list.innerHTML = '';
+      document.getElementById('historyToolbar').style.display = 'flex';
+      var lastClickedIdx = null;
+      jobs.forEach(function(job, idx) {
+        var card = document.createElement('div');
+        card.className = 'job-card';
+        card.dataset.index = idx;
+        card.onclick = function(e) {
+          if (e.target.classList.contains('job-check')) return;
+          if (e.ctrlKey || e.metaKey) { toggleJobCard(card); return; }
+          if (e.shiftKey && lastClickedIdx !== null) {
+            var from = Math.min(lastClickedIdx, idx);
+            var to = Math.max(lastClickedIdx, idx);
+            $list.querySelectorAll('.job-card').forEach(function(c) {
+              var ci = parseInt(c.dataset.index);
+              if (ci >= from && ci <= to) {
+                var cb = c.querySelector('.job-check');
+                if (cb) { cb.checked = true; c.classList.add('selected'); }
+              }
+            });
+            updateHistDeleteBtn();
+            return;
+          }
+          showDetail(job);
+        };
+
+        var statusMap = {completed:'completed', error:'error', stalled:'stalled', running:'running', queued:'queued'};
+        var statusCls = statusMap[job.status] || 'running';
+
+        var thumbHtml;
+        var thumbOutput = job.output || (job.outputs && job.outputs[0]);
+        if (thumbOutput && thumbOutput.filename && !thumbOutput.filename.match(/\.(mp4|webm)$/i)) {
+          var thumbUrl = '/api/comfyui/view?filename=' + encodeURIComponent(thumbOutput.filename) +
+            '&type=' + encodeURIComponent(thumbOutput.type || 'output') +
+            (thumbOutput.subfolder ? '&subfolder=' + encodeURIComponent(thumbOutput.subfolder) : '');
+          var countBadge = job.outputs && job.outputs.length > 1 ? '<span style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;">' + job.outputs.length + '</span>' : '';
+          thumbHtml = '<div style="position:relative;"><img class="job-thumb" src="' + thumbUrl + '" onerror="this.outerHTML=\'<div class=job-thumb-placeholder><svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><path d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg></div>\'">' + countBadge + '</div>';
+        } else if (job.input_image) {
+          thumbHtml = '<img class="job-thumb" src="/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input" onerror="this.outerHTML=\'<div class=job-thumb-placeholder>&#9654;</div>\'">';
+        } else if (thumbOutput && thumbOutput.filename) {
+          thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+        } else {
+          thumbHtml = '<div class="job-thumb-placeholder">&#9654;</div>';
+        }
+
+        var prompt = job.params && job.params.positive_prompt ? job.params.positive_prompt : '';
+        // For dynamic workflows, get first scene prompt
+        if (!prompt && job.params && job.params.scenes && job.params.scenes.length > 0) {
+          prompt = job.params.scenes[0].prompt || '';
+        }
+        if (prompt.length > 80) prompt = prompt.substring(0, 80) + '...';
+
+        var checkHtml = (job.status === 'completed' || job.status === 'error' || job.status === 'stalled')
+          ? '<input type="checkbox" class="job-check" data-prompt-id="' + job.prompt_id + '" onclick="event.stopPropagation();">'
+          : '<div class="job-check-placeholder"></div>';
+
+        card.innerHTML =
+          checkHtml +
+          thumbHtml +
+          '<div class="job-info">' +
+            '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
+            '<div class="job-meta">' +
+              '<span class="pill"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
+              '<span class="pill"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
+              (job.duration ? fmtDuration(job.duration) : '') +
+              '<span style="color:bisque;">' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
+            '</div>' +
+            (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<div class="job-status ' + statusCls + '">' + escHtml(job.status) + '</div>' +
+            ((job.status === 'stalled' || job.status === 'error') && job.workflow_id ? '<button class="btn btn--sm" style="border-color:var(--success);color:var(--success);font-size:9px;" onclick="event.stopPropagation();retryJob(\'' + job.prompt_id + '\',this)">&#9654; Retry</button>' : '') +
+          '</div>';
+
+        var cb = card.querySelector('.job-check');
+        if (cb) {
+          cb.addEventListener('change', function() {
+            card.classList.toggle('selected', cb.checked);
+            lastClickedIdx = parseInt(card.dataset.index);
+            updateHistDeleteBtn();
+          });
+        }
+        $list.appendChild(card);
+      });
+
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $loading.style.display = 'none';
+        $empty.style.display = '';
+        $empty.querySelector('p').textContent = 'Error loading history: ' + e.message;
+      }
+    }
+  }
+
+  // Selection helpers
+  var $histSelectAll = document.getElementById('histSelectAll');
+  var $histDeleteBtn = document.getElementById('histDeleteBtn');
+
+  function toggleJobCard(card) {
+    var cb = card.querySelector('.job-check');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    card.classList.toggle('selected', cb.checked);
+    updateHistDeleteBtn();
+  }
+
+  // Track last clicked for shift-select (updated in checkbox change)
+  var lastClickedIdx = null;
+
+  var $histSelectCount = document.getElementById('histSelectCount');
+  function updateHistDeleteBtn() {
+    var count = $list.querySelectorAll('.job-check:checked').length;
+    $histDeleteBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
+    $histDeleteBtn.textContent = 'Delete ' + count;
+    $histSelectCount.textContent = count > 0 ? count + ' selected' : '';
+  }
+
+  $histSelectAll.addEventListener('change', function() {
+    $list.querySelectorAll('.job-check').forEach(function(cb) {
+      cb.checked = $histSelectAll.checked;
+      cb.closest('.job-card').classList.toggle('selected', $histSelectAll.checked);
+    });
+    updateHistDeleteBtn();
+  });
+
+  $histDeleteBtn.addEventListener('click', async function() {
+    var checked = $list.querySelectorAll('.job-check:checked');
+    var ids = [];
+    checked.forEach(function(cb) { ids.push(cb.dataset.promptId); });
+    if (ids.length === 0) return;
+    if (!await studioConfirm('Delete ' + ids.length + ' job(s) and their output files? This cannot be undone.', {danger: true, yes: 'Delete'})) return;
+
+    $histDeleteBtn.disabled = true;
+    $histDeleteBtn.textContent = 'Deleting...';
+
+    apiFetch('/api/admin/history/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt_ids: ids})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+      $histDeleteBtn.disabled = false;
+      $histDeleteBtn.textContent = 'Delete selected';
+      $histDeleteBtn.style.visibility = 'hidden';
+      $histSelectAll.checked = false;
+      _lastJobIds = [];
+      loadHistory();
+    })
+    .catch(function(e) {
+      $histDeleteBtn.disabled = false;
+      if (e.message !== 'auth') showToast('Delete failed: ' + e.message, 5000, 'error');
+    });
+  });
+
+  function showDetail(job) {
+    var rows = '';
+    rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + copyBtn(job.prompt_id) + '</td></tr>';
+    rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
+    rows += '<tr><td>Workflow</td><td>' + escHtml(job.workflow_name || job.workflow_id) + '</td></tr>';
+    if (job.output_dir) rows += '<tr><td>Output Dir</td><td>comfyui-studio/' + escHtml(job.output_dir) + '/</td></tr>';
+    rows += '<tr><td>Status</td><td>' + escHtml(job.status) + '</td></tr>';
+    rows += '<tr><td>Queued</td><td>' + fmtDate(job.queued_at) + '</td></tr>';
+    rows += '<tr><td>Started</td><td>' + fmtDate(job.started_at) + '</td></tr>';
+    if (job.finished_at) rows += '<tr><td>Finished</td><td>' + fmtDate(job.finished_at) + '</td></tr>';
+    if (job.duration) rows += '<tr><td>Duration</td><td>' + fmtDuration(job.duration) + '</td></tr>';
+
+    // Workflow params
+    rows += '<tr><td colspan="2" class="divider-accent"></td></tr>';
+    if (job.input_image) {
+      var imgUrl = '/api/comfyui/view?filename=' + encodeURIComponent(job.input_image) + '&type=input';
+      rows += '<tr><td>Input Image</td><td>' + escHtml(job.input_image) +
+        ' <span class="img-preview-trigger" style="cursor:pointer;position:relative;display:inline-block;opacity:0.4;" onmouseenter="this.style.opacity=0.8;this.querySelector(\'.img-preview-popup\').style.display=\'block\'" onmouseleave="this.style.opacity=0.4;this.querySelector(\'.img-preview-popup\').style.display=\'none\'" onclick="showImageFullscreen(\'' + imgUrl.replace(/'/g, "\\'") + '\')">' +
+        '<span class="icon icon-image icon-lg" style="vertical-align:-2px;"></span>' +
+        '<img class="img-preview-popup" src="' + imgUrl + '" style="display:none;position:absolute;left:20px;top:-60px;width:150px;border-radius:4px;border:1px solid var(--border);z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.5);">' +
+        '</span></td></tr>';
+    }
+    if (job.params) {
+      for (var key in job.params) {
+        var val = job.params[key];
+        if (key === 'positive_prompt' || key === 'negative_prompt') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap">' + escHtml(String(val)) + copyBtn(String(val)) + '</td></tr>';
+        } else if (key === 'scenes' && Array.isArray(val)) {
+          val.forEach(function(scene, idx) {
+            var sceneSeedKey = 'scene_' + (idx+1);
+            var inputSeed = scene.seed != null ? scene.seed : '?';
+            var resolvedSeed = job.seeds && job.seeds[sceneSeedKey] ? job.seeds[sceneSeedKey] : null;
+            var seedDisplay;
+            if (inputSeed == -1 && resolvedSeed) {
+              seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+            } else if (resolvedSeed && resolvedSeed != inputSeed) {
+              seedDisplay = inputSeed + ' (used: ' + resolvedSeed + ')';
+            } else {
+              seedDisplay = String(resolvedSeed || inputSeed);
+            }
+            var seedCopyVal = String(resolvedSeed || inputSeed);
+            rows += '<tr><td>Scene ' + (idx+1) + '</td><td class="text-pre-wrap">' +
+              escHtml(scene.prompt || '') + copyBtn(scene.prompt || '') +
+              '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's · seed: ' + seedDisplay + copyBtn(seedCopyVal) + '</span></td></tr>';
+          });
+        } else if (key === 'loras' && Array.isArray(val)) {
+          val.forEach(function(lora, idx) {
+            var loraName = typeof lora === 'string' ? lora : (lora.pair_id || '?');
+            var strH = typeof lora === 'object' ? lora.strength_high : '';
+            var strL = typeof lora === 'object' ? lora.strength_low : '';
+            var strInfo = strH || strL ? ' H:' + (strH||'?') + ' L:' + (strL||'?') : '';
+            rows += '<tr><td>LoRA ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
+          });
+        } else if (key === 'seed') {
+          // Single seed field (static workflows)
+          var resolvedSeed = job.seeds && job.seeds[key] ? job.seeds[key] : null;
+          var seedDisplay;
+          if (val == -1 && resolvedSeed) {
+            seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+          } else {
+            seedDisplay = String(resolvedSeed || val);
+          }
+          var seedCopyVal = String(resolvedSeed || val);
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + seedDisplay + copyBtn(seedCopyVal) + '</td></tr>';
+        } else if (typeof val === 'object') {
+          rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap" style="font-size:11px;">' + escHtml(JSON.stringify(val, null, 2)) + '</td></tr>';
+        } else {
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(String(val)) + '</td></tr>';
+        }
+      }
+    }
+
+    if (job.error) rows += '<tr><td>Error</td><td style="color:var(--error);">' + escHtml(job.error) + '</td></tr>';
+
+    // Output
+    var outputHtml = '';
+    var outputImages = job.outputs || (job.output ? [job.output] : []);
+    if (outputImages.length > 1) {
+      // Gallery placeholder — wired up after DOM insert
+      outputHtml = '<div class="detail-output" id="histGalleryContainer"></div>';
+    } else if (job.output && job.output.filename) {
+      var url = '/api/comfyui/view?filename=' + encodeURIComponent(job.output.filename) +
+        '&type=' + encodeURIComponent(job.output.type || 'output') +
+        (job.output.subfolder ? '&subfolder=' + encodeURIComponent(job.output.subfolder) : '');
+      if (job.output.filename.match(/\.(mp4|webm)$/i)) {
+        outputHtml = '<div class="detail-output"><video controls autoplay loop src="' + url + '"></video></div>';
+      } else {
+        outputHtml = '<div class="detail-output"><img src="' + url + '" alt="Output"></div>';
+      }
+    }
+
+    // Action buttons
+    var actionsHtml = '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">';
+    if (job.workflow_id) {
+      if (job.status === 'stalled' || job.status === 'error') {
+        actionsHtml += '<button class="btn btn--sm" style="border-color:var(--success);color:var(--success);" onclick="retryJob(\'' + job.prompt_id + '\',this)">&#9654; Retry</button>';
+      }
+      actionsHtml += '<button class="btn btn--sm" onclick="rerunJob(_detailJob)">&#8635; Re-run</button>';
+    }
+    actionsHtml += '<button class="btn btn--sm" onclick="exportJobJson(_detailJob)">&#128230; Export JSON</button>';
+    actionsHtml += '<button class="btn btn--sm" onclick="downloadJobPackage(_detailJob)">&#128230; Download Package</button>';
+    actionsHtml += '</div>';
+
+    $detailBox.innerHTML =
+      '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
+      '<h2>Job Details</h2>' +
+      '<table class="detail-table">' + rows + '</table>' +
+      outputHtml +
+      actionsHtml;
+
+    window._detailJob = job;
+    $overlay.classList.add('visible');
+
+    // Wire up gallery if batch output
+    if (outputImages.length > 1) {
+      var $gc = document.getElementById('histGalleryContainer');
+      if ($gc) _buildHistGallery($gc, outputImages);
+    }
+  }
+
+  $overlay.addEventListener('click', function(e) {
+    if (e.target === $overlay) $overlay.classList.remove('visible');
+  });
+
+  // Re-run: navigate to runner with pre-filled params
+  function _buildHistGallery($container, images) {
+    var currentIdx = 0;
+    var mode = 'grid';
+    var thumbSize = 120;
+
+    function galUrl(img) {
+      return '/api/comfyui/view?filename=' + encodeURIComponent(img.filename) +
+        '&type=' + encodeURIComponent(img.type || 'output') +
+        (img.subfolder ? '&subfolder=' + encodeURIComponent(img.subfolder) : '');
+    }
+
+    function renderGrid() {
+      mode = 'grid';
+      $container.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+          '<span style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + images.length + ' images</span>' +
+          '<input type="range" id="histGalSlider" min="60" max="250" value="' + thumbSize + '" style="width:100px;accent-color:var(--accent);">' +
+          '<span id="histGalSizeVal" style="font-size:10px;color:var(--muted);font-family:var(--mono);">' + thumbSize + 'px</span>' +
+        '</div>' +
+        '<div id="histGalGrid" style="display:flex;flex-wrap:wrap;gap:4px;max-height:400px;overflow-y:auto;align-content:flex-start;"></div>';
+
+      var $grid = document.getElementById('histGalGrid');
+      images.forEach(function(img, idx) {
+        var thumb = document.createElement('img');
+        thumb.src = galUrl(img);
+        thumb.loading = 'lazy';
+        thumb.style.cssText = 'width:' + thumbSize + 'px;height:' + thumbSize + 'px;object-fit:cover;border-radius:3px;cursor:pointer;border:2px solid transparent;';
+        thumb.onmouseenter = function() { this.style.borderColor = 'var(--accent)'; };
+        thumb.onmouseleave = function() { this.style.borderColor = 'transparent'; };
+        thumb.onclick = function() { currentIdx = idx; renderSingle(); };
+        $grid.appendChild(thumb);
+      });
+
+      document.getElementById('histGalSlider').oninput = function() {
+        thumbSize = parseInt(this.value);
+        document.getElementById('histGalSizeVal').textContent = thumbSize + 'px';
+        $grid.querySelectorAll('img').forEach(function(img) {
+          img.style.width = thumbSize + 'px';
+          img.style.height = thumbSize + 'px';
+        });
+      };
+    }
+
+    function renderSingle() {
+      mode = 'single';
+      var img = images[currentIdx];
+      $container.innerHTML =
+        '<div style="text-align:center;margin-bottom:6px;">' +
+          '<button id="histGalBack" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;cursor:pointer;padding:3px 10px;border-radius:4px;font-family:var(--mono);">&larr; Grid</button>' +
+          '<span style="margin-left:10px;font-size:11px;color:var(--muted);">' + (currentIdx + 1) + '/' + images.length + ' \u00b7 ' + img.filename + '</span>' +
+        '</div>' +
+        '<div style="position:relative;display:flex;align-items:center;justify-content:center;min-height:300px;">' +
+          '<button id="histGalPrev" style="position:absolute;left:0;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:6px;z-index:5;">&lsaquo;</button>' +
+          '<img src="' + galUrl(img) + '" style="max-width:100%;max-height:400px;object-fit:contain;border-radius:4px;">' +
+          '<button id="histGalNext" style="position:absolute;right:0;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:6px;z-index:5;">&rsaquo;</button>' +
+        '</div>';
+
+      document.getElementById('histGalBack').onclick = function() { renderGrid(); };
+      document.getElementById('histGalPrev').onclick = function() { currentIdx = (currentIdx - 1 + images.length) % images.length; renderSingle(); };
+      document.getElementById('histGalNext').onclick = function() { currentIdx = (currentIdx + 1) % images.length; renderSingle(); };
+    }
+
+    renderGrid();
+  }
+
+  window.rerunJob = function(job) {
+    var payload = {params: JSON.parse(JSON.stringify(job.params || {})), input_image: job.input_image || null};
+    // Merge resolved seeds into params
+    if (job.seeds) {
+      if (payload.params.scenes && Array.isArray(payload.params.scenes)) {
+        payload.params.scenes.forEach(function(s, i) {
+          var key = 'scene_' + (i + 1);
+          if (job.seeds[key] != null) s.seed = job.seeds[key];
+        });
+      }
+      for (var sid in job.seeds) {
+        if (/^scene_\d+$/.test(sid)) continue;
+        payload.params[sid] = job.seeds[sid];
+      }
+    }
+    var encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    window.location = '/run/' + encodeURIComponent(job.workflow_id) + '#rerun=' + encoded;
+  };
+
+  window.retryJob = async function(promptId, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    try {
+      var resp = await apiFetch('/api/admin/history/retry', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt_id: promptId}),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Retry failed: ' + (err.detail || resp.status), 5000, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '▶ Retry'; }
+        return;
+      }
+      var data = await resp.json();
+      if (btn) { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; btn.textContent = '✓ Queued'; }
+      // Refresh list after short delay
+      setTimeout(function() { _lastJobIds = []; loadHistory(); }, 1000);
+    } catch (e) {
+      showToast('Error: ' + e.message, 5000, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Retry'; }
+    }
+  };
+
+  // Export JSON: download job record as .json file
+  window.exportJobJson = function(job) {
+    var blob = new Blob([JSON.stringify(job, null, 2)], {type: 'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'job_' + (job.prompt_id || 'unknown').substring(0, 12) + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // Download Package: ZIP with job.json + input + output
+  window.downloadJobPackage = function(job) {
+    var a = document.createElement('a');
+    a.href = '/api/admin/history/' + encodeURIComponent(job.prompt_id) + '/package';
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Fullscreen image viewer (sits on top of detail overlay)
+  var $imgOverlay = document.createElement('div');
+  $imgOverlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:20000;cursor:pointer;justify-content:center;align-items:center;';
+  $imgOverlay.addEventListener('click', function() {
+    $imgOverlay.style.display = 'none';
+  });
+  document.body.appendChild($imgOverlay);
+
+  window.showImageFullscreen = function(url) {
+    $imgOverlay.innerHTML = '<img src="' + url + '" class="fullscreen-img">';
+    $imgOverlay.style.display = 'flex';
+  }
+
+  // ── Live auto-refresh ──
+  var POLL_MS = 5000;
+  var $liveBar = document.getElementById('liveBar');
+
+  function startLiveBar() {
+    $liveBar.style.transition = 'none';
+    $liveBar.style.transform = 'scaleX(0)';
+    $liveBar.offsetHeight;
+    $liveBar.style.transition = 'transform ' + POLL_MS + 'ms linear';
+    $liveBar.style.transform = 'scaleX(1)';
+  }
+
+  function refreshNow() {
+    loadHistory();
+    startLiveBar();
+  }
+
+  document.getElementById('liveIndicator').addEventListener('click', refreshNow);
+
+  // Auto-poll
+  setInterval(refreshNow, POLL_MS);
+
+  loadHistory();
+  startLiveBar();
+
+})();
+</script>
+</body>
+</html>

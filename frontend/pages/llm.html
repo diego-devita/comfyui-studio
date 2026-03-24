@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — LLM</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  main { max-width: 960px; margin: 0 auto; }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Server Panel ── */
+  .server-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .server-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .server-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    vertical-align: middle;
+  }
+  .status-dot.green { background: var(--success); }
+  .status-dot.grey { background: var(--muted); }
+  .status-dot.red { background: var(--error); }
+  .server-model-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 4px;
+  }
+  .server-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .config-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 160px;
+  }
+  .config-field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .config-field select,
+  .config-field input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .config-field select:focus,
+  .config-field input:focus {
+    border-color: var(--accent);
+  }
+  .config-field .range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .config-field input[type="range"] {
+    flex: 1;
+    padding: 0;
+    background: transparent;
+    border: none;
+    accent-color: var(--accent);
+  }
+  .config-field .range-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  /* ── Model Catalog (LLM-specific, NOT the model manager .model-card) ── */
+  .model-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+  .llm-model-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 14px 20px;
+    transition: border-color 0.15s;
+  }
+  .llm-model-card:hover { border-color: #3a3a4a; }
+  .model-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+  .model-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .model-meta {
+    display: flex;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .model-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .model-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .model-badge.present {
+    color: var(--success);
+    border: 1px solid var(--success);
+  }
+  .model-badge.missing {
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .model-badge.downloading {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .model-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ── Chat Area ── */
+  .chat-section {
+    margin-bottom: 32px;
+  }
+  .chat-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px;
+  }
+  .chat-messages {
+    min-height: 120px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .chat-msg {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .chat-msg.user {
+    background: rgba(232, 255, 71, 0.08);
+    border: 1px solid rgba(232, 255, 71, 0.2);
+    color: var(--text);
+  }
+  .chat-msg.assistant {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .chat-msg.error {
+    background: rgba(255, 80, 80, 0.08);
+    border: 1px solid rgba(255, 80, 80, 0.2);
+    color: var(--error);
+  }
+  .chat-empty {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 32px 0;
+  }
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .chat-input-row textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 40px;
+    max-height: 200px;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+  }
+  .chat-input-row textarea:focus {
+    border-color: var(--accent);
+  }
+  .chat-input-row .btn {
+    align-self: flex-end;
+  }
+
+  @media (max-width: 640px) {
+    .config-row { flex-direction: column; }
+    .server-header { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link active">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+</nav>
+
+
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>LLM</small></div>
+</header>
+
+<main>
+  <!-- Section 1: Server Status & Control -->
+  <div class="section-title">Server Status</div>
+  <div class="server-panel">
+    <div class="server-header">
+      <div class="server-status">
+        <span class="status-dot grey" id="serverDot"></span>
+        <span id="serverStatusText">Stopped</span>
+        <span class="server-model-name" id="serverModelName"></span>
+      </div>
+      <div class="server-actions">
+        <button class="btn" id="startBtn" disabled>Start</button>
+        <button class="btn" id="stopBtn" disabled>Stop</button>
+      </div>
+    </div>
+    <div class="config-row">
+      <div class="config-field">
+        <label>Model</label>
+        <select id="modelSelect" disabled>
+          <option value="">-- no models available --</option>
+        </select>
+      </div>
+      <div class="config-field">
+        <label>Context Size</label>
+        <input type="number" id="ctxSize" value="4096" min="512" max="131072" step="512">
+      </div>
+      <div class="config-field">
+        <label>GPU Layers</label>
+        <input type="number" id="gpuLayers" value="-1" min="-1" max="200" step="1">
+      </div>
+      <div class="config-field">
+        <label>Temperature</label>
+        <div class="range-wrap">
+          <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+          <span class="range-val" id="tempVal">0.7</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Model Catalog -->
+  <div class="section-title">Model Catalog</div>
+  <div class="model-list" id="modelList">
+    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
+  </div>
+
+  <!-- Section 3: Test Chat -->
+  <div class="chat-section" id="chatSection" style="display:none;">
+    <div class="section-title">Test Chat</div>
+    <div class="chat-area">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty">Send a message to start chatting.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" placeholder="Type a message..." rows="2"></textarea>
+        <button class="btn" id="chatSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ── DOM refs ──
+  var $serverDot = document.getElementById('serverDot');
+  var $serverStatusText = document.getElementById('serverStatusText');
+  var $serverModelName = document.getElementById('serverModelName');
+  var $startBtn = document.getElementById('startBtn');
+  var $stopBtn = document.getElementById('stopBtn');
+  var $modelSelect = document.getElementById('modelSelect');
+  var $ctxSize = document.getElementById('ctxSize');
+  var $gpuLayers = document.getElementById('gpuLayers');
+  var $temperature = document.getElementById('temperature');
+  var $tempVal = document.getElementById('tempVal');
+  var $modelList = document.getElementById('modelList');
+  var $chatSection = document.getElementById('chatSection');
+  var $chatMessages = document.getElementById('chatMessages');
+  var $chatInput = document.getElementById('chatInput');
+  var $chatSendBtn = document.getElementById('chatSendBtn');
+
+  var _serverRunning = false;
+  var _serverModel = '';
+  var _chatHistory = [];
+  var _pollTimer = null;
+  var _downloadPollTimer = null;
+
+  // ── Temperature slider ──
+  $temperature.addEventListener('input', function() {
+    $tempVal.textContent = this.value;
+  });
+
+  // ── Load Server Status ──
+  async function loadStatus() {
+    try {
+      var resp = await apiFetch('/api/admin/llm/status');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      _serverRunning = data.running || false;
+      _serverModel = data.model || '';
+
+      if (_serverRunning) {
+        $serverDot.className = 'status-dot green';
+        $serverStatusText.textContent = 'Running';
+        $serverModelName.textContent = _serverModel ? '(' + _serverModel + ')' : '';
+        $startBtn.disabled = true;
+        $stopBtn.disabled = false;
+        $chatSection.style.display = '';
+      } else {
+        $serverDot.className = 'status-dot grey';
+        $serverStatusText.textContent = 'Stopped';
+        $serverModelName.textContent = '';
+        $startBtn.disabled = !$modelSelect.value;
+        $stopBtn.disabled = true;
+        $chatSection.style.display = 'none';
+      }
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $serverDot.className = 'status-dot red';
+        $serverStatusText.textContent = 'Error';
+      }
+    }
+  }
+
+  // ── Load Models ──
+  var _models = [];
+  async function loadModels() {
+    try {
+      var resp = await apiFetch('/api/admin/llm/models');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      _models = data.models || data || [];
+      renderModels();
+      updateModelSelect();
+    } catch (e) {
+      if (e.message !== 'auth') {
+        $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--error);text-align:center;padding:24px 0;">Failed to load models</div>';
+      }
+    }
+  }
+
+  function renderModels() {
+    if (!_models.length) {
+      $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">No models configured</div>';
+      return;
+    }
+    var html = '';
+    _models.forEach(function(m) {
+      var name = m.name || m.filename || '--';
+      var size = m.size ? formatSize(m.size) : '';
+      var quant = m.quant || '';
+      var status = m.status || 'missing';
+      var tags = m.tags || [];
+      var progress = m.download_progress || null;
+
+      var badgeClass = status === 'present' ? 'present' : (status === 'downloading' ? 'downloading' : 'missing');
+      var badgeText = status === 'downloading' && progress != null ? 'Downloading ' + progress + '%' : status;
+
+      var tagsHtml = '';
+      tags.forEach(function(t) { tagsHtml += '<span class="model-tag">' + escHtml(t) + '</span>'; });
+
+      var metaParts = [];
+      if (size) metaParts.push(size);
+      if (quant) metaParts.push(quant);
+
+      var actionHtml = '';
+      if (status === 'present') {
+        actionHtml = '<button class="btn btn-sm" onclick="window._llmDeleteModel(\'' + escHtml(name) + '\')">Delete</button>';
+      } else if (status === 'downloading') {
+        actionHtml = '<span class="spinner sm"></span>';
+      } else {
+        actionHtml = '<button class="btn btn-sm" onclick="window._llmDownloadModel(\'' + escHtml(name) + '\')">Download</button>';
+      }
+
+      html +=
+        '<div class="llm-model-card">' +
+          '<div class="model-info">' +
+            '<div class="model-name">' + escHtml(name) + '</div>' +
+            '<div class="model-meta">' +
+              (metaParts.length ? '<span>' + escHtml(metaParts.join(' / ')) + '</span>' : '') +
+              tagsHtml +
+            '</div>' +
+          '</div>' +
+          '<span class="model-badge ' + badgeClass + '">' + escHtml(badgeText) + '</span>' +
+          '<div class="model-actions">' + actionHtml + '</div>' +
+        '</div>';
+    });
+    $modelList.innerHTML = html;
+  }
+
+  function updateModelSelect() {
+    var presentModels = _models.filter(function(m) { return m.status === 'present'; });
+    $modelSelect.innerHTML = '';
+    if (!presentModels.length) {
+      $modelSelect.innerHTML = '<option value="">-- no models available --</option>';
+      $modelSelect.disabled = true;
+      if (!_serverRunning) $startBtn.disabled = true;
+      return;
+    }
+    presentModels.forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m.name || m.filename;
+      opt.textContent = m.name || m.filename;
+      $modelSelect.appendChild(opt);
+    });
+    $modelSelect.disabled = false;
+    if (!_serverRunning) $startBtn.disabled = false;
+  }
+
+  function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  }
+
+  // ── Download / Delete ──
+  window._llmDownloadModel = async function(name) {
+    try {
+      var resp = await apiFetch('/api/admin/llm/models/download/' + encodeURIComponent(name), {method: 'POST'});
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Download failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        return;
+      }
+      showToast('Download started: ' + name, 3000);
+      startDownloadPoll();
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Download error: ' + e.message, 5000, 'error');
+    }
+  };
+
+  window._llmDeleteModel = async function(name) {
+    var ok = await studioConfirm('Delete model "' + name + '"?', {yes: 'Delete', danger: true});
+    if (!ok) return;
+    try {
+      var resp = await apiFetch('/api/admin/llm/models/' + encodeURIComponent(name), {method: 'DELETE'});
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Delete failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        return;
+      }
+      showToast('Deleted: ' + name, 3000);
+      loadModels();
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Delete error: ' + e.message, 5000, 'error');
+    }
+  };
+
+  function startDownloadPoll() {
+    if (_downloadPollTimer) return;
+    _downloadPollTimer = setInterval(function() {
+      loadModels().then(function() {
+        var downloading = _models.some(function(m) { return m.status === 'downloading'; });
+        if (!downloading && _downloadPollTimer) {
+          clearInterval(_downloadPollTimer);
+          _downloadPollTimer = null;
+        }
+      });
+    }, 3000);
+  }
+
+  // ── Start / Stop ──
+  $startBtn.addEventListener('click', async function() {
+    var model = $modelSelect.value;
+    if (!model) { showToast('Select a model first', 3000); return; }
+    $startBtn.disabled = true;
+    $startBtn.innerHTML = '<span class="spinner sm"></span>';
+    try {
+      var resp = await apiFetch('/api/admin/llm/start', {
+        method: 'POST',
+        body: {
+          model: model,
+          ctx_size: parseInt($ctxSize.value) || 4096,
+          gpu_layers: parseInt($gpuLayers.value),
+          temperature: parseFloat($temperature.value) || 0.7
+        }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Start failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        $startBtn.disabled = false;
+        $startBtn.textContent = 'Start';
+        return;
+      }
+      showToast('Server starting...', 3000);
+      setTimeout(loadStatus, 2000);
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Start error: ' + e.message, 5000, 'error');
+      $startBtn.disabled = false;
+      $startBtn.textContent = 'Start';
+    }
+  });
+
+  $stopBtn.addEventListener('click', async function() {
+    var ok = await studioConfirm('Stop the LLM server?');
+    if (!ok) return;
+    $stopBtn.disabled = true;
+    $stopBtn.innerHTML = '<span class="spinner sm"></span>';
+    try {
+      var resp = await apiFetch('/api/admin/llm/stop', {method: 'POST'});
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Stop failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        $stopBtn.disabled = false;
+        $stopBtn.textContent = 'Stop';
+        return;
+      }
+      showToast('Server stopped', 3000);
+      _chatHistory = [];
+      setTimeout(loadStatus, 1000);
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
+      $stopBtn.disabled = false;
+      $stopBtn.textContent = 'Stop';
+    }
+  });
+
+  // ── Chat ──
+  function appendChatMsg(role, text) {
+    var empty = $chatMessages.querySelector('.chat-empty');
+    if (empty) empty.remove();
+    var div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    div.textContent = text;
+    $chatMessages.appendChild(div);
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+    return div;
+  }
+
+  $chatSendBtn.addEventListener('click', sendChat);
+  $chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  });
+
+  async function sendChat() {
+    var text = $chatInput.value.trim();
+    if (!text || !_serverRunning) return;
+
+    $chatInput.value = '';
+    appendChatMsg('user', text);
+    _chatHistory.push({role: 'user', content: text});
+
+    $chatSendBtn.disabled = true;
+    $chatSendBtn.innerHTML = '<span class="spinner sm"></span>';
+
+    try {
+      var resp = await apiFetch('/api/admin/llm/chat', {
+        method: 'POST',
+        body: {
+          model: _serverModel,
+          messages: _chatHistory,
+          temperature: parseFloat($temperature.value) || 0.7
+        }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        appendChatMsg('error', 'Error: ' + (err.detail || err.error || resp.status));
+        _chatHistory.pop();
+      } else {
+        var data = await resp.json();
+        var reply = data.content || data.message || data.choices?.[0]?.message?.content || '(empty response)';
+        appendChatMsg('assistant', reply);
+        _chatHistory.push({role: 'assistant', content: reply});
+      }
+    } catch (e) {
+      if (e.message !== 'auth') appendChatMsg('error', 'Error: ' + e.message);
+      _chatHistory.pop();
+    }
+
+    $chatSendBtn.disabled = false;
+    $chatSendBtn.textContent = 'Send';
+  }
+
+  // ── Polling ──
+  function startPoll() {
+    _pollTimer = setInterval(loadStatus, 3000);
+  }
+
+  // ── Boot ──
+  loadStatus();
+  loadModels();
+  startPoll();
+})();
+</script>
+</body>
+</html>
