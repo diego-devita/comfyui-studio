@@ -138,6 +138,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_PREFER_BINARY=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
+ENV RUNTIME_VERSION=2
 
 # ── system dependencies ───────────────────────────────────
 # build-essential + cmake + gfortran + ninja: compile dlib, C++ extensions
