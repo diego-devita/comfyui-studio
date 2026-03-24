@@ -15,6 +15,9 @@
 # Node/model manager — install/update nodes and models from UI
 https://github.com/ltdrdata/ComfyUI-Manager.git
 
+# Basic password login for ComfyUI web UI (third-party auth)
+https://github.com/liusida/ComfyUI-Login.git
+
 # Math, resize, batch, image info — universal utilities
 https://github.com/cubiq/ComfyUI_essentials.git
 
