@@ -235,6 +235,8 @@
     border-color: var(--accent);
     background: rgba(232, 255, 71, 0.03);
   }
+  .dropzone.uploading { opacity: 0.6; pointer-events: none; }
+  .dropzone.uploading .dropzone-filename::after { content: ' \25CF'; color: var(--accent); animation: spin 1s linear infinite; }
   .dropzone-text {
     font-family: var(--mono);
     font-size: 12px;
@@ -580,6 +582,7 @@
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/settings" class="nav-link"><svg width="13" height="13" viewBox="0 0 512 512" fill="currentColor" style="vertical-align:-1px;"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.4-28.2 19-44.1 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.9-6.4-30.7-15-44.1-25.4L83.1 339.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.4 28.2-19 44.1-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.9 6.4 30.7 15 44.1 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z"/></svg></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><svg width="14" height="14" viewBox="0 0 448 512" fill="currentColor"><path d="M224 0c-17.7 0-32 14.3-32 32V49.9C119.5 61.4 64 124.2 64 200v33.4c0 45.4-15.5 89.5-43.8 124.9L5.3 377c-5.8 7.2-6.9 17.1-2.9 25.4S14.8 416 24 416H424c9.2 0 17.6-5.3 21.6-13.6s2.9-18.2-2.9-25.4l-14.9-18.6C399.5 322.9 384 278.8 384 233.4V200c0-75.8-55.5-138.6-128-150.1V32c0-17.7-14.3-32-32-32zm0 512c26.5 0 48.4-16.2 57.7-38.8c3.4-8.2-1.2-17.5-9.7-20.3c-2-.6-4-.9-6-.9H182c-2 0-4 .3-6 .9c-8.5 2.8-13.1 12.1-9.7 20.3c9.3 22.6 31.2 38.8 57.7 38.8z"/></svg><span class="activity-dot" id="activityDot"></span></a>
   <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
 </nav>
@@ -594,6 +597,15 @@
     <div class="activity-list" id="activityList"></div>
   </div>
 </div>
+
+<!-- Confirm Dialog -->
+<dialog class="studio-dialog" id="studioDialog">
+  <div class="studio-dialog-body" id="studioDialogMsg"></div>
+  <div class="studio-dialog-actions">
+    <button class="studio-dialog-btn" id="studioDialogNo">Cancel</button>
+    <button class="studio-dialog-btn primary" id="studioDialogYes">Confirm</button>
+  </div>
+</dialog>
 
 <!-- Main content -->
 <main id="mainContent">
@@ -745,6 +757,59 @@
     const resp = await fetch(url, opts);
     if (resp.status === 401) { window.location = '/login'; throw new Error('auth'); }
     return resp;
+  }
+
+  // ── Toast + Confirm helpers ──
+  var _toastStack = [];
+  function _layoutToasts() {
+    var top = 24;
+    for (var i = _toastStack.length - 1; i >= 0; i--) {
+      var t = _toastStack[i];
+      if (!t.parentElement) { _toastStack.splice(i, 1); continue; }
+      t.style.top = top + 'px';
+      top += t.offsetHeight + 8;
+    }
+  }
+  function showToast(msg, duration, type) {
+    var toast = document.createElement('div');
+    toast.className = 'studio-toast' + (type ? ' ' + type : '');
+    toast.innerHTML = msg + '<button class="toast-close" onclick="this.parentElement.remove()">&times;</button>';
+    if (duration) {
+      var bar = document.createElement('div');
+      bar.className = 'toast-bar';
+      bar.style.transition = 'transform ' + duration + 'ms linear';
+      toast.appendChild(bar);
+      requestAnimationFrame(function() { bar.style.transform = 'scaleX(0)'; });
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() { toast.remove(); _layoutToasts(); }, 300);
+      }, duration);
+    }
+    _toastStack.push(toast);
+    document.body.appendChild(toast);
+    _layoutToasts();
+    var obs = new MutationObserver(function() { if (!toast.parentElement) { obs.disconnect(); _layoutToasts(); } });
+    obs.observe(document.body, { childList: true });
+    return toast;
+  }
+
+  var _dialogResolve = null;
+  function studioConfirm(msg, opts) {
+    opts = opts || {};
+    return new Promise(function(resolve) {
+      var dlg = document.getElementById('studioDialog');
+      document.getElementById('studioDialogMsg').textContent = msg;
+      var yesBtn = document.getElementById('studioDialogYes');
+      var noBtn = document.getElementById('studioDialogNo');
+      yesBtn.textContent = opts.yes || 'Confirm';
+      yesBtn.className = 'studio-dialog-btn ' + (opts.danger ? 'danger' : 'primary');
+      noBtn.textContent = opts.no || 'Cancel';
+      _dialogResolve = resolve;
+      dlg.showModal();
+      yesBtn.onclick = function() { dlg.close(); resolve(true); };
+      noBtn.onclick = function() { dlg.close(); resolve(false); };
+      dlg.addEventListener('close', function handler() { dlg.removeEventListener('close', handler); resolve(false); });
+    });
   }
 
   // ── Initial load ──
@@ -953,11 +1018,9 @@
   }
 
   function handleFile(file, inputId, preview, filenameEl, zone) {
-    inputFiles[inputId] = file;
-    delete existingImages[inputId]; // clear any existing image selection
+    // Show preview immediately
     filenameEl.textContent = file.name;
     filenameEl.classList.add('visible');
-
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -968,6 +1031,27 @@
     } else {
       preview.classList.remove('visible');
     }
+
+    // Upload immediately to ComfyUI
+    zone.classList.add('uploading');
+    filenameEl.textContent = 'Uploading...';
+    var uploadForm = new FormData();
+    uploadForm.append('file', file);
+    apiFetch('/api/run/upload-image', { method: 'POST', body: uploadForm })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        zone.classList.remove('uploading');
+        existingImages[inputId] = data.filename;
+        delete inputFiles[inputId];
+        filenameEl.textContent = file.name + ' \u2713';
+        showToast('&#9989; Image uploaded \u00b7 <code>' + data.filename + '</code>', 3000);
+      })
+      .catch(function(err) {
+        zone.classList.remove('uploading');
+        filenameEl.textContent = file.name + ' (upload failed)';
+        inputFiles[inputId] = file; // fallback: keep file for form upload
+        if (err.message !== 'auth') showToast('&#10060; Upload failed: ' + err.message, 5000);
+      });
   }
 
   function getAccept(type) {
@@ -1429,38 +1513,7 @@
   }
 
 
-  // ── Toast (stackable with expiry bar) ──
-  var _toastStack = [];
-  function _layoutToasts() {
-    var top = 24;
-    for (var i = _toastStack.length - 1; i >= 0; i--) {
-      var t = _toastStack[i];
-      if (!t.parentElement) { _toastStack.splice(i, 1); continue; }
-      t.style.top = top + 'px';
-      top += t.offsetHeight + 8;
-    }
-  }
-  function showToast(msg, duration) {
-    var toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;right:24px;z-index:' + (400 + _toastStack.length) + ';background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-card);padding:12px 40px 12px 16px;font-family:var(--mono);font-size:12px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,0.4);overflow:hidden;transition:opacity 0.3s;';
-    toast.innerHTML = msg + '<span style="position:absolute;top:8px;right:12px;cursor:pointer;color:var(--muted);font-size:16px;" onclick="this.parentElement.remove()">&times;</span>';
-    if (duration) {
-      var bar = document.createElement('div');
-      bar.style.cssText = 'position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--accent);transform-origin:left;transition:transform ' + duration + 'ms linear;';
-      toast.appendChild(bar);
-      requestAnimationFrame(function() { bar.style.transform = 'scaleX(0)'; });
-      setTimeout(function() {
-        toast.style.opacity = '0';
-        setTimeout(function() { toast.remove(); _layoutToasts(); }, 300);
-      }, duration);
-    }
-    _toastStack.push(toast);
-    document.body.appendChild(toast);
-    _layoutToasts();
-    // Re-layout when removed via X
-    var obs = new MutationObserver(function() { if (!toast.parentElement) { obs.disconnect(); _layoutToasts(); } });
-    obs.observe(toast.parentElement, { childList: true });
-  }
+  // (Toast helpers defined above near apiFetch)
 
   // ── Job Count Stepper ──
   var _genCount = 1;
@@ -2194,12 +2247,12 @@
     var file = e.target.files[0];
     if (!file) return;
     var reader = new FileReader();
-    reader.onload = function(ev) {
+    reader.onload = async function(ev) {
       try {
         var job = JSON.parse(ev.target.result);
         // Check if this job matches the current workflow
         if (job.workflow_id && job.workflow_id !== workflowId) {
-          if (!confirm('This job was for "' + (job.workflow_name || job.workflow_id) + '" but you are on "' + workflowId + '". Pre-fill anyway?')) return;
+          if (!await studioConfirm('This job was for "' + (job.workflow_name || job.workflow_id) + '" but you are on "' + workflowId + '". Pre-fill anyway?', {yes: 'Pre-fill anyway'})) return;
         }
         var data = {params: job.params || {}, input_image: job.input_image || null};
         // Merge seeds
@@ -2218,7 +2271,7 @@
         prefillForm(data);
         document.getElementById('rerunBanner').style.display = 'block';
       } catch (err) {
-        alert('Invalid JSON file: ' + err.message);
+        showToast('Invalid JSON file: ' + err.message, 5000, 'error');
       }
     };
     reader.readAsText(file);
@@ -2278,13 +2331,13 @@
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        alert('Export error: ' + (err.detail || resp.status));
+        showToast('Export error: ' + (err.detail || resp.status), 5000, 'error');
         return;
       }
       var data = await resp.json();
       downloadJson(data, workflowId + '_' + format + '.json');
     } catch (e) {
-      alert('Export error: ' + e.message);
+      showToast('Export error: ' + e.message, 5000, 'error');
     }
   }
 

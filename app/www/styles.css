@@ -411,13 +411,14 @@ body::before {
 
 .activity-panel {
   background: var(--bg);
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 1px solid transparent;
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease;
+  transition: max-height 0.3s ease, border-color 0.3s ease;
 }
 .activity-panel.open {
   max-height: 250px;
+  border-bottom-color: var(--border);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
@@ -484,3 +485,93 @@ body::before {
   text-align: center;
   padding: 16px 0;
 }
+
+/* ── Toast (global) ── */
+.studio-toast {
+  position: fixed;
+  right: 24px;
+  z-index: 400;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 12px 40px 12px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  overflow: hidden;
+  transition: opacity 0.3s;
+}
+.studio-toast.error { border-color: var(--error); }
+.studio-toast.success { border-color: var(--success); }
+.studio-toast .toast-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 16px;
+  background: none;
+  border: none;
+}
+.studio-toast .toast-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+}
+
+/* ── Confirm Dialog (global) ── */
+.studio-dialog {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  padding: 0;
+  max-width: 480px;
+  width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.studio-dialog::backdrop {
+  background: rgba(0,0,0,0.6);
+}
+.studio-dialog-body {
+  padding: 24px 28px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.studio-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 28px 20px;
+}
+.studio-dialog-btn {
+  padding: 8px 20px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.studio-dialog-btn:hover { border-color: var(--text); color: var(--text); }
+.studio-dialog-btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.studio-dialog-btn.primary:hover { background: var(--accent); color: #0a0a0f; }
+.studio-dialog-btn.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+.studio-dialog-btn.danger:hover { background: var(--error); color: #fff; }
