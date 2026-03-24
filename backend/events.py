@@ -149,5 +149,15 @@ async def _start_event_consumer():
             import shutil
             shutil.rmtree(old_path)
 
+    # Migration: copy working dirs from .repo/ if missing (first run after architecture change)
+    from config import REPO_DIR, WWW_ROOT, BACKEND_DIR
+    import shutil
+    for src_name, dst_path in [("frontend", WWW_ROOT), ("backend", BACKEND_DIR)]:
+        src = REPO_DIR / src_name
+        if not dst_path.exists() and src.exists():
+            shutil.copytree(str(src), str(dst_path))
+            _events.emit("system.migration", f"Copied {src_name} from .repo/ to working dir",
+                         severity="info")
+
     _events.emit("system.backend.started", "Backend started", severity="info",
                  data={"version": _load_version().get("app_version", "?")})
