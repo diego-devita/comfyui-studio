@@ -1,14 +1,14 @@
 {
   "min_runtime": 0,
-  "app_version": "11.3.0",
+  "app_version": "11.4.0",
   "date": "2026-03-24 06:50",
   "components": {
     "runtime": {"version": 1, "date": "2026-03-24 03:05"},
     "backend": {"version": "11.3.0", "date": "2026-03-24 06:50", "dir": "backend/"},
-    "frontend": {"version": "11.3.0", "date": "2026-03-24 06:50", "dir": "frontend/"},
+    "frontend": {"version": "11.4.0", "date": "2026-03-24 06:50", "dir": "frontend/"},
     "models": {"version": 21, "date": "2026-03-23 16:25", "file": "catalogs/models.json"},
     "loras": {"version": 2, "date": "2026-03-23 16:53", "file": "catalogs/loras.json"},
-    "llm_models": {"version": 1, "date": "2026-03-24 02:24", "file": "catalogs/llm-models.json"},
+    "llm_models": {"version": 2, "date": "2026-03-24 06:50", "file": "catalogs/llm-models.json"},
     "workflows": {"version": 32, "date": "2026-03-24 03:56", "dir": "workflows/"}
   }
 }

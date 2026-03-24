@@ -491,7 +491,9 @@
       html +=
         '<div class="llm-model-card">' +
           '<div class="model-info">' +
-            '<div class="model-name">' + escHtml(name) + '</div>' +
+            '<div class="model-name">' + escHtml(name) +
+              (m.hf_repo ? ' <a href="https://huggingface.co/' + m.hf_repo + '" target="_blank" style="text-decoration:none;opacity:0.4;" title="View on HuggingFace"><span class="icon icon-external-link icon-sm"></span></a>' : '') +
+            '</div>' +
             '<div class="model-meta">' +
               (metaParts.length ? '<span>' + escHtml(metaParts.join(' / ')) + '</span>' : '') +
               tagsHtml +
