@@ -20,21 +20,21 @@ RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
 
 STUDIO_DIR = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
 
-# Git repo clone (source of truth for code)
+# Git repo clone (staging area for updates only)
 REPO_DIR = STUDIO_DIR / ".repo"
 REPO_URL = os.environ.get(
     "REPO_URL",
     "https://github.com/diego-devita/comfyui-studio.git",
 )
 
-# Backend — served directly from repo
-BACKEND_DIR = REPO_DIR / "backend"
+# Backend — working copy
+BACKEND_DIR = STUDIO_DIR / "backend"
 
-# Frontend — served directly from repo
-WWW_ROOT = REPO_DIR / "frontend"
+# Frontend — working copy
+WWW_ROOT = STUDIO_DIR / "frontend"
 
-# Version — read from repo
-VERSION_JSON = REPO_DIR / "version.json"
+# Version — local working copy
+VERSION_JSON = STUDIO_DIR / "version.json"
 
 # Catalogs — working copies outside git (editable on pod)
 CATALOGS_DIR = STUDIO_DIR / "catalogs"

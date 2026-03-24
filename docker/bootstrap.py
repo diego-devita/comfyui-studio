@@ -72,30 +72,49 @@ def main():
     app_version = version.get("app_version", "?")
     log(f"App version: {app_version} (min_runtime: {min_runtime})")
 
-    # Step 3: Copy data components to working directories (outside git)
-    catalogs_dir = os.path.join(STUDIO_DIR, "catalogs")
-    workflows_dir = os.path.join(STUDIO_DIR, "workflows")
+    # Step 3: Copy ALL components from .repo/ to working directories
+    # .repo/ is only a staging area — the live app runs from working dirs
 
-    # Catalogs
+    # Backend
+    src_backend = os.path.join(repo_dir, "backend")
+    dst_backend = os.path.join(STUDIO_DIR, "backend")
+    if os.path.exists(src_backend):
+        if os.path.exists(dst_backend):
+            shutil.rmtree(dst_backend)
+        shutil.copytree(src_backend, dst_backend)
+        log("  Copied backend")
+
+    # Frontend
+    src_frontend = os.path.join(repo_dir, "frontend")
+    dst_frontend = os.path.join(STUDIO_DIR, "frontend")
+    if os.path.exists(src_frontend):
+        if os.path.exists(dst_frontend):
+            shutil.rmtree(dst_frontend)
+        shutil.copytree(src_frontend, dst_frontend)
+        log("  Copied frontend")
+
+    # Catalogs (don't overwrite existing — user may have edited on pod)
+    catalogs_dir = os.path.join(STUDIO_DIR, "catalogs")
     src_catalogs = os.path.join(repo_dir, "catalogs")
     if os.path.exists(src_catalogs):
         os.makedirs(catalogs_dir, exist_ok=True)
         for fname in os.listdir(src_catalogs):
             src = os.path.join(src_catalogs, fname)
             dst = os.path.join(catalogs_dir, fname)
-            if not os.path.exists(dst):  # don't overwrite existing
+            if not os.path.exists(dst):
                 shutil.copy2(src, dst)
                 log(f"  Copied catalog: {fname}")
             else:
                 log(f"  Catalog exists, skipping: {fname}")
 
-    # Workflows
+    # Workflows (don't overwrite existing)
+    workflows_dir = os.path.join(STUDIO_DIR, "workflows")
     src_workflows = os.path.join(repo_dir, "workflows")
     if os.path.exists(src_workflows) and not os.path.exists(os.path.join(workflows_dir, "index.json")):
         shutil.copytree(src_workflows, workflows_dir, dirs_exist_ok=True)
-        log(f"  Copied workflows")
+        log("  Copied workflows")
     else:
-        log(f"  Workflows exist, skipping")
+        log("  Workflows exist, skipping")
 
     # Version.json (local working copy)
     local_ver = os.path.join(STUDIO_DIR, "version.json")

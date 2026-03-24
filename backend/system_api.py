@@ -330,12 +330,25 @@ async def system_update(request: Request):
             if proc.returncode != 0:
                 raise Exception(f"Git reset failed: {proc.stderr}")
 
-            # Step 7: Backend + Frontend are always updated (served from .repo/)
+            # Step 7: Copy backend + frontend from .repo/ to working dirs
             if "backend" in to_update:
-                updated.append("backend")
-                restart_needed = True
+                src = REPO_DIR / "backend"
+                if src.exists():
+                    dst = BACKEND_DIR
+                    if dst.exists():
+                        shutil.rmtree(str(dst))
+                    shutil.copytree(str(src), str(dst))
+                    updated.append("backend")
+                    restart_needed = True
+
             if "frontend" in to_update:
-                updated.append("frontend")
+                src = REPO_DIR / "frontend"
+                if src.exists():
+                    dst = WWW_ROOT
+                    if dst.exists():
+                        shutil.rmtree(str(dst))
+                    shutil.copytree(str(src), str(dst))
+                    updated.append("frontend")
 
             # Step 8: Selective copy for data components (catalogs, workflows)
             if "models" in to_update:
