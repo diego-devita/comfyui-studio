@@ -10,6 +10,8 @@ on:
       - 'catalogs/**'
       - 'version.json'
       - '*.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
   workflow_dispatch:
 
 env:

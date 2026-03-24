@@ -1,0 +1,140 @@
+site_name: ComfyUI Studio
+site_description: Web management platform for ComfyUI on RunPod — models, workflows, job queue, LLM chat
+site_url: https://diego-devita.github.io/comfyui-studio/
+repo_url: https://github.com/diego-devita/comfyui-studio
+repo_name: diego-devita/comfyui-studio
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Overview: getting-started/overview.md
+    - Quick Start: getting-started/quick-start.md
+    - Your First Generation: getting-started/first-generation.md
+    - Environment Variables: getting-started/environment-variables.md
+  - Architecture:
+    - architecture/index.md
+    - System Overview: architecture/overview.md
+    - Docker Image: architecture/docker-image.md
+    - Bootstrap Flow: architecture/bootstrap-flow.md
+    - Update Mechanism: architecture/update-mechanism.md
+    - Runtime Versioning: architecture/runtime-versioning.md
+    - Directory Layout: architecture/directory-layout.md
+  - Workflows:
+    - workflows/index.md
+    - Overview: workflows/overview.md
+    - Manifest Reference: workflows/manifest-reference.md
+    - Static Workflows: workflows/static-workflows.md
+    - Dynamic Workflows: workflows/dynamic-workflows.md
+    - Block Format: workflows/block-format.md
+    - Inputs:
+      - workflows/inputs/index.md
+      - Text: workflows/inputs/text.md
+      - Integer: workflows/inputs/int.md
+      - Float: workflows/inputs/float.md
+      - Boolean: workflows/inputs/boolean.md
+      - Seed: workflows/inputs/seed.md
+      - Select: workflows/inputs/select.md
+      - Image: workflows/inputs/image.md
+      - Checkpoint Picker: workflows/inputs/checkpoint-picker.md
+      - Resolution Picker: workflows/inputs/resolution-picker.md
+      - LoRA Picker (Dynamic): workflows/inputs/lora-picker-dynamic.md
+      - LoRA Picker (Paired): workflows/inputs/lora-picker.md
+      - Scene List: workflows/inputs/scene-list.md
+      - VAE Picker: workflows/inputs/vae-picker.md
+    - Outputs: workflows/outputs.md
+    - Execution Flow: workflows/execution-flow.md
+    - Multi-Generate: workflows/multi-generate.md
+    - Creating a Workflow: workflows/creating-a-workflow.md
+  - Models:
+    - models/index.md
+    - Overview: models/overview.md
+    - Catalog Format: models/catalog-format.md
+    - Download System: models/download-system.md
+    - Base Models: models/base-models.md
+    - LoRA Pairing: models/lora-pairing.md
+    - Supported Models: models/supported-models.md
+  - Pages:
+    - pages/index.md
+    - Home: pages/home.md
+    - Model Manager: pages/models.md
+    - LoRA Manager: pages/loras.md
+    - LLM Assistant: pages/llm.md
+    - Workflow Manager: pages/workflows.md
+    - Job Queue: pages/queue.md
+    - Job History: pages/history.md
+    - Asset Manager: pages/assets.md
+    - Settings: pages/settings.md
+    - Workflow Runner: pages/runner.md
+  - API Reference:
+    - api/index.md
+    - Authentication: api/auth.md
+    - System: api/system.md
+    - Models: api/models.md
+    - LoRAs: api/loras.md
+    - LLM: api/llm.md
+    - Workflows: api/workflows.md
+    - Runner: api/runner.md
+    - Jobs: api/jobs.md
+    - Assets: api/assets.md
+    - Events: api/events.md
+    - Nodes: api/nodes.md
+    - WebSocket: api/websocket.md
+  - Docker & Build:
+    - docker/index.md
+    - Build Configurator: docker/configurator.md
+    - Build Arguments: docker/build-arguments.md
+    - Custom Nodes: docker/custom-nodes.md
+    - llama-server: docker/llama-server.md
+    - GPU Compatibility: docker/gpu-compatibility.md
+    - CI/CD: docker/ci-cd.md
+  - Deployment:
+    - deployment/index.md
+    - RunPod: deployment/runpod.md
+    - Custom Server: deployment/custom-server.md
+    - Security: deployment/security.md
