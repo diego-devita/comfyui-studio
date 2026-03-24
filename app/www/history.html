@@ -590,6 +590,7 @@
       $histDeleteBtn.textContent = 'Delete selected';
       $histDeleteBtn.style.visibility = 'hidden';
       $histSelectAll.checked = false;
+      _lastJobIds = [];
       loadHistory();
     })
     .catch(function(e) {
