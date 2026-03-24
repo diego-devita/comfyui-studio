@@ -440,7 +440,11 @@
       var resp = await apiFetch('/api/admin/llm/models');
       if (!resp.ok) return;
       var data = await resp.json();
-      _models = data.models || data || [];
+      // Flatten categories into a single models list
+      _models = [];
+      (data.categories || []).forEach(function(cat) {
+        (cat.models || []).forEach(function(m) { _models.push(m); });
+      });
       renderModels();
       updateModelSelect();
     } catch (e) {
