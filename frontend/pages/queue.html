@@ -596,6 +596,42 @@
         if (key.startsWith('_')) continue;
         if (key === 'positive_prompt' || key === 'negative_prompt') {
           rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap">' + escHtml(String(val)) + copyBtn(String(val)) + '</td></tr>';
+        } else if (key === 'scenes' && Array.isArray(val)) {
+          val.forEach(function(scene, idx) {
+            var sceneSeedKey = 'scene_' + (idx+1);
+            var inputSeed = scene.seed != null ? scene.seed : '?';
+            var resolvedSeed = job.seeds && job.seeds[sceneSeedKey] ? job.seeds[sceneSeedKey] : null;
+            var seedDisplay;
+            if (inputSeed == -1 && resolvedSeed) {
+              seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+            } else if (resolvedSeed && resolvedSeed != inputSeed) {
+              seedDisplay = inputSeed + ' (used: ' + resolvedSeed + ')';
+            } else {
+              seedDisplay = String(resolvedSeed || inputSeed);
+            }
+            var seedCopyVal = String(resolvedSeed || inputSeed);
+            rows += '<tr><td>Scene ' + (idx+1) + '</td><td class="text-pre-wrap">' +
+              escHtml(scene.prompt || '') + copyBtn(scene.prompt || '') +
+              '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's \u00b7 seed: ' + seedDisplay + copyBtn(seedCopyVal) + '</span></td></tr>';
+          });
+        } else if (key === 'loras' && Array.isArray(val)) {
+          val.forEach(function(lora, idx) {
+            var loraName = typeof lora === 'string' ? lora : (lora.pair_id || '?');
+            var strH = typeof lora === 'object' ? lora.strength_high : '';
+            var strL = typeof lora === 'object' ? lora.strength_low : '';
+            var strInfo = strH || strL ? ' H:' + (strH||'?') + ' L:' + (strL||'?') : '';
+            rows += '<tr><td>LoRA ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
+          });
+        } else if (key === 'seed') {
+          var resolvedSeed = job.seeds && job.seeds[key] ? job.seeds[key] : null;
+          var seedDisplay;
+          if (val == -1 && resolvedSeed) {
+            seedDisplay = '-1 (used: ' + resolvedSeed + ')';
+          } else {
+            seedDisplay = String(resolvedSeed || val);
+          }
+          var seedCopyVal = String(resolvedSeed || val);
+          rows += '<tr><td>' + escHtml(key) + '</td><td>' + seedDisplay + copyBtn(seedCopyVal) + '</td></tr>';
         } else if (typeof val === 'object') {
           rows += '<tr><td>' + escHtml(key) + '</td><td class="text-pre-wrap" style="font-size:11px;">' + escHtml(JSON.stringify(val, null, 2)) + '</td></tr>';
         } else {
