@@ -40,7 +40,7 @@ VERSION_JSON = STUDIO_DIR / "version.json"
 CATALOGS_DIR = STUDIO_DIR / "catalogs"
 MODELS_JSON = CATALOGS_DIR / "models.json"
 LORAS_JSON = CATALOGS_DIR / "loras.json"
-LLM_MODELS_JSON = CATALOGS_DIR / "llm-models.json"
+LLM_MODELS_JSON = CATALOGS_DIR / "llm.json"
 
 # Workflows — working copy outside git (editable on pod)
 WORKFLOWS_DIR = STUDIO_DIR / "workflows"

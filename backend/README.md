@@ -267,7 +267,7 @@ STUDIO_DIR (/workspace/studio)
 ├── catalogs/
 │   ├── models.json      MODELS_JSON        — model catalog
 │   ├── loras.json       LORAS_JSON         — LoRA catalog
-│   └── llm-models.json  LLM_MODELS_JSON    — LLM model catalog
+│   └── llm.json         LLM_MODELS_JSON    — LLM model catalog
 ├── workflows/           WORKFLOWS_DIR      — workflow library
 ├── assets/
 │   ├── input/           ASSETS_INPUT_DIR   — ComfyUI input images

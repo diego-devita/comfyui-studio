@@ -10,7 +10,7 @@ This directory contains the model catalogs that drive the Model Manager, LoRA Ma
 |------|-------------|
 | `models.json` | AI models: checkpoints, diffusion models, LoRAs, VAE, text encoders, CLIP, ControlNet, IP-Adapter, upscalers, embeddings, detectors, segmentation, face swap, AnimateDiff motion modules |
 | `loras.json` | Style LoRAs (separate catalog for user-curated LoRA collections) |
-| `llm-models.json` | LLM GGUF models for the llama-server chat assistant |
+| `llm.json` | LLM GGUF models for the llama-server chat assistant |
 
 ---
 

@@ -373,10 +373,10 @@ async def system_update(request: Request):
                     updated.append("loras")
 
             if "llm_models" in to_update:
-                src = REPO_DIR / "catalogs" / "llm-models.json"
+                src = REPO_DIR / "catalogs" / "llm.json"
                 if src.exists():
                     CATALOGS_DIR.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(src), str(CATALOGS_DIR / "llm-models.json"))
+                    shutil.copy2(str(src), str(CATALOGS_DIR / "llm.json"))
                     updated.append("llm_models")
 
             if "workflows" in to_update:

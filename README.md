@@ -151,7 +151,7 @@ Application code, catalogs, and workflows live in this Git repository as source 
 | **Backend** (16 Python modules) | `STUDIO_DIR/backend/` | Yes (auto) | After ~2s restart |
 | **Model catalog** | `STUDIO_DIR/catalogs/models.json` | No | Next API call |
 | **LoRA catalog** | `STUDIO_DIR/catalogs/loras.json` | No | Next API call |
-| **LLM catalog** | `STUDIO_DIR/catalogs/llm-models.json` | No | Next API call |
+| **LLM catalog** | `STUDIO_DIR/catalogs/llm.json` | No | Next API call |
 | **Workflows** | `STUDIO_DIR/workflows/` | No | Next API call |
 
 ---
@@ -278,7 +278,7 @@ comfyui-studio/
 ├── catalogs/                 Model catalogs (source of truth)
 │   ├── models.json           AI model catalog
 │   ├── loras.json            LoRA catalog
-│   └── llm-models.json       LLM model catalog
+│   └── llm.json       LLM model catalog
 │
 ├── workflows/                Workflow library (source of truth)
 │   ├── index.json            Index with versions
