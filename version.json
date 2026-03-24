@@ -6,7 +6,7 @@
     "runtime": {"version": 3, "date": "2026-03-24 15:47"},
     "backend": {"version": "12.2.0", "date": "2026-03-24 09:56", "dir": "backend/"},
     "frontend": {"version": "12.0.2", "date": "2026-03-24 09:36", "dir": "frontend/"},
-    "models": {"version": 22, "date": "2026-03-24 17:16", "file": "catalogs/models.json"},
+    "models": {"version": 23, "date": "2026-03-24 18:21", "file": "catalogs/models.json"},
     "loras": {"version": 3, "date": "2026-03-24 17:00", "file": "catalogs/loras.json"},
     "llm_models": {"version": 3, "date": "2026-03-24 07:03", "file": "catalogs/llm-models.json"},
     "workflows": {"version": 32, "date": "2026-03-24 03:56", "dir": "workflows/"}
