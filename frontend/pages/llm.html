@@ -479,12 +479,13 @@
       if (quant) metaParts.push(quant);
 
       var actionHtml = '';
+      var fileEsc = escHtml(m.file).replace(/'/g, '&#39;');
       if (status === 'present') {
-        actionHtml = '<button class="btn btn-sm" onclick="window._llmDeleteModel(\'' + escHtml(name) + '\')">Delete</button>';
+        actionHtml = '<button class="btn btn-sm" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
       } else if (status === 'downloading') {
         actionHtml = '<span class="spinner sm"></span>';
       } else {
-        actionHtml = '<button class="btn btn-sm" onclick="window._llmDownloadModel(\'' + escHtml(name) + '\')">Download</button>';
+        actionHtml = '<button class="btn btn-sm" onclick="window._llmDownloadModel(\'' + fileEsc + '\')">Download</button>';
       }
 
       html +=

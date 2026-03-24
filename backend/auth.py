@@ -63,7 +63,7 @@ _maintenance_mode = False
 
 class AuthMiddleware(BaseHTTPMiddleware):
     PUBLIC_PATHS = {"/login", "/api/auth/login", "/api/health"}
-    PUBLIC_PREFIXES = ("/api/health",)
+    PUBLIC_PREFIXES = ("/api/health", "/static/")
 
     async def dispatch(self, request, call_next):
         global _maintenance_mode
