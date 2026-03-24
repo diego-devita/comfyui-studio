@@ -306,11 +306,12 @@
     <p>No jobs found. Run a workflow to see history here.</p>
   </div>
 
-  <div id="historyToolbar" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
-    <div style="display:flex;gap:8px;align-items:center;">
-      <label style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
-        <input type="checkbox" id="histSelectAll" style="accent-color:var(--error);"> Select all
+  <div id="historyToolbar" class="select-toolbar" style="display:none;">
+    <div class="select-toolbar-left">
+      <label class="select-all-label">
+        <input type="checkbox" class="select-all-cb" id="histSelectAll"> Select all
       </label>
+      <span class="select-count" id="histSelectCount"></span>
     </div>
     <button class="btn btn--danger btn--sm" id="histDeleteBtn" style="visibility:hidden;">Delete selected</button>
   </div>
@@ -555,10 +556,12 @@
   // Track last clicked for shift-select (updated in checkbox change)
   var lastClickedIdx = null;
 
+  var $histSelectCount = document.getElementById('histSelectCount');
   function updateHistDeleteBtn() {
     var count = $list.querySelectorAll('.job-check:checked').length;
     $histDeleteBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
-    $histDeleteBtn.textContent = 'Delete ' + count + ' selected';
+    $histDeleteBtn.textContent = 'Delete ' + count;
+    $histSelectCount.textContent = count > 0 ? count + ' selected' : '';
   }
 
   $histSelectAll.addEventListener('change', function() {

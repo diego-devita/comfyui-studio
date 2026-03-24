@@ -277,10 +277,13 @@
       </label>
       <button class="btn btn--sm" id="downloadAllBtn" style="display:none;">Download ZIP</button>
     </div>
-    <div id="assetsToolbar" style="display:none;gap:8px;align-items:center;">
-      <label style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
-        <input type="checkbox" id="selectAll" style="accent-color:var(--accent);"> Select all
-      </label>
+    <div id="assetsToolbar" class="select-toolbar" style="display:none;">
+      <div class="select-toolbar-left">
+        <label class="select-all-label">
+          <input type="checkbox" class="select-all-cb" id="selectAll"> Select all
+        </label>
+        <span class="select-count" id="assetSelectCount"></span>
+      </div>
       <button class="btn btn--danger btn--sm" id="deleteBtn" style="visibility:hidden;">Delete selected</button>
     </div>
   </div>
@@ -433,10 +436,12 @@
     updateDeleteBtn();
   }
 
+  var $assetSelectCount = document.getElementById('assetSelectCount');
   function updateDeleteBtn() {
     var count = $grid.querySelectorAll('.asset-check:checked').length;
     $deleteBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
-    $deleteBtn.textContent = 'Delete ' + count + ' selected';
+    $deleteBtn.textContent = 'Delete ' + count;
+    $assetSelectCount.textContent = count > 0 ? count + ' selected' : '';
   }
 
   $deleteBtn.addEventListener('click', async function() {

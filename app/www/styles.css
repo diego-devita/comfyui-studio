@@ -489,6 +489,63 @@ header { min-height: 110px; }
   padding: 16px 0;
 }
 
+/* ── Selection toolbar (global) ── */
+.select-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.select-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+.select-all-label:hover { color: var(--text); }
+.select-all-cb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.select-all-cb:hover { border-color: var(--accent); }
+.select-all-cb:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='%230a0a0f' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2.5-2.5a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+  background-size: 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.select-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  min-width: 0;
+  transition: opacity 0.15s;
+}
+
 /* ── Toast (global) ── */
 .studio-toast {
   position: fixed;
