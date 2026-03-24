@@ -201,6 +201,7 @@ async def system_status():
                 "version": RUNTIME_VERSION,
                 "date": ver.get("components", {}).get("runtime", {}).get("date", ""),
                 "status": f"Docker image v{RUNTIME_VERSION}",
+                "updatable": False,
             },
             "backend": {
                 "version": ver.get("components", {}).get("backend", {}).get("version", "0.0.0"),

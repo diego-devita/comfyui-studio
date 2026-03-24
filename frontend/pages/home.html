@@ -432,11 +432,10 @@
       : Object.entries(compObj).map(([key, val]) => Object.assign({ name: key }, val));
     $compBody.innerHTML = '';
 
-    const labelMap = { backend: 'Backend', frontend: 'Frontend', models: 'Models Catalog', loras: 'LoRAs Catalog', llm_models: 'LLM Models', workflows: 'Workflows' };
+    const labelMap = { backend: 'Backend', frontend: 'Frontend', runtime: 'Runtime', models: 'Models Catalog', loras: 'LoRAs Catalog', llm_models: 'LLM Models', workflows: 'Workflows' };
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
     var _defaultUnchecked = { loras: true, llm_models: true };
-    var _noToggle = { runtime: true };  // not updatable via check for updates
     var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras', llm_models: '/api/admin/llm/models' };
     var svgEye = '<span class="icon icon-eye icon-sm"></span>';
     components.forEach(c => {
@@ -450,7 +449,7 @@
         ? ' <span style="cursor:pointer;opacity:0.4;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="showCatalogOverlay(\'' + _viewableComps[c.name] + '\',\'' + escHtml(displayName) + '\')" title="View catalog">' + svgEye + '</span>'
         : '';
       var toggleHtml = '';
-      if (!_noToggle[c.name]) {
+      if (c.updatable !== false) {
         var checked = _defaultUnchecked[c.name] ? '' : 'checked';
         toggleHtml = '<label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label>';
       }
