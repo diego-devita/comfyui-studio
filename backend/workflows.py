@@ -10,7 +10,7 @@ import yaml
 
 from config import (
     COMFY_URL, COMFYUI_DIR, MODELS_BASE,
-    WORKFLOWS_DIR, WORKFLOWS_DIR_DEFAULT,
+    WORKFLOWS_DIR,
 )
 from catalogs import _all_categories, _reload_models
 
@@ -19,11 +19,8 @@ from catalogs import _all_categories, _reload_models
 
 
 def _workflows_path(subpath: str) -> Path:
-    """Resolve a workflow subpath: WORKFLOWS_DIR first, WORKFLOWS_DIR_DEFAULT fallback."""
-    p = WORKFLOWS_DIR / subpath
-    if p.exists():
-        return p
-    return WORKFLOWS_DIR_DEFAULT / subpath
+    """Resolve a workflow subpath within WORKFLOWS_DIR."""
+    return WORKFLOWS_DIR / subpath
 
 
 def _make_input_filename(original_filename: str) -> str:
@@ -123,9 +120,9 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
     # Check /workspace first, then /app
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found: tried {WORKFLOWS_DIR / wf_id / blocks_subdir} and {WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir}. Run Check for Updates to download workflow blocks.")
+        raise FileNotFoundError(f"Blocks directory not found: tried {WORKFLOWS_DIR / wf_id / blocks_subdir} and {WORKFLOWS_DIR / wf_id / blocks_subdir}. Run Check for Updates to download workflow blocks.")
     defaults = manifest.get("defaults", {})
 
     # Load block templates
@@ -363,7 +360,7 @@ def _assemble_faceid_batch_workflow(manifest: dict, params: dict) -> tuple:
     blocks_subdir = manifest.get("blocks_dir", "blocks")
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
         raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
 
@@ -567,7 +564,7 @@ def _assemble_ipa_batch_workflow(manifest: dict, params: dict) -> tuple:
     blocks_subdir = manifest.get("blocks_dir", "blocks")
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
         raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
 
@@ -757,7 +754,7 @@ def _assemble_i2i_batch_workflow(manifest: dict, params: dict) -> tuple:
     blocks_subdir = manifest.get("blocks_dir", "blocks")
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
         raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
 
@@ -928,7 +925,7 @@ def _assemble_t2i_batch_workflow(manifest: dict, params: dict) -> tuple:
     blocks_subdir = manifest.get("blocks_dir", "blocks")
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
         raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
 
@@ -1074,7 +1071,7 @@ def _assemble_t2i_workflow(manifest: dict, params: dict) -> tuple:
     blocks_subdir = manifest.get("blocks_dir", "blocks")
     blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR_DEFAULT / wf_id / blocks_subdir
+        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
     if not blocks_dir.exists():
         raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
 

@@ -20,25 +20,22 @@ RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
 
 STUDIO_DIR = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
 
-# Backend (live code on pod — updated via update mechanism)
+# Backend
 BACKEND_DIR = STUDIO_DIR / "backend"
-BACKEND_DIR_DEFAULT = Path("/app/backend")  # baked fallback in Docker image
 
 # Frontend
 WWW_ROOT = STUDIO_DIR / "www"
-WWW_DEFAULT = Path("/app/www")  # baked fallback
 
 # Catalogs
 MODELS_JSON = STUDIO_DIR / "catalogs" / "models.json"
-MODELS_JSON_DEFAULT = Path("/app/catalogs/models.json")
 LORAS_JSON = STUDIO_DIR / "catalogs" / "loras.json"
-LORAS_JSON_DEFAULT = Path("/app/catalogs/loras.json")
 LLM_MODELS_JSON = STUDIO_DIR / "catalogs" / "llm-models.json"
-LLM_MODELS_JSON_DEFAULT = Path("/app/catalogs/llm-models.json")
 
 # Workflows
 WORKFLOWS_DIR = STUDIO_DIR / "workflows"
-WORKFLOWS_DIR_DEFAULT = Path("/app/workflows")
+
+# Version
+VERSION_JSON = STUDIO_DIR / "version.json"
 
 # Jobs (DB)
 DB_DIR = STUDIO_DIR / "db"
@@ -54,10 +51,6 @@ LLM_MODELS_DIR = LLM_DIR / "models"
 LLM_CONFIG_PATH = LLM_DIR / "config.json"
 LLAMA_SERVER_PATH = Path(os.environ.get("LLAMA_SERVER_PATH", "/workspace/llama-server"))
 LLAMA_SERVER_PORT = int(os.environ.get("LLAMA_SERVER_PORT", "8080"))
-
-# Version
-VERSION_JSON = STUDIO_DIR / "version.json"
-VERSION_JSON_DEFAULT = Path("/app/version.json")
 
 # Auth
 SESSION_SECRET_PATH = STUDIO_DIR / ".session_secret"

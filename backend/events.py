@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 from fastapi import WebSocket
 
-from config import app, REPO_BASE, STUDIO_DIR, WWW_ROOT, WWW_DEFAULT
+from config import app, REPO_BASE, STUDIO_DIR, WWW_ROOT
 
 
 # ── Event Bus ───────────────────────────────────────────────────────────
@@ -149,9 +149,7 @@ async def _start_event_consumer():
         "workflows.html", "nodes.html", "runner.html", "queue.html",
         "history.html", "assets.html", "settings.html", "llm.html",
     ]
-    missing = [f for f in _FRONTEND_FILES if not _www(f).exists() or (
-        not (WWW_ROOT / f).exists() and not (WWW_DEFAULT / f).exists()
-    )]
+    missing = [f for f in _FRONTEND_FILES if not _www(f).exists()]
     if missing:
         async def _download_missing():
             try:
