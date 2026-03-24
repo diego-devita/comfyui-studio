@@ -6,6 +6,27 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 
 ---
 
+## Deploy on RunPod
+
+  [![Deploy on RunPod](https://img.shields.io/badge/RunPod-Deploy-673ab7?logo=data:image/svg+xml;base64,PHN2...)](https://runpod.io/console/deploy?template=7ox0egslls)
+
+  1. Click **Deploy** above (or go to [RunPod → Deploy](https://runpod.io/console/deploy?template=7ox0egslls))
+  2. Select a GPU — any NVIDIA GPU from V100 to B200 works
+  3. Set the environment variables (API_KEY is required, tokens recommended)
+  4. Launch the pod
+
+  Once running, open `https://<POD_ID>-8000.proxy.runpod.net` and log in with your API key.
+
+  | Variable | Required | Where to get it |
+  |----------|----------|-----------------|
+  | `API_KEY` | **Yes** | Choose a strong password |
+  | `CIVITAI_API_KEY` | Recommended | [civitai.com/user/account](https://civitai.com/user/account) → API Keys |
+  | `HF_TOKEN` | Recommended | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+
+  Per il badge, se vuoi un bottone più semplice senza SVG custom:
+
+---
+
 ## Architecture
 
 ```
