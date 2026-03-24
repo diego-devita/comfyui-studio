@@ -42,12 +42,21 @@ def main():
             capture_output=True, text=True, timeout=60, cwd=repo_dir
         )
         if proc.returncode != 0:
-            log(f"Git fetch failed: {proc.stderr}")
-            sys.exit(1)
-        subprocess.run(
-            ["git", "reset", "--hard", "origin/main"],
-            capture_output=True, text=True, timeout=30, cwd=repo_dir
-        )
+            # Fetch failed (e.g., history rewritten) — re-clone from scratch
+            log(f"Git fetch failed, re-cloning: {proc.stderr}")
+            shutil.rmtree(repo_dir)
+            proc = subprocess.run(
+                ["git", "clone", "--depth", "1", REPO_URL, repo_dir],
+                capture_output=True, text=True, timeout=120
+            )
+            if proc.returncode != 0:
+                log(f"Git re-clone failed: {proc.stderr}")
+                sys.exit(1)
+        else:
+            subprocess.run(
+                ["git", "reset", "--hard", "origin/main"],
+                capture_output=True, text=True, timeout=30, cwd=repo_dir
+            )
     else:
         log("Cloning repo...")
         proc = subprocess.run(

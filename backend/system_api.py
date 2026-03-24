@@ -265,7 +265,14 @@ async def system_update(request: Request):
                 cwd=str(REPO_DIR)
             )
             if proc.returncode != 0:
-                raise HTTPException(500, f"Git fetch failed: {proc.stderr}")
+                # Fetch failed (e.g., history rewritten) — re-clone from scratch
+                shutil.rmtree(str(REPO_DIR))
+                proc = subprocess.run(
+                    ["git", "clone", "--depth", "1", REPO_URL, str(REPO_DIR)],
+                    capture_output=True, text=True, timeout=60
+                )
+                if proc.returncode != 0:
+                    raise HTTPException(500, f"Git re-clone failed: {proc.stderr}")
 
         # Step 2: Read remote version.json from fetched ref
         proc = subprocess.run(
