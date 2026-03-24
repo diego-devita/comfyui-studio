@@ -1,6 +1,6 @@
 {
-  "version": 31,
-  "date": "2026-03-23 15:43",
+  "version": 32,
+  "date": "2026-03-24 03:56",
   "workflows": [
     {
       "id": "wan22-i2v-lightx2v",
@@ -17,12 +17,7 @@
       "version": 8,
       "date": "2026-03-23 01:46"
     },
-    {
-      "id": "wan22-svi-pro",
-      "version": 4,
-      "date": "2026-03-23 01:46"
-    },
-    {
+{
       "id": "wan22-svi-dynamic",
       "version": 9,
       "date": "2026-03-23 01:46"
