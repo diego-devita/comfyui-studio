@@ -51,7 +51,7 @@ auth.py
 └── config          (app, API_KEY, SESSION_SECRET_PATH)
 
 events.py
-└── config          (app, REPO_BASE, STUDIO_DIR, WWW_ROOT, WWW_DEFAULT)
+└── config          (app, STUDIO_DIR)
 
 pages.py
 ├── config          (app)
@@ -64,7 +64,7 @@ download.py
 └── config          (MODELS_BASE, CIVITAI_API_KEY, HF_TOKEN)
 
 models_api.py
-├── config          (MODELS_BASE, MODELS_JSON, REPO_BASE)
+├── config          (MODELS_BASE, MODELS_JSON, REPO_URL)
 ├── catalogs        (_models_data, _loras_data, _reload_models, _find_model, ...)
 ├── download        (_download_state, _enqueue_download, _clean_state, ...)
 └── events          (_events)
@@ -80,13 +80,13 @@ llm_server.py
 └── config          (LLM_MODELS_DIR, LLM_CONFIG_PATH, LLAMA_SERVER_PATH, LLAMA_SERVER_PORT)
 
 workflows_api.py
-├── config          (COMFY_URL, REPO_BASE, WORKFLOWS_DIR)
+├── config          (COMFY_URL, REPO_URL, WORKFLOWS_DIR)
 ├── catalogs        (_find_model, _reload_models)
 ├── download        (_enqueue_download)
 └── workflows       (_load_workflows_index_raw, _load_manifest, ...)
 
 workflows.py
-├── config          (COMFY_URL, COMFYUI_DIR, MODELS_BASE, WORKFLOWS_DIR, WORKFLOWS_DIR_DEFAULT)
+├── config          (COMFY_URL, COMFYUI_DIR, MODELS_BASE, WORKFLOWS_DIR)
 └── catalogs        (_all_categories, _reload_models)
 
 runner.py
@@ -102,7 +102,7 @@ runner_api.py
 └── workflows       (_load_workflows_index, _load_manifest, ...)
 
 system_api.py
-├── config          (app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_BASE, ...)
+├── config          (app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, ...)
 ├── catalogs        (_load_version, _reload_models, _all_categories, ...)
 ├── download        (_download_state, _max_concurrent, _queue_lock, ...)
 ├── events          (_events)
@@ -156,16 +156,14 @@ To add a new catalog (like `loras.json` was added alongside `models.json`):
 
 2. **Add path constants** to `config.py`:
    ```python
-   NEW_CATALOG_JSON = STUDIO_DIR / "catalogs" / "new-catalog.json"
-   NEW_CATALOG_JSON_DEFAULT = Path("/app/catalogs/new-catalog.json")
+   NEW_CATALOG_JSON = CATALOGS_DIR / "new-catalog.json"
    ```
 
 3. **Add loader functions** to `catalogs.py` following the pattern of `_load_models()`:
    ```python
    def _load_new_catalog() -> dict:
-       f = NEW_CATALOG_JSON if NEW_CATALOG_JSON.exists() else NEW_CATALOG_JSON_DEFAULT
        try:
-           return json.loads(f.read_text())
+           return json.loads(NEW_CATALOG_JSON.read_text())
        except Exception:
            return {"categories": []}
    ```
@@ -178,12 +176,10 @@ To add a new catalog (like `loras.json` was added alongside `models.json`):
    ```
 
 6. **Add to the update mechanism** in `system_api.py`:
-   - Add the dest mapping to `catalog_dest_map`
-   - Add the component name to the catalog update loop
+   - Add a copy block for the new catalog file (from `.repo/catalogs/` to `STUDIO_DIR/catalogs/`)
 
 7. **Add to bootstrap** in `docker/bootstrap.py`:
-   - Add the dest mapping to `dest_map`
-   - Add the component name to the catalog download loop
+   - The bootstrap copies all files in `.repo/catalogs/` automatically (no change needed if the file is in catalogs/)
 
 8. **Create API endpoints** in a new `*_api.py` module or an existing one.
 
@@ -267,7 +263,7 @@ All paths derive from `STUDIO_DIR` (default: `/workspace/studio`). Defined in `c
 ```
 STUDIO_DIR (/workspace/studio)
 ├── backend/             BACKEND_DIR        — live Python code
-├── www/                 WWW_ROOT           — live frontend files
+├── frontend/            WWW_ROOT           — live frontend files
 ├── catalogs/
 │   ├── models.json      MODELS_JSON        — model catalog
 │   ├── loras.json       LORAS_JSON         — LoRA catalog
@@ -286,7 +282,7 @@ STUDIO_DIR (/workspace/studio)
 └── .session_secret      SESSION_SECRET_PATH — HMAC signing key
 ```
 
-Each path has a `*_DEFAULT` counterpart pointing to `/app/...` (the baked fallback in the Docker image). The `_www()` helper in `catalogs.py` checks the live path first, then falls back to the baked default.
+The `_www()` helper in `catalogs.py` resolves frontend files from `WWW_ROOT`, checking `pages/` subdirectory for bare filenames.
 
 External (not under STUDIO_DIR):
 - `COMFYUI_DIR` = `/workspace/ComfyUI` -- ComfyUI installation
@@ -328,38 +324,35 @@ During updates, `auth._maintenance_mode` is set to `True`. The middleware return
 
 ## Update Mechanism
 
-The update endpoint `POST /api/admin/system/update` runs in 4 phases:
+The update endpoint `POST /api/admin/system/update` uses git to fetch updates:
 
-### Phase 0: Compatibility check
-- Fetches `version.json` from the repository
+### Step 1: Git fetch
+- `git fetch --depth 1 origin main` in `STUDIO_DIR/.repo/` (or clone if missing)
+- Read remote `version.json` via `git show origin/main:version.json`
+
+### Step 2: Compatibility check
 - If `remote.min_runtime > RUNTIME_VERSION`, returns `blocked: true` (Docker image too old)
 
-### Phase 1: Frontend
-- Downloads the entire `frontend/` directory tree via GitHub API (recursive)
-- Writes to `STUDIO_DIR/www/`
-- Uses GitHub Contents API to list directories, then fetches individual files
+### Step 3: Compare versions
+- Compare each component version between local and remote
+- Skip components listed in `skip_components` request body
 
-### Phase 2: Catalogs
-- Downloads changed JSON files: `models.json`, `loras.json`, `llm-models.json`
-- Uses a `catalog_dest_map` to route repo paths to local paths
-- Calls `_reload_models()` to refresh in-memory catalog data
+### Step 4: Apply updates (under maintenance mode)
+- `git reset --hard origin/main` in `.repo/`
+- **Backend/Frontend**: `rmtree` + `copytree` from `.repo/` to working dirs
+- **Catalogs**: `copy2` individual files from `.repo/catalogs/` to `STUDIO_DIR/catalogs/`
+- **Workflows**: copy index + each workflow dir from `.repo/workflows/` to `STUDIO_DIR/workflows/`
 
-### Phase 3: Workflows
-- Fetches `workflows/index.json` from repo
-- Compares each workflow's version with the local version
-- Downloads only changed workflows (manifest.yaml + workflow.json or dynamic blocks)
-
-### Phase 4: Backend (triggers restart)
-- Downloads the entire `backend/` directory tree via GitHub API
-- Writes to `STUDIO_DIR/backend/`
-- Sets `restart_needed = True`
-- After returning the response, schedules `os.execv(uvicorn)` to restart the process
+### Step 5: Finalize
+- Merge version.json (keep skipped component versions from local)
+- If backend updated → restart via `os.execv(uvicorn)`
+- If no restart needed → exit maintenance mode
 
 ### Important behaviors
-- **Maintenance mode** is enabled before Phase 1 and disabled after completion (or on error). If a restart is needed, maintenance mode stays on until the new process starts.
-- **Skip components**: The request body can include `{"skip_components": ["frontend"]}` to skip specific components.
-- **Version comparison** handles mixed types (int vs str) from schema migrations -- forces update when types differ.
-- The response always includes a `debug` field with both `local_version_json` and `remote_version_json`.
+- **Maintenance mode** is enabled before updates and disabled after (or on error). If restart needed, stays on until reboot.
+- **Skip components**: Request body `{"skip_components": ["frontend"]}` to skip specific components.
+- **Version comparison** handles mixed types (int vs str) — forces update when types differ.
+- Response includes `debug` field with both local and remote version.json.
 
 ---
 

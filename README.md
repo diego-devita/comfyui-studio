@@ -13,8 +13,8 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 │                  DOCKER IMAGE (build time)                       │
 │                                                                  │
 │  /comfyui           ComfyUI + 35 custom nodes (baked in)        │
-│  /app               Baseline backend + frontend + catalogs       │
 │  /app/bootstrap.py  First-boot installer                        │
+│  /opt/llama-server  llama.cpp server (CUDA, SM 75-100) [optional]│
 │  /start.sh          Boot script                                 │
 │                                                                  │
 │  NOT in image: models, workflows, live app code, user data       │
@@ -22,8 +22,9 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 │              PERSISTENT VOLUME (runtime)                         │
 │                                                                  │
 │  /workspace/studio/                  ← STUDIO_DIR               │
+│    .repo/                            ← git clone (staging only)   │
 │    backend/                          ← live Python backend       │
-│    www/                              ← live frontend (HTML/CSS/JS)│
+│    frontend/                         ← live frontend (HTML/CSS/JS)│
 │    catalogs/                         ← models, loras, llm-models │
 │    workflows/                        ← workflow library           │
 │    assets/input/ + assets/output/    ← ComfyUI I/O               │
@@ -36,18 +37,27 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 └──────────────────────────────────────────────────────────────────┘
 
 Bootstrap flow (first boot only):
-  1. bootstrap.py fetches version.json from GitHub
+  1. bootstrap.py clones repo to STUDIO_DIR/.repo/
   2. Checks RUNTIME_VERSION >= min_runtime (blocks if incompatible)
-  3. Downloads backend/, frontend/, catalogs, workflows to STUDIO_DIR
+  3. Copies backend/, frontend/, catalogs/, workflows/ to STUDIO_DIR working dirs
   4. start.sh copies /comfyui → /workspace/ComfyUI
   5. Starts ComfyUI (port 8188) + Studio backend (port 8000)
+  All output visible in RunPod container logs (stdout via tee)
 ```
 
 ---
 
 ## Quick Start
 
-### Build (default: B200)
+### Build
+
+The easiest way is to use the interactive configurator, which auto-detects the right settings for your GPU:
+
+```bash
+docker/configure.sh
+```
+
+Or build directly (default: B200, all features):
 
 ```bash
 docker build -f docker/Dockerfile -t comfyui-studio .
@@ -116,7 +126,7 @@ Application code, catalogs, and workflows live in this Git repository as source 
 
 | Component | Where it goes | Restart? | When visible? |
 |-----------|--------------|----------|---------------|
-| **Frontend** (HTML/CSS/JS) | `STUDIO_DIR/www/` | No | Next page load |
+| **Frontend** (HTML/CSS/JS) | `STUDIO_DIR/frontend/` | No | Next page load |
 | **Backend** (16 Python modules) | `STUDIO_DIR/backend/` | Yes (auto) | After ~2s restart |
 | **Model catalog** | `STUDIO_DIR/catalogs/models.json` | No | Next API call |
 | **LoRA catalog** | `STUDIO_DIR/catalogs/loras.json` | No | Next API call |
@@ -140,10 +150,10 @@ Application code, catalogs, and workflows live in this Git repository as source 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `STUDIO_DIR` | No | `/workspace/studio` | Root directory for all Studio data on the persistent volume |
-| `RUNTIME_VERSION` | No | `0` | Docker image runtime version (set at build time in Dockerfile) |
+| `RUNTIME_VERSION` | No | `3` | Docker image version (set in Dockerfile, must match `version.json` → `components.runtime.version`) |
 | `COMFYUI_FLAGS` | No | `--highvram` | ComfyUI VRAM mode (`--lowvram`, `--normalvram`, `--highvram`) |
 | `COMFYUI_EXTRA_ARGS` | No | _(empty)_ | Additional ComfyUI flags |
-| `REPO_BASE` | No | `https://raw.githubusercontent.com/.../main` | Base URL for fetching updates |
+| `REPO_URL` | No | `https://github.com/diego-devita/comfyui-studio.git` | Git repo for updates |
 | `MAX_CONCURRENT_DOWNLOADS` | No | `3` | Parallel model downloads (1-10, also adjustable from UI) |
 
 ---
@@ -159,6 +169,8 @@ All arguments have defaults optimized for B200. Override with `--build-arg` for 
 | `PYTHON_VERSION` | `3.12` | Python interpreter version |
 | `ENABLE_SAGE_ATTENTION` | `true` | SageAttention 2 + Triton (Ampere+) |
 | `ENABLE_FLASH_ATTENTION` | `true` | FlashAttention (Ampere+, builds from source) |
+| `ENABLE_LLM` | `true` | llama.cpp server for local LLM inference |
+| `LLAMA_CPP_VERSION` | `b8505` | llama.cpp release tag (or `latest` for HEAD) |
 
 ### GPU Compatibility Table
 
@@ -184,13 +196,21 @@ docker build -f docker/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 .
 
-# T4 / V100 (no attention optimizations)
+# T4 / V100 (no attention optimizations, no LLM)
 docker build -f docker/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \
-  --build-arg ENABLE_FLASH_ATTENTION=false .
+  --build-arg ENABLE_FLASH_ATTENTION=false \
+  --build-arg ENABLE_LLM=false .
+
+# Fast CI build (skip slow compilations)
+docker build -f docker/Dockerfile -t comfyui-studio \
+  --build-arg ENABLE_FLASH_ATTENTION=false \
+  --build-arg ENABLE_LLM=false .
 ```
+
+> **Tip:** Use `docker/configure.sh` instead of memorizing build args — it picks the right values for your GPU and explains each option.
 
 ---
 
@@ -231,10 +251,11 @@ comfyui-studio/
 │   └── <workflow-id>/        Per-workflow dirs with manifest.yaml + workflow.json
 │
 ├── docker/                   Docker infrastructure
-│   ├── Dockerfile            Image definition (CUDA, PyTorch, nodes)
+│   ├── Dockerfile            Image definition (CUDA, PyTorch, nodes, llama-server)
+│   ├── configure.sh          Interactive build configurator
 │   ├── start.sh              Container boot script
-│   ├── bootstrap.py          First-boot installer (downloads app from repo)
-│   ├── nodes.txt             Custom node list (35 nodes)
+│   ├── bootstrap.py          First-boot installer (clones repo, copies to working dirs)
+│   ├── nodes.txt             Custom node list
 │   └── install_nodes.sh      Node installer (build time)
 │
 ├── version.json              Component version manifest

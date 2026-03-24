@@ -49,6 +49,20 @@ ARG ENABLE_SAGE_ATTENTION=true
 #
 ARG ENABLE_FLASH_ATTENTION=true
 
+# ENABLE_LLM — Compile llama.cpp server for local LLM inference.
+#   Provides GPU-accelerated LLM chat directly on the pod.
+#   Compiles with CUDA for all supported architectures (SM 75-100).
+#   Set to "false" to skip (~60 min saved on CI builds).
+#
+ARG ENABLE_LLM=true
+
+# LLAMA_CPP_VERSION — llama.cpp release tag to build.
+#   Pinned to a known-good release for reproducible builds.
+#   Set to "latest" to clone HEAD (not recommended — may break).
+#   Pinned on 2026-03-24 to b8505 (latest stable at that time).
+#
+ARG LLAMA_CPP_VERSION=b8505
+
 # ── GPU COMPATIBILITY TABLE ────────────────────────────────
 #
 # Use this table to pick the right build args for your GPU.
@@ -131,6 +145,8 @@ ARG PYTHON_VERSION
 ARG PYTORCH_INDEX
 ARG ENABLE_SAGE_ATTENTION
 ARG ENABLE_FLASH_ATTENTION
+ARG ENABLE_LLM
+ARG LLAMA_CPP_VERSION
 
 # ── environment variables ──────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
@@ -138,7 +154,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_PREFER_BINARY=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
-ENV RUNTIME_VERSION=2
+ENV RUNTIME_VERSION=3
 
 # ── system dependencies ───────────────────────────────────
 # build-essential + cmake + gfortran + ninja: compile dlib, C++ extensions
@@ -211,6 +227,54 @@ RUN if [ "${ENABLE_FLASH_ATTENTION}" = "true" ]; then \
       echo "=== Skipping FlashAttention (disabled) ==="; \
     fi
 
+# ── FastAPI + backoffice dependencies ─────────────────────
+# Placed before ComfyUI/nodes so that adding a custom node
+# does not invalidate this cached layer.
+RUN pip install \
+    fastapi \
+    "uvicorn[standard]" \
+    httpx \
+    python-multipart \
+    huggingface_hub \
+    aiofiles \
+    requests \
+    pyyaml
+
+# ── llama.cpp server (conditional — for local LLM inference) ─
+# Compiled with CUDA support — GPU acceleration works at runtime.
+# Binary installed to /opt/llama-server; configurable via LLAMA_SERVER_PATH env.
+# Skip with --build-arg ENABLE_LLM=false to save ~60 min on CI builds.
+#
+# Placed before ComfyUI/nodes for layer caching: changing nodes.txt
+# does NOT trigger a llama-server recompile (~60 min saved).
+#
+# Build flags based on llama.cpp official CUDA Dockerfile:
+#   https://github.com/ggml-org/llama.cpp/blob/master/.devops/cuda.Dockerfile
+# --allow-shlib-undefined: libcuda.so stubs don't provide libcuda.so.1,
+#   the real driver is mounted at runtime by NVIDIA Container Toolkit.
+RUN if [ "${ENABLE_LLM}" = "true" ]; then \
+      echo "=== Building llama-server with CUDA ===" && \
+      CUDA_ARCHS="75;80;86;89;90;100" && \
+      if [ "$LLAMA_CPP_VERSION" = "latest" ]; then \
+        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
+      else \
+        git clone --depth 1 --branch "$LLAMA_CPP_VERSION" https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
+      fi && \
+      cd /tmp/llama.cpp && \
+      cmake -B build \
+          -DGGML_CUDA=ON \
+          -DGGML_NATIVE=OFF \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" \
+          -DLLAMA_BUILD_TESTS=OFF \
+          -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined && \
+      cmake --build build --config Release -j$(nproc) --target llama-server && \
+      cp build/bin/llama-server /opt/llama-server && \
+      rm -rf /tmp/llama.cpp; \
+    else \
+      echo "=== Skipping llama-server (disabled) ==="; \
+    fi
+
 # ── ComfyUI core in /comfyui ─────────────────────────────
 # NOT in /workspace — that is the Network Volume, mounted at
 # runtime and overwrites anything placed there during build.
@@ -222,6 +286,11 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
 # install_nodes.sh reads nodes.txt and installs nodes between
 # section markers. COPY as a real file instead of generating
 # inline to avoid shell escaping issues.
+#
+# LAYER CACHING: nodes.txt COPY invalidates all layers below.
+# That's why llama-server and FastAPI are placed ABOVE this point —
+# adding a custom node only rebuilds the node install layers (~15 min),
+# not the full llama-server compilation (~60 min).
 COPY docker/nodes.txt /tmp/nodes.txt
 COPY docker/install_nodes.sh /tmp/install_nodes.sh
 RUN chmod +x /tmp/install_nodes.sh
@@ -241,30 +310,6 @@ RUN /tmp/install_nodes.sh "CivitAI Integration" "ENDOFFILE" "${PYTORCH_INDEX}"
 
 # ── Clean up ──────────────────────────────────────────────
 RUN rm -rf /root/.cache/pip /tmp/nodes.txt /tmp/install_nodes.sh
-
-# ── FastAPI + backoffice dependencies ─────────────────────
-RUN pip install \
-    fastapi \
-    "uvicorn[standard]" \
-    httpx \
-    python-multipart \
-    huggingface_hub \
-    aiofiles \
-    requests \
-    pyyaml
-
-# ── llama.cpp server (for local LLM inference) ─────────────
-# Compiled with CUDA support — GPU acceleration works at runtime.
-# Binary installed to /opt/llama-server; configurable via LLAMA_SERVER_PATH env.
-RUN CUDA_ARCHS="75;80;86;89;90;100" && \
-    git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp && \
-    cd /tmp/llama.cpp && \
-    cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" && \
-    LIBRARY_PATH=/usr/local/cuda/lib64/stubs \
-    cmake --build build --config Release -j$(nproc) --target llama-server && \
-    cp build/bin/llama-server /opt/llama-server && \
-    rm -rf /tmp/llama.cpp
 
 # ── Bootstrap script (clones repo + sets up working dirs on first boot) ──
 COPY docker/bootstrap.py /app/bootstrap.py
