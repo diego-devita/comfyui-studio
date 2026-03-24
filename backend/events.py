@@ -169,5 +169,12 @@ async def _start_event_consumer():
                 pass
         asyncio.create_task(_download_missing())
 
+    # Clean up .old directories left by atomic swap update
+    for old_name in ("backend.old", "www.old"):
+        old_path = STUDIO_DIR / old_name
+        if old_path.exists():
+            import shutil
+            shutil.rmtree(old_path)
+
     _events.emit("system.backend.started", "Backend started", severity="info",
                  data={"version": _load_version().get("app_version", "?")})

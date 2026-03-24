@@ -307,38 +307,59 @@ async def system_update(request: Request):
         updated = []
         restart_needed = False
 
+        async def _download_dir(repo_subdir: str, dest_dir: Path, dl_client):
+            """Recursively download all files from a GitHub directory."""
+            count = 0
+            api_url = _github_api_url(REPO_BASE, repo_subdir)
+            if not api_url:
+                return 0
+            api_r = await dl_client.get(api_url)
+            if api_r.status_code != 200:
+                return 0
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            for item in api_r.json():
+                if item.get("type") == "file":
+                    dl_url = item.get("download_url") or f"{REPO_BASE}/{repo_subdir}/{item['name']}"
+                    fr = await dl_client.get(dl_url)
+                    if fr.status_code == 200:
+                        (dest_dir / item["name"]).write_text(fr.text)
+                        count += 1
+                elif item.get("type") == "dir":
+                    count += await _download_dir(f"{repo_subdir}/{item['name']}", dest_dir / item["name"], dl_client)
+            return count
+
+        def _atomic_swap(new_dir: Path, target_dir: Path):
+            """Swap new_dir into target_dir atomically. Old target becomes .old."""
+            old_dir = target_dir.with_name(target_dir.name + ".old")
+            if old_dir.exists():
+                shutil.rmtree(old_dir)
+            if target_dir.exists():
+                target_dir.rename(old_dir)
+            new_dir.rename(target_dir)
+
+        def _cleanup_old():
+            """Remove .old directories left by atomic swaps."""
+            for name in ("backend.old", "www.old"):
+                old = STUDIO_DIR / name
+                if old.exists():
+                    shutil.rmtree(old)
+
         try:
-            # Phase 1: FRONTEND (entire directory tree via GitHub API)
+            # Phase 1: FRONTEND — download to .new, then swap
             if "frontend" in to_update:
-                downloaded = 0
                 frontend_repo_dir = to_update["frontend"].get("dir", "frontend/").rstrip("/")
-
-                async def _download_dir(repo_subdir: str, dest_dir: Path, dl_client):
-                    """Recursively download all files from a GitHub directory."""
-                    nonlocal downloaded
-                    api_url = _github_api_url(REPO_BASE, repo_subdir)
-                    if not api_url:
-                        return
-                    api_r = await dl_client.get(api_url)
-                    if api_r.status_code != 200:
-                        return
-                    dest_dir.mkdir(parents=True, exist_ok=True)
-                    for item in api_r.json():
-                        if item.get("type") == "file":
-                            dl_url = item.get("download_url") or f"{REPO_BASE}/{repo_subdir}/{item['name']}"
-                            fr = await dl_client.get(dl_url)
-                            if fr.status_code == 200:
-                                (dest_dir / item["name"]).write_text(fr.text)
-                                downloaded += 1
-                        elif item.get("type") == "dir":
-                            await _download_dir(f"{repo_subdir}/{item['name']}", dest_dir / item["name"], dl_client)
-
+                www_new = WWW_ROOT.with_name("www.new")
+                if www_new.exists():
+                    shutil.rmtree(www_new)
                 async with httpx.AsyncClient(timeout=30) as dl_client:
-                    await _download_dir(frontend_repo_dir, WWW_ROOT, dl_client)
-                if downloaded > 0:
+                    count = await _download_dir(frontend_repo_dir, www_new, dl_client)
+                if count > 0:
+                    _atomic_swap(www_new, WWW_ROOT)
                     updated.append("frontend")
+                elif www_new.exists():
+                    shutil.rmtree(www_new)
 
-            # Phase 2: JSON files (models, loras, llm_models)
+            # Phase 2: Catalogs (single files — direct overwrite, no swap needed)
             from config import MODELS_JSON, LORAS_JSON, LLM_MODELS_JSON
             catalog_dest_map = {
                 "catalogs/models.json": MODELS_JSON,
@@ -400,16 +421,20 @@ async def system_update(request: Request):
                         (WORKFLOWS_DIR / "index.json").write_text(idx_r.text)
                 updated.append("workflows")
 
-            # Phase 4: BACKEND (entire directory — last, triggers restart)
+            # Phase 4: BACKEND — download to .new, swap, restart (LAST)
             if "backend" in to_update:
-                downloaded = 0
                 backend_repo_dir = to_update["backend"].get("dir", "backend/").rstrip("/")
+                backend_new = BACKEND_DIR.with_name("backend.new")
+                if backend_new.exists():
+                    shutil.rmtree(backend_new)
                 async with httpx.AsyncClient(timeout=30) as dl_client:
-                    await _download_dir(backend_repo_dir, BACKEND_DIR, dl_client)
-                    downloaded = 1  # _download_dir increments nonlocal but we just need to know it ran
-                if downloaded > 0:
+                    count = await _download_dir(backend_repo_dir, backend_new, dl_client)
+                if count > 0:
+                    _atomic_swap(backend_new, BACKEND_DIR)
                     updated.append("backend")
                     restart_needed = True
+                elif backend_new.exists():
+                    shutil.rmtree(backend_new)
 
             # Save version.json
             VERSION_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -417,8 +442,17 @@ async def system_update(request: Request):
             if "models" in updated or "loras" in updated or "llm_models" in updated:
                 _reload_models()
 
+        except Exception:
+            # If anything fails, clean up .new dirs
+            for name in ("www.new", "backend.new"):
+                p = STUDIO_DIR / name
+                if p.exists():
+                    shutil.rmtree(p)
+            raise
         finally:
             if not restart_needed:
+                # No restart — clean up .old now and exit maintenance
+                _cleanup_old()
                 auth._maintenance_mode = False
 
         if updated:
