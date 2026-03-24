@@ -261,6 +261,7 @@ RUN CUDA_ARCHS="75;80;86;89;90;100" && \
     cd /tmp/llama.cpp && \
     cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" && \
+    LIBRARY_PATH=/usr/local/cuda/lib64/stubs \
     cmake --build build --config Release -j$(nproc) --target llama-server && \
     cp build/bin/llama-server /opt/llama-server && \
     rm -rf /tmp/llama.cpp
