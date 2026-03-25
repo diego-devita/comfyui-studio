@@ -4,6 +4,8 @@ A web-based management platform for AI image and video generation built on Comfy
 
 Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 to B200 via build arguments.
 
+https://diego-devita.github.io/comfyui-studio/
+
 ---
 
 ## Deploy on RunPod
