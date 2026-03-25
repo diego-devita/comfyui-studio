@@ -262,7 +262,7 @@ ask_llm() {
 parse_node_categories() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local nodes_file="$script_dir/nodes.txt"
+  local nodes_file="$script_dir/production/nodes.txt"
 
   CATEGORIES=()
   CATEGORY_COUNTS=()
@@ -414,9 +414,9 @@ emit_build_command() {
   fi
 
   if [ ${#args[@]} -eq 0 ]; then
-    echo "  docker build -f docker/Dockerfile -t comfyui-studio ."
+    echo "  docker build -f docker/production/Dockerfile -t comfyui-studio ."
   else
-    echo -n "  docker build -f docker/Dockerfile -t comfyui-studio"
+    echo -n "  docker build -f docker/production/Dockerfile -t comfyui-studio"
     for arg in "${args[@]}"; do
       echo " \\"
       echo -n "    $arg"
@@ -460,8 +460,8 @@ select_output() {
 emit_dockerfile() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local src_dockerfile="$script_dir/Dockerfile"
-  local src_nodes="$script_dir/nodes.txt"
+  local src_dockerfile="$script_dir/production/Dockerfile"
+  local src_nodes="$script_dir/production/nodes.txt"
   local out_dir="${script_dir}"
   local out_dockerfile="$out_dir/Dockerfile.custom"
   local out_nodes="$out_dir/nodes.custom.txt"
@@ -517,9 +517,62 @@ emit_dockerfile() {
   build_time_estimate
 }
 
+# ── Step 0: Production or Development ────────────────────────
+
+ask_image_type() {
+  echo ""
+  bold "=== ComfyUI Studio — Docker Build Configurator ==="; echo ""
+  echo ""
+  echo "  What type of image do you want to build?"
+  echo ""
+  echo "    1) Production — full image with CUDA, PyTorch, ComfyUI, 38 nodes (~12 GB)"
+  echo "    2) Development — lightweight with stub ComfyUI, hot reload (~200 MB)"
+  echo ""
+  dim "    Development image is for local coding and testing. No GPU required."; echo ""
+  dim "    It mounts your codebase as a volume and restarts on file changes."; echo ""
+  echo ""
+
+  while true; do
+    read -rp "  Image type [1/2]: " it
+    case "$it" in
+      1) SEL_IMAGE_TYPE="production"; break;;
+      2) SEL_IMAGE_TYPE="development"; break;;
+      *) echo "  Invalid choice, try again.";;
+    esac
+  done
+}
+
+emit_dev_command() {
+  echo ""
+  bold "  ──────────────────────────────────────────────"; echo ""
+  bold "  Build:"; echo ""
+  echo ""
+  echo "  docker build -f docker/development/Dockerfile -t comfyui-studio-dev ."
+  echo ""
+  bold "  Run:"; echo ""
+  echo ""
+  echo "  docker run -p 8000:8000 \\"
+  echo "    -v \$(pwd):/workspace/studio \\"
+  echo "    -e API_KEY=test \\"
+  echo "    comfyui-studio-dev"
+  echo ""
+  bold "  ──────────────────────────────────────────────"; echo ""
+  dim "  Run both commands from the repository root."; echo ""
+  dim "  Edit files in your editor — changes appear instantly (hot reload)."; echo ""
+  dim "  ComfyUI stub server runs on port 8188 with fake responses."; echo ""
+  echo ""
+}
+
 # ── Main ─────────────────────────────────────────────────────
 
 main() {
+  ask_image_type
+
+  if [ "$SEL_IMAGE_TYPE" = "development" ]; then
+    emit_dev_command
+    return
+  fi
+
   select_gpu
   confirm_params
   ask_llm
