@@ -178,7 +178,7 @@ async def lookup_civitai(body: LookupRequest):
         v_images = [
             {"id": img.get("id"), "url": img.get("url", ""),
              "width": img.get("width"), "height": img.get("height"),
-             "nsfw": img.get("nsfwLevel", 1) > 1}
+             "nsfw": int(img.get("nsfwLevel", 1) or 1) > 1}
             for img in v.get("images", [])
         ]
         versions.append({
@@ -195,7 +195,7 @@ async def lookup_civitai(body: LookupRequest):
     preview_images = [
         {"id": img.get("id"), "url": img.get("url", ""),
          "width": img.get("width"), "height": img.get("height"),
-         "nsfw": img.get("nsfwLevel", 1) > 1,
+         "nsfw": int(img.get("nsfwLevel", 1) or 1) > 1,
          "meta": _extract_image_meta(img.get("meta"))}
         for img in imgs_data.get("items", [])
     ]
