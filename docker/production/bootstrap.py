@@ -46,7 +46,7 @@ def main():
             log(f"Git fetch failed, re-cloning: {proc.stderr}")
             shutil.rmtree(repo_dir)
             proc = subprocess.run(
-                ["git", "clone", "--depth", "1", REPO_URL, repo_dir],
+                ["git", "clone", "--depth", "1", "--branch", "main", REPO_URL, repo_dir],
                 capture_output=True, text=True, timeout=120
             )
             if proc.returncode != 0:
@@ -60,7 +60,7 @@ def main():
     else:
         log("Cloning repo...")
         proc = subprocess.run(
-            ["git", "clone", "--depth", "1", REPO_URL, repo_dir],
+            ["git", "clone", "--depth", "1", "--branch", "main", REPO_URL, repo_dir],
             capture_output=True, text=True, timeout=120
         )
         if proc.returncode != 0:
