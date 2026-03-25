@@ -151,7 +151,7 @@ The Dockerfile is structured to maximize cache hits:
 10. COPY bootstrap.py + start.sh       (changes rarely)
 ```
 
-The key insight: `COPY docker/nodes.txt` at step 8 invalidates all subsequent layers. This is why llama-server (step 7) and all pip installs (steps 2-6) are placed above it. Adding a custom node to `nodes.txt` only rebuilds steps 8-10 (~15 minutes), not the full llama-server compilation (~60 minutes).
+The key insight: `COPY docker/production/nodes.txt` at step 8 invalidates all subsequent layers. This is why llama-server (step 7) and all pip installs (steps 2-6) are placed above it. Adding a custom node to `nodes.txt` only rebuilds steps 8-10 (~15 minutes), not the full llama-server compilation (~60 minutes).
 
 ## Workflow Steps
 

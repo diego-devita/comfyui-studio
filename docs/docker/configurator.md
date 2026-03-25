@@ -8,7 +8,7 @@ The interactive build configurator at `docker/configure.sh` walks you through ev
 bash docker/configure.sh
 ```
 
-The script runs entirely in the terminal. No dependencies beyond bash. It reads `docker/nodes.txt` and `docker/Dockerfile` from the same directory.
+The script runs entirely in the terminal. No dependencies beyond bash. It reads `docker/production/nodes.txt` and `docker/production/Dockerfile` from the same directory.
 
 ## Walkthrough
 
@@ -72,7 +72,7 @@ If you decline LLM support, `ENABLE_LLM` is set to `false` and the entire llama.
 
 ### Step 4: Custom Node Categories
 
-The script parses `docker/nodes.txt` and presents 6 toggleable categories:
+The script parses `docker/production/nodes.txt` and presents 6 toggleable categories:
 
 | # | Category | Nodes | Description |
 |---|----------|-------|-------------|
@@ -92,13 +92,13 @@ The script offers two output formats:
 **Docker build command** (when all node categories are selected):
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 \
   .
 ```
 
-Only non-default arguments are included. If your GPU matches the Dockerfile defaults (Blackwell/Hopper), the command is just `docker build -f docker/Dockerfile -t comfyui-studio .` with no extra args.
+Only non-default arguments are included. If your GPU matches the Dockerfile defaults (Blackwell/Hopper), the command is just `docker build -f docker/production/Dockerfile -t comfyui-studio .` with no extra args.
 
 **Customized Dockerfile** (always used when node categories are deselected):
 
@@ -108,7 +108,7 @@ The script generates two files in the `docker/` directory:
 - `nodes.custom.txt` -- filtered `nodes.txt` with excluded categories removed
 
 ```bash
-docker build -f docker/Dockerfile.custom -t comfyui-studio .
+docker build -f docker/production/Dockerfile.custom -t comfyui-studio .
 ```
 
 ### Build Time Estimate
@@ -134,7 +134,7 @@ The estimate adjusts based on your selections. Disabling FlashAttention and LLM 
 The configurator would produce:
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \
@@ -148,7 +148,7 @@ Estimated time: ~15-25 minutes.
 **Full build for A100** (all features, CI environment):
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 \
   .

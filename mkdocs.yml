@@ -132,6 +132,7 @@ nav:
     - Custom Nodes: docker/custom-nodes.md
     - llama-server: docker/llama-server.md
     - GPU Compatibility: docker/gpu-compatibility.md
+    - Development Image: docker/development.md
     - CI/CD: docker/ci-cd.md
   - Deployment:
     - deployment/index.md

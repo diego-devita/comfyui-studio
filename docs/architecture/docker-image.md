@@ -20,24 +20,25 @@ The Dockerfile layers are ordered for optimal build cache efficiency. Layers tha
 ```
 Layer  1: Base CUDA image                     (changes: ~never)
 Layer  2: System packages (apt-get)           (changes: ~never)
-Layer  3: Python venv + PyTorch               (changes: ~never)
-Layer  4: xformers                            (changes: ~never)
-Layer  5: SageAttention (conditional)         (changes: ~never)
-Layer  6: FlashAttention (conditional)        (changes: ~never)
-Layer  7: FastAPI + backend dependencies      (changes: rarely)
-Layer  8: llama-server (conditional, ~60 min) (changes: rarely)
-Layer  9: ComfyUI core                        (changes: rarely)
-Layer 10: COPY nodes.txt + install_nodes.sh   ← CACHE BREAK when nodes change
-Layer 11: Custom nodes group 1                (rebuilt if nodes.txt changes)
-Layer 12: Custom nodes group 2                (rebuilt if nodes.txt changes)
-Layer 13: Custom nodes group 3                (rebuilt if nodes.txt changes)
-Layer 14: Custom nodes group 4                (rebuilt if nodes.txt changes)
-Layer 15: Cleanup
-Layer 16: COPY bootstrap.py                   ← CACHE BREAK when bootstrap changes
-Layer 17: COPY start.sh                       ← CACHE BREAK when start.sh changes
+Layer  3: llama-server (conditional, ~60 min) (changes: ~never — pinned version)
+Layer  4: Python venv                         (changes: ~never)
+Layer  5: PyTorch                             (changes: ~never)
+Layer  6: xformers                            (changes: ~never)
+Layer  7: SageAttention (conditional)         (changes: ~never)
+Layer  8: FlashAttention (conditional)        (changes: ~never)
+Layer  9: FastAPI + backend dependencies      (changes: rarely)
+Layer 10: ComfyUI core                        (changes: rarely)
+Layer 11: COPY nodes.txt + install_nodes.sh   ← CACHE BREAK when nodes change
+Layer 12: Custom nodes group 1                (rebuilt if nodes.txt changes)
+Layer 13: Custom nodes group 2                (rebuilt if nodes.txt changes)
+Layer 14: Custom nodes group 3                (rebuilt if nodes.txt changes)
+Layer 15: Custom nodes group 4                (rebuilt if nodes.txt changes)
+Layer 16: Cleanup
+Layer 17: COPY bootstrap.py                   ← CACHE BREAK when bootstrap changes
+Layer 18: COPY start.sh                       ← CACHE BREAK when start.sh changes
 ```
 
-**Key insight:** `nodes.txt` is COPYed at layer 10. Everything above (including the 60-minute llama-server build) is cached. Adding a custom node only rebuilds layers 10-17 (~15 minutes), not the entire image.
+**Key insight:** llama-server is at layer 3 — right after system packages. It only depends on CUDA + cmake + git, nothing from Python or ComfyUI. Adding a custom node, a pip package, or updating PyTorch never triggers llama-server recompilation. Only changing the base CUDA image or system packages does (which ~never happens).
 
 ## What's Installed
 
@@ -70,7 +71,7 @@ Layer 17: COPY start.sh                       ← CACHE BREAK when start.sh chan
 
 ### ComfyUI + Custom Nodes
 
-ComfyUI is cloned from GitHub and installed with all its requirements. 38 custom nodes are installed from `docker/nodes.txt`, organized in categories:
+ComfyUI is cloned from GitHub and installed with all its requirements. 38 custom nodes are installed from `docker/production/nodes.txt`, organized in categories:
 
 | Category | Nodes | Purpose |
 |----------|-------|---------|

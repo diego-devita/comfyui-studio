@@ -1,6 +1,6 @@
 # Custom Nodes
 
-The Docker image ships with 38 custom nodes pre-installed, organized into 6 categories. Nodes are defined in `docker/nodes.txt` and installed during the Docker build by `docker/install_nodes.sh`.
+The Docker image ships with 38 custom nodes pre-installed, organized into 6 categories. Nodes are defined in `docker/production/nodes.txt` and installed during the Docker build by `docker/production/install_nodes.sh`.
 
 ## Categories
 
@@ -78,7 +78,7 @@ ControlNet, IP-Adapter, face processing, upscaling, and model loading.
 
 ## File Format: nodes.txt
 
-`docker/nodes.txt` is a plain text file with one node per line. Each line has the format:
+`docker/production/nodes.txt` is a plain text file with one node per line. Each line has the format:
 
 ```
 repo_url [requirements_file] [post_install_command]
@@ -134,7 +134,7 @@ The script reads `nodes.txt` from top to bottom, only processing lines between i
 
 ## How install_nodes.sh Works
 
-The installer script at `docker/install_nodes.sh` takes three arguments:
+The installer script at `docker/production/install_nodes.sh` takes three arguments:
 
 ```bash
 install_nodes.sh <start_marker> <end_marker> <pytorch_index>
@@ -155,12 +155,12 @@ The script also removes any broken cmake pip wrapper before processing nodes. So
 
 ### At build time (permanent)
 
-1. Add the git URL to `docker/nodes.txt` in the appropriate section
+1. Add the git URL to `docker/production/nodes.txt` in the appropriate section
 2. If the node needs a non-standard requirements file or a post-install command, add them on the same line
 3. Commit and push
 
 !!! warning "Triggers Docker rebuild"
-    Any change to `docker/nodes.txt` triggers a full Docker image rebuild via CI/CD. The layer caching strategy means only the section containing your new node (and all subsequent sections) will be rebuilt.
+    Any change to `docker/production/nodes.txt` triggers a full Docker image rebuild via CI/CD. The layer caching strategy means only the section containing your new node (and all subsequent sections) will be rebuilt.
 
 ### At runtime (per-pod)
 
@@ -170,6 +170,6 @@ This is useful for testing nodes before adding them to the image, or for nodes t
 
 ## Removing a Node
 
-To remove a node from the image, delete its line from `docker/nodes.txt` and push. The next build will produce an image without that node.
+To remove a node from the image, delete its line from `docker/production/nodes.txt` and push. The next build will produce an image without that node.
 
 To remove a runtime-installed node, use the `/admin/nodes` page or delete its directory from `/workspace/ComfyUI/custom_nodes/`.

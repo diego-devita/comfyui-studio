@@ -20,7 +20,7 @@ The image is configurable via build arguments to target any NVIDIA GPU from Volt
 **Default build** (Blackwell/Hopper, all features):
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 ```
 
 **Guided build** (interactive configurator):
@@ -40,10 +40,10 @@ ghcr.io/diego-devita/comfyui-studio:sha-<commit>
 
 | File | Purpose |
 |------|---------|
-| `docker/Dockerfile` | Multi-stage build, all build args, layer caching strategy |
+| `docker/production/Dockerfile` | Multi-stage build, all build args, layer caching strategy |
 | `docker/configure.sh` | Interactive build configurator script |
-| `docker/nodes.txt` | Custom node list with section markers |
-| `docker/install_nodes.sh` | Node installer (reads `nodes.txt` between section markers) |
-| `docker/start.sh` | Container entrypoint (bootstrap + process supervision) |
-| `docker/bootstrap.py` | First-boot setup (clone repo, copy to working dirs) |
+| `docker/production/nodes.txt` | Custom node list with section markers |
+| `docker/production/install_nodes.sh` | Node installer (reads `nodes.txt` between section markers) |
+| `docker/production/start.sh` | Container entrypoint (bootstrap + process supervision) |
+| `docker/production/bootstrap.py` | First-boot setup (clone repo, copy to working dirs) |
 | `.github/workflows/build.yml` | CI/CD workflow for automated builds |
