@@ -22,6 +22,7 @@ REPO_URL = os.environ.get(
     "https://github.com/diego-devita/comfyui-studio.git",
 )
 RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
+REPO_BRANCH = os.environ.get("REPO_BRANCH", "main")
 
 
 def log(msg):
@@ -38,7 +39,7 @@ def main():
     if os.path.exists(repo_dir):
         log("Repo already exists — pulling latest...")
         proc = subprocess.run(
-            ["git", "fetch", "--depth", "1", "origin", "main"],
+            ["git", "fetch", "--depth", "1", "origin", REPO_BRANCH],
             capture_output=True, text=True, timeout=60, cwd=repo_dir
         )
         if proc.returncode != 0:
@@ -46,7 +47,7 @@ def main():
             log(f"Git fetch failed, re-cloning: {proc.stderr}")
             shutil.rmtree(repo_dir)
             proc = subprocess.run(
-                ["git", "clone", "--depth", "1", REPO_URL, repo_dir],
+                ["git", "clone", "--depth", "1", "--branch", REPO_BRANCH, REPO_URL, repo_dir],
                 capture_output=True, text=True, timeout=120
             )
             if proc.returncode != 0:
@@ -54,13 +55,13 @@ def main():
                 sys.exit(1)
         else:
             subprocess.run(
-                ["git", "reset", "--hard", "origin/main"],
+                ["git", "reset", "--hard", f"origin/{REPO_BRANCH}"],
                 capture_output=True, text=True, timeout=30, cwd=repo_dir
             )
     else:
         log("Cloning repo...")
         proc = subprocess.run(
-            ["git", "clone", "--depth", "1", REPO_URL, repo_dir],
+            ["git", "clone", "--depth", "1", "--branch", REPO_BRANCH, REPO_URL, repo_dir],
             capture_output=True, text=True, timeout=120
         )
         if proc.returncode != 0:

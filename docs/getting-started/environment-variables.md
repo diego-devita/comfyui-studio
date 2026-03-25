@@ -50,6 +50,7 @@ These are set by the Docker image or the RunPod platform. Do not change them man
 |----------|---------|--------|-------------|
 | `RUNTIME_VERSION` | `3` | Dockerfile | The Docker image version number. The application checks this against `min_runtime` in `version.json` to ensure compatibility. If your image is older than what the application requires, you'll see a "Runtime Incompatible" message and need to pull a newer image. This number is incremented when the Docker image includes breaking changes (new dependencies, new custom nodes, updated CUDA). |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Dockerfile | The Git repository URL used by the bootstrap script and update mechanism. The application clones this repo on first boot and fetches from it when checking for updates. |
+| `REPO_BRANCH` | `main` | config.py | The Git branch to track. Default `main` for production pods. Set to `dev` to point a test pod at the development branch. Used by bootstrap (clone) and the update mechanism (fetch/reset). |
 | `RUNPOD_API_KEY` | _(auto)_ | RunPod | Automatically injected by RunPod into the container. Used by the telemetry system to query the RunPod API for network volume size (to calculate free disk space on the dashboard). |
 | `RUNPOD_POD_ID` | _(auto)_ | RunPod | The pod identifier. Used in telemetry API calls. |
 | `RUNPOD_DC_ID` | _(auto)_ | RunPod | The datacenter identifier. |

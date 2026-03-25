@@ -159,5 +159,22 @@ async def _start_event_consumer():
             _events.emit("system.migration", f"Copied {src_name} from .repo/ to working dir",
                          severity="info")
 
+    # Migrate JSON job files to SQLite (one-time, on first run with DB)
+    from config import JOBS_DIR
+    import db as _db
+    if JOBS_DIR.exists() and list(JOBS_DIR.glob("*.json")):
+        count = _db.migrate_json_jobs(JOBS_DIR)
+        if count > 0:
+            _events.emit("system.migration", f"Migrated {count} jobs from JSON to SQLite",
+                         severity="info")
+            # Rename old jobs dir so we don't migrate again
+            import shutil
+            shutil.move(str(JOBS_DIR), str(JOBS_DIR.parent / "jobs_old"))
+
+    # Mark any jobs that were running/queued as stalled
+    stalled = _db.mark_stalled_jobs()
+    if stalled > 0:
+        _events.emit("system.startup", f"Marked {stalled} stalled jobs", severity="warning")
+
     _events.emit("system.backend.started", "Backend started", severity="info",
                  data={"version": _load_version().get("app_version", "?")})

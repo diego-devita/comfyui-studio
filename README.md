@@ -1,8 +1,14 @@
 # ComfyUI Studio
 
+- This project is still heavily under construction as today 25/03/2026.
+- There are yet lots of features to improve and it behaves behind the expcetations.
+- The RunPod template is still kept private until the project won't be mature enough for a serious release.
+
 A web-based management platform for AI image and video generation built on ComfyUI. Runs as a Docker container on RunPod (or any NVIDIA GPU machine) with a dedicated interface for managing models, LoRAs, workflows, custom nodes, an LLM assistant, and running generation jobs -- without touching the ComfyUI graph editor. The Docker image provides ComfyUI + 38 custom nodes + performance optimizations. The web application updates live from the Git repository without rebuilding.
 
 Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 to B200 via build arguments.
+
+https://diego-devita.github.io/comfyui-studio/
 
 ---
 
@@ -81,8 +87,19 @@ docker/configure.sh
 Or build directly (default: B200, all features):
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 ```
+
+### Local Development
+
+For development without GPU, use the lightweight image (~200 MB):
+
+```bash
+docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
+docker run -p 8000:8000 -v $(pwd):/workspace/studio -e API_KEY=test comfyui-studio-dev
+```
+
+This mounts your codebase into the container with hot reload. A ComfyUI stub server provides fake responses on port 8188. See [Development Image](docker/README.md#development-image) for details.
 
 ### Run
 
@@ -186,6 +203,7 @@ Application code, catalogs, and workflows live in this Git repository as source 
 |----------|---------|--------|-------------|
 | `RUNTIME_VERSION` | `3` | Dockerfile | Docker image version — must match `version.json` → `components.runtime.version` |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Dockerfile | Git repo for updates |
+| `REPO_BRANCH` | `main` | config.py | Git branch to track. `main` for production, `dev` for testing. |
 | `RUNPOD_API_KEY` | _(auto)_ | RunPod | Used for volume size telemetry |
 | `RUNPOD_POD_ID` | _(auto)_ | RunPod | Pod identifier — used for telemetry |
 | `RUNPOD_DC_ID` | _(auto)_ | RunPod | Datacenter ID |
@@ -224,15 +242,15 @@ All arguments have defaults optimized for B200. Override with `--build-arg` for 
 
 ```bash
 # B200 (default)
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 
 # A100 / RTX 4090 / RTX 3090
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 .
 
 # T4 / V100 (no attention optimizations, no LLM)
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \
@@ -240,7 +258,7 @@ docker build -f docker/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_LLM=false .
 
 # Fast CI build (skip slow compilations)
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_FLASH_ATTENTION=false \
   --build-arg ENABLE_LLM=false .
 ```
@@ -286,12 +304,18 @@ comfyui-studio/
 │   └── <workflow-id>/        Per-workflow dirs with manifest.yaml + workflow.json
 │
 ├── docker/                   Docker infrastructure
-│   ├── Dockerfile            Image definition (CUDA, PyTorch, nodes, llama-server)
+│   ├── production/           Production image (CUDA, PyTorch, ComfyUI, 38 nodes)
+│   │   ├── Dockerfile
+│   │   ├── start.sh
+│   │   ├── bootstrap.py
+│   │   ├── nodes.txt
+│   │   └── install_nodes.sh
+│   ├── development/          Development image (lightweight, stub ComfyUI)
+│   │   ├── Dockerfile
+│   │   ├── start.sh
+│   │   └── comfyui_stub.py
 │   ├── configure.sh          Interactive build configurator
-│   ├── start.sh              Container boot script
-│   ├── bootstrap.py          First-boot installer (clones repo, copies to working dirs)
-│   ├── nodes.txt             Custom node list
-│   └── install_nodes.sh      Node installer (build time)
+│   └── README.md
 │
 ├── version.json              Component version manifest
 └── .github/workflows/

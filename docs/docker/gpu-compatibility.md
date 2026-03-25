@@ -116,7 +116,7 @@ Three sets of build arguments cover all supported GPUs:
 ### Blackwell / Hopper
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 ```
 
 All defaults. No `--build-arg` flags needed.
@@ -124,7 +124,7 @@ All defaults. No `--build-arg` flags needed.
 ### Ampere / Ada Lovelace
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 \
   .
@@ -133,7 +133,7 @@ docker build -f docker/Dockerfile -t comfyui-studio \
 ### Turing / Volta
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \

@@ -178,7 +178,7 @@ To add a new catalog (like `loras.json` was added alongside `models.json`):
 6. **Add to the update mechanism** in `system_api.py`:
    - Add a copy block for the new catalog file (from `.repo/catalogs/` to `STUDIO_DIR/catalogs/`)
 
-7. **Add to bootstrap** in `docker/bootstrap.py`:
+7. **Add to bootstrap** in `docker/production/bootstrap.py`:
    - The bootstrap copies all files in `.repo/catalogs/` automatically (no change needed if the file is in catalogs/)
 
 8. **Create API endpoints** in a new `*_api.py` module or an existing one.

@@ -111,7 +111,7 @@ The build uses all available cores (`-j$(nproc)`) and only compiles the `llama-s
 Set `ENABLE_LLM=false` to skip llama-server compilation entirely:
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_LLM=false \
   .
 ```
@@ -127,8 +127,8 @@ The llama-server build step is intentionally placed **before** the custom node i
 RUN if [ "${ENABLE_LLM}" = "true" ]; then ...
 
 # Custom nodes (cheaper, ~15 min)
-COPY docker/nodes.txt /tmp/nodes.txt
-COPY docker/install_nodes.sh /tmp/install_nodes.sh
+COPY docker/production/nodes.txt /tmp/nodes.txt
+COPY docker/production/install_nodes.sh /tmp/install_nodes.sh
 RUN /tmp/install_nodes.sh ...
 ```
 

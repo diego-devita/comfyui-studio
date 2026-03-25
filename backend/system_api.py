@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import (
-    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, RUNTIME_VERSION,
+    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
     VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
@@ -115,9 +115,9 @@ async def remote_version():
     """Show what the repo has vs what's local."""
     # Fetch latest
     if REPO_DIR.exists():
-        subprocess.run(["git", "fetch", "--depth", "1", "origin", "main"],
+        subprocess.run(["git", "fetch", "--depth", "1", "origin", REPO_BRANCH],
                        capture_output=True, cwd=str(REPO_DIR), timeout=30)
-        proc = subprocess.run(["git", "show", "origin/main:version.json"],
+        proc = subprocess.run(["git", "show", f"origin/{REPO_BRANCH}:version.json"],
                               capture_output=True, text=True, cwd=str(REPO_DIR), timeout=10)
         if proc.returncode == 0:
             return {"remote": json.loads(proc.stdout), "local": _load_version()}
@@ -253,14 +253,14 @@ async def system_update(request: Request):
         if not REPO_DIR.exists():
             # First time — clone
             proc = subprocess.run(
-                ["git", "clone", "--depth", "1", REPO_URL, str(REPO_DIR)],
+                ["git", "clone", "--depth", "1", "--branch", REPO_BRANCH, REPO_URL, str(REPO_DIR)],
                 capture_output=True, text=True, timeout=60
             )
             if proc.returncode != 0:
                 raise HTTPException(500, f"Git clone failed: {proc.stderr}")
         else:
             proc = subprocess.run(
-                ["git", "fetch", "--depth", "1", "origin", "main"],
+                ["git", "fetch", "--depth", "1", "origin", REPO_BRANCH],
                 capture_output=True, text=True, timeout=30,
                 cwd=str(REPO_DIR)
             )
@@ -268,7 +268,7 @@ async def system_update(request: Request):
                 # Fetch failed (e.g., history rewritten) — re-clone from scratch
                 shutil.rmtree(str(REPO_DIR))
                 proc = subprocess.run(
-                    ["git", "clone", "--depth", "1", REPO_URL, str(REPO_DIR)],
+                    ["git", "clone", "--depth", "1", "--branch", REPO_BRANCH, REPO_URL, str(REPO_DIR)],
                     capture_output=True, text=True, timeout=60
                 )
                 if proc.returncode != 0:
@@ -276,7 +276,7 @@ async def system_update(request: Request):
 
         # Step 2: Read remote version.json from fetched ref
         proc = subprocess.run(
-            ["git", "show", "origin/main:version.json"],
+            ["git", "show", f"origin/{REPO_BRANCH}:version.json"],
             capture_output=True, text=True, timeout=10,
             cwd=str(REPO_DIR)
         )
@@ -330,7 +330,7 @@ async def system_update(request: Request):
         try:
             # Step 6: git reset --hard to update repo clone
             proc = subprocess.run(
-                ["git", "reset", "--hard", "origin/main"],
+                ["git", "reset", "--hard", f"origin/{REPO_BRANCH}"],
                 capture_output=True, text=True, timeout=30,
                 cwd=str(REPO_DIR)
             )

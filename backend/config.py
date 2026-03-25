@@ -26,6 +26,7 @@ REPO_URL = os.environ.get(
     "REPO_URL",
     "https://github.com/diego-devita/comfyui-studio.git",
 )
+REPO_BRANCH = os.environ.get("REPO_BRANCH", "main")
 
 # Backend — working copy
 BACKEND_DIR = STUDIO_DIR / "backend"

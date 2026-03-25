@@ -1,0 +1,237 @@
+"""ComfyUI Studio — SQLite database layer.
+
+Single DB file at STUDIO_DIR/db/studio.db.
+Thread-safe via WAL mode + serialized access.
+All timestamps stored as ISO 8601 strings (Italian timezone).
+"""
+
+import json
+import sqlite3
+import threading
+from pathlib import Path
+
+from config import STUDIO_DIR
+
+DB_PATH = STUDIO_DIR / "db" / "studio.db"
+_local = threading.local()
+
+
+def _get_conn() -> sqlite3.Connection:
+    """Get a thread-local connection (one per thread, reused)."""
+    if not hasattr(_local, "conn") or _local.conn is None:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(DB_PATH), timeout=10)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
+        _local.conn = conn
+    return _local.conn
+
+
+def init_db():
+    """Create tables if they don't exist."""
+    conn = _get_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            prompt_id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            workflow_name TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued', 'running', 'completed', 'failed', 'stalled')),
+            params TEXT DEFAULT '{}',
+            seeds TEXT DEFAULT '{}',
+            output TEXT,
+            outputs TEXT,
+            output_dir TEXT,
+            input_image TEXT,
+            error TEXT,
+            queued_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            duration INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+        CREATE INDEX IF NOT EXISTS idx_jobs_queued_at ON jobs(queued_at);
+        CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
+    """)
+    conn.commit()
+
+
+# ── Job CRUD ─────────────────────────────────────────────────
+
+
+def save_job(job: dict):
+    """Insert or update a job record."""
+    conn = _get_conn()
+    conn.execute("""
+        INSERT INTO jobs (prompt_id, workflow_id, workflow_name, status,
+                          params, seeds, output, outputs, output_dir,
+                          input_image, error, queued_at, started_at,
+                          finished_at, duration)
+        VALUES (:prompt_id, :workflow_id, :workflow_name, :status,
+                :params, :seeds, :output, :outputs, :output_dir,
+                :input_image, :error, :queued_at, :started_at,
+                :finished_at, :duration)
+        ON CONFLICT(prompt_id) DO UPDATE SET
+            status=excluded.status,
+            output=excluded.output,
+            outputs=excluded.outputs,
+            error=excluded.error,
+            started_at=excluded.started_at,
+            finished_at=excluded.finished_at,
+            duration=excluded.duration
+    """, {
+        "prompt_id": job.get("prompt_id"),
+        "workflow_id": job.get("workflow_id", ""),
+        "workflow_name": job.get("workflow_name", ""),
+        "status": job.get("status", "queued"),
+        "params": json.dumps(job.get("params", {}), ensure_ascii=False),
+        "seeds": json.dumps(job.get("seeds", {}), ensure_ascii=False),
+        "output": job.get("output"),
+        "outputs": json.dumps(job.get("outputs")) if job.get("outputs") else None,
+        "output_dir": job.get("output_dir"),
+        "input_image": job.get("input_image"),
+        "error": job.get("error"),
+        "queued_at": job.get("queued_at"),
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
+        "duration": job.get("duration"),
+    })
+    conn.commit()
+
+
+def get_job(prompt_id: str) -> dict | None:
+    """Get a single job by prompt_id."""
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM jobs WHERE prompt_id = ?", (prompt_id,)).fetchone()
+    return _row_to_job(row) if row else None
+
+
+def list_jobs_by_status(statuses: list[str], order_desc: bool = True, limit: int = 0) -> list[dict]:
+    """List jobs matching any of the given statuses."""
+    conn = _get_conn()
+    placeholders = ",".join("?" * len(statuses))
+    order = "DESC" if order_desc else "ASC"
+    sql = f"SELECT * FROM jobs WHERE status IN ({placeholders}) ORDER BY queued_at {order}"
+    if limit > 0:
+        sql += f" LIMIT {limit}"
+    rows = conn.execute(sql, statuses).fetchall()
+    return [_row_to_job(r) for r in rows]
+
+
+def list_active_jobs() -> list[dict]:
+    """List queued + running jobs, running first, then by queued_at."""
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT * FROM jobs
+        WHERE status IN ('queued', 'running')
+        ORDER BY
+            CASE status WHEN 'running' THEN 0 ELSE 1 END,
+            queued_at ASC
+    """).fetchall()
+    return [_row_to_job(r) for r in rows]
+
+
+def list_history(limit: int = 200, offset: int = 0) -> list[dict]:
+    """List completed/failed/stalled jobs, newest first."""
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT * FROM jobs
+        WHERE status IN ('completed', 'failed', 'stalled')
+        ORDER BY queued_at DESC
+        LIMIT ? OFFSET ?
+    """, (limit, offset)).fetchall()
+    return [_row_to_job(r) for r in rows]
+
+
+def update_job_status(prompt_id: str, **fields):
+    """Update specific fields of a job."""
+    conn = _get_conn()
+    sets = []
+    values = []
+    for key, val in fields.items():
+        sets.append(f"{key} = ?")
+        values.append(val)
+    values.append(prompt_id)
+    conn.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE prompt_id = ?", values)
+    conn.commit()
+
+
+def delete_jobs(prompt_ids: list[str]) -> list[str]:
+    """Delete jobs by prompt_id. Returns list of deleted prompt_ids with their output_dirs."""
+    conn = _get_conn()
+    deleted = []
+    for pid in prompt_ids:
+        row = conn.execute("SELECT prompt_id, output_dir FROM jobs WHERE prompt_id = ?", (pid,)).fetchone()
+        if row:
+            conn.execute("DELETE FROM jobs WHERE prompt_id = ?", (pid,))
+            deleted.append({"prompt_id": row["prompt_id"], "output_dir": row["output_dir"]})
+    conn.commit()
+    return deleted
+
+
+def mark_stalled_jobs():
+    """Mark any running/queued jobs as stalled (called at startup)."""
+    conn = _get_conn()
+    cursor = conn.execute("""
+        UPDATE jobs SET status = 'stalled', error = 'Job was active when backend restarted'
+        WHERE status IN ('queued', 'running')
+    """)
+    conn.commit()
+    return cursor.rowcount
+
+
+def count_jobs_by_workflow() -> list[dict]:
+    """Count jobs per workflow (for stats)."""
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT workflow_id, workflow_name, COUNT(*) as count,
+               SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+               SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+        FROM jobs
+        GROUP BY workflow_id
+        ORDER BY count DESC
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Migration ────────────────────────────────────────────────
+
+
+def migrate_json_jobs(jobs_dir: Path) -> int:
+    """Import existing JSON job files into the database. Returns count imported."""
+    if not jobs_dir.exists():
+        return 0
+    count = 0
+    for f in jobs_dir.glob("*.json"):
+        try:
+            job = json.loads(f.read_text())
+            if job.get("prompt_id"):
+                save_job(job)
+                count += 1
+        except Exception:
+            pass
+    return count
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+
+def _row_to_job(row: sqlite3.Row) -> dict:
+    """Convert a DB row to the same dict format the API expects."""
+    d = dict(row)
+    # Parse JSON fields back to dicts/lists
+    for field in ("params", "seeds"):
+        if d.get(field):
+            try:
+                d[field] = json.loads(d[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    if d.get("outputs"):
+        try:
+            d["outputs"] = json.loads(d["outputs"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return d

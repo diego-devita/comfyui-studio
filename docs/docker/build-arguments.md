@@ -131,7 +131,7 @@ The llama.cpp git tag to clone and build. Only relevant when `ENABLE_LLM=true`.
 ### Default (Blackwell/Hopper, all features)
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 ```
 
 Uses all defaults: CUDA 12.8.1, cu128, SageAttention v2, FlashAttention v3, llama-server b8505.
@@ -139,7 +139,7 @@ Uses all defaults: CUDA 12.8.1, cu128, SageAttention v2, FlashAttention v3, llam
 ### Ampere / Ada Lovelace (A100, RTX 30xx/40xx, L40S)
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 \
   .
@@ -150,7 +150,7 @@ SageAttention v1 and FlashAttention v2 are installed (both default to `true`).
 ### Turing / Volta (RTX 20xx, T4, V100)
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \
@@ -163,7 +163,7 @@ No attention optimizations. xformers and torch.compile still work on these GPUs.
 ### Fast CI build (no FlashAttention, no LLM)
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_FLASH_ATTENTION=false \
   --build-arg ENABLE_LLM=false \
   .
@@ -174,7 +174,7 @@ Skips both source compilations. Build time drops from ~85-115 minutes to ~15-25 
 ### Custom llama.cpp version
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg LLAMA_CPP_VERSION=b8400 \
   .
 ```
@@ -182,7 +182,7 @@ docker build -f docker/Dockerfile -t comfyui-studio \
 ### Latest llama.cpp (bleeding edge)
 
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg LLAMA_CPP_VERSION=latest \
   .
 ```

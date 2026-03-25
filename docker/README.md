@@ -79,6 +79,7 @@ All steps are logged with `[bootstrap]` prefix to stdout (visible in RunPod cont
 |----------|---------|-------------|
 | `STUDIO_DIR` | `/workspace/studio` | Where to install the application |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Git repository URL |
+| `REPO_BRANCH` | `main` | Git branch to track (`main` for production, `dev` for testing) |
 | `RUNTIME_VERSION` | `0` (image sets `3`) | Docker image runtime version (set at build time) |
 
 ### Error handling

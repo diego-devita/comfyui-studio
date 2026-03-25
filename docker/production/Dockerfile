@@ -188,6 +188,39 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
+# ── llama.cpp server (conditional — for local LLM inference) ─
+# Placed immediately after system deps — only depends on CUDA + cmake + git.
+# This is the optimal position: only a base image or apt-get change
+# triggers recompilation. Python, PyTorch, pip deps, ComfyUI, nodes —
+# none of these invalidate the llama-server cache layer.
+#
+# Build flags based on llama.cpp official CUDA Dockerfile:
+#   https://github.com/ggml-org/llama.cpp/blob/master/.devops/cuda.Dockerfile
+# --allow-shlib-undefined: libcuda.so stubs don't provide libcuda.so.1,
+#   the real driver is mounted at runtime by NVIDIA Container Toolkit.
+RUN if [ "${ENABLE_LLM}" = "true" ]; then \
+      echo "=== Building llama-server with CUDA ===" && \
+      CUDA_ARCHS="75;80;86;89;90;100" && \
+      if [ "$LLAMA_CPP_VERSION" = "latest" ]; then \
+        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
+      else \
+        git clone --depth 1 --branch "$LLAMA_CPP_VERSION" https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
+      fi && \
+      cd /tmp/llama.cpp && \
+      cmake -B build \
+          -DGGML_CUDA=ON \
+          -DGGML_NATIVE=OFF \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" \
+          -DLLAMA_BUILD_TESTS=OFF \
+          -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined && \
+      cmake --build build --config Release -j$(nproc) --target llama-server && \
+      cp build/bin/llama-server /opt/llama-server && \
+      rm -rf /tmp/llama.cpp; \
+    else \
+      echo "=== Skipping llama-server (disabled) ==="; \
+    fi
+
 # ── virtual environment ───────────────────────────────────
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -240,41 +273,6 @@ RUN pip install \
     requests \
     pyyaml
 
-# ── llama.cpp server (conditional — for local LLM inference) ─
-# Compiled with CUDA support — GPU acceleration works at runtime.
-# Binary installed to /opt/llama-server; configurable via LLAMA_SERVER_PATH env.
-# Skip with --build-arg ENABLE_LLM=false to save ~60 min on CI builds.
-#
-# Placed before ComfyUI/nodes for layer caching: changing nodes.txt
-# does NOT trigger a llama-server recompile (~60 min saved).
-#
-# Build flags based on llama.cpp official CUDA Dockerfile:
-#   https://github.com/ggml-org/llama.cpp/blob/master/.devops/cuda.Dockerfile
-# --allow-shlib-undefined: libcuda.so stubs don't provide libcuda.so.1,
-#   the real driver is mounted at runtime by NVIDIA Container Toolkit.
-RUN if [ "${ENABLE_LLM}" = "true" ]; then \
-      echo "=== Building llama-server with CUDA ===" && \
-      CUDA_ARCHS="75;80;86;89;90;100" && \
-      if [ "$LLAMA_CPP_VERSION" = "latest" ]; then \
-        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
-      else \
-        git clone --depth 1 --branch "$LLAMA_CPP_VERSION" https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp; \
-      fi && \
-      cd /tmp/llama.cpp && \
-      cmake -B build \
-          -DGGML_CUDA=ON \
-          -DGGML_NATIVE=OFF \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" \
-          -DLLAMA_BUILD_TESTS=OFF \
-          -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined && \
-      cmake --build build --config Release -j$(nproc) --target llama-server && \
-      cp build/bin/llama-server /opt/llama-server && \
-      rm -rf /tmp/llama.cpp; \
-    else \
-      echo "=== Skipping llama-server (disabled) ==="; \
-    fi
-
 # ── ComfyUI core in /comfyui ─────────────────────────────
 # NOT in /workspace — that is the Network Volume, mounted at
 # runtime and overwrites anything placed there during build.
@@ -291,8 +289,8 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
 # That's why llama-server and FastAPI are placed ABOVE this point —
 # adding a custom node only rebuilds the node install layers (~15 min),
 # not the full llama-server compilation (~60 min).
-COPY docker/nodes.txt /tmp/nodes.txt
-COPY docker/install_nodes.sh /tmp/install_nodes.sh
+COPY docker/production/nodes.txt /tmp/nodes.txt
+COPY docker/production/install_nodes.sh /tmp/install_nodes.sh
 RUN chmod +x /tmp/install_nodes.sh
 
 # ── Custom nodes: Fundamentals / QoL ─────────────────────
@@ -312,10 +310,10 @@ RUN /tmp/install_nodes.sh "CivitAI Integration" "ENDOFFILE" "${PYTORCH_INDEX}"
 RUN rm -rf /root/.cache/pip /tmp/nodes.txt /tmp/install_nodes.sh
 
 # ── Bootstrap script (clones repo + sets up working dirs on first boot) ──
-COPY docker/bootstrap.py /app/bootstrap.py
+COPY docker/production/bootstrap.py /app/bootstrap.py
 
 # ── Startup script ────────────────────────────────────────
-COPY docker/start.sh /start.sh
+COPY docker/production/start.sh /start.sh
 RUN chmod +x /start.sh
 
 WORKDIR /
