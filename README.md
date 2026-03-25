@@ -1,5 +1,9 @@
 # ComfyUI Studio
 
+- This project is still heavily under construction as today 25/03/2026.
+- There are yet lots of features to improve and it behaves behind the expcetations.
+- The RunPod template is still kept private until the project won't be mature enough for a serious release.
+
 A web-based management platform for AI image and video generation built on ComfyUI. Runs as a Docker container on RunPod (or any NVIDIA GPU machine) with a dedicated interface for managing models, LoRAs, workflows, custom nodes, an LLM assistant, and running generation jobs -- without touching the ComfyUI graph editor. The Docker image provides ComfyUI + 38 custom nodes + performance optimizations. The web application updates live from the Git repository without rebuilding.
 
 Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 to B200 via build arguments.
