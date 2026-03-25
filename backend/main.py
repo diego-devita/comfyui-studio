@@ -21,6 +21,7 @@ from workflows_api import router as workflows_router
 from runner_api import router as runner_router
 from system_api import router as system_router
 from jobs_api import router as jobs_router
+from loras_api import router as loras_router
 
 app.include_router(models_router)
 app.include_router(llm_router)
@@ -28,3 +29,4 @@ app.include_router(workflows_router)
 app.include_router(runner_router)
 app.include_router(system_router)
 app.include_router(jobs_router)
+app.include_router(loras_router)
