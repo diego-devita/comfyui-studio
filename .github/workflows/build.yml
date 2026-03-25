@@ -3,15 +3,8 @@ name: Build and push Docker image
 on:
   push:
     branches: [ main ]
-    paths-ignore:
-      - 'workflows/**'
-      - 'backend/**'
-      - 'frontend/**'
-      - 'catalogs/**'
-      - 'version.json'
-      - '*.md'
-      - 'docs/**'
-      - 'mkdocs.yml'
+    paths:
+      - 'docker/production/**'
   workflow_dispatch:
 
 env:
@@ -52,7 +45,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/Dockerfile
+          file: docker/production/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
