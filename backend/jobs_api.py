@@ -14,10 +14,11 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import COMFY_URL, COMFYUI_DIR, JOBS_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR
+from config import COMFY_URL, COMFYUI_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR
 from events import _events
 from runner import _exec_progress, _save_job, _pick_best_output, _start_ws_listener
 from workflows import _make_input_filename
+import db
 
 router = APIRouter()
 
@@ -28,50 +29,29 @@ router = APIRouter()
 @router.get("/api/admin/queue")
 async def list_queue():
     """List active (running/queued) jobs with real-time progress."""
-    mem_active = {pid for pid, st in _exec_progress.items()
-                  if st.get("status") in ("queued", "running")}
+    jobs = db.list_active_jobs()
 
-    result = []
-    if JOBS_DIR.exists():
-        for f in sorted(JOBS_DIR.glob("*.json")):
-            try:
-                job = json.loads(f.read_text())
-                pid = job.get("prompt_id")
-                disk_status = job.get("status", "")
-                prog = _exec_progress.get(pid, {})
-                prog_status = prog.get("status")
-                if pid in mem_active or (
-                    disk_status in ("queued", "running")
-                    and prog_status in (None, "queued", "running")
-                ):
-                    if prog_status == "running" and not job.get("started_at"):
-                        try:
-                            fresh = json.loads(f.read_text())
-                            if fresh.get("started_at"):
-                                job["started_at"] = fresh["started_at"]
-                        except Exception:
-                            pass
-                    job["progress"] = {
-                        "status": prog_status or disk_status,
-                        "node_title": prog.get("node_title", ""),
-                        "node_type": prog.get("node_type", ""),
-                        "step": prog.get("step", 0),
-                        "total_steps": prog.get("total_steps", 0),
-                        "nodes_done": prog.get("nodes_done", 0),
-                        "total_nodes": prog.get("total_nodes", 0),
-                        "effective_total": prog.get("effective_total", prog.get("total_nodes", 0)),
-                        "cached_count": prog.get("cached_count", 0),
-                        "percent": prog.get("percent", 0),
-                        "eta_seconds": prog.get("eta_seconds"),
-                        "step_rate": prog.get("step_rate"),
-                        "node_outputs": prog.get("node_outputs", {}),
-                    }
-                    result.append(job)
-            except Exception:
-                pass
+    # Enrich with in-memory progress
+    for job in jobs:
+        pid = job.get("prompt_id")
+        prog = _exec_progress.get(pid, {})
+        job["progress"] = {
+            "status": prog.get("status") or job.get("status"),
+            "node_title": prog.get("node_title", ""),
+            "node_type": prog.get("node_type", ""),
+            "step": prog.get("step", 0),
+            "total_steps": prog.get("total_steps", 0),
+            "nodes_done": prog.get("nodes_done", 0),
+            "total_nodes": prog.get("total_nodes", 0),
+            "effective_total": prog.get("effective_total", prog.get("total_nodes", 0)),
+            "cached_count": prog.get("cached_count", 0),
+            "percent": prog.get("percent", 0),
+            "eta_seconds": prog.get("eta_seconds"),
+            "step_rate": prog.get("step_rate"),
+            "node_outputs": prog.get("node_outputs", {}),
+        }
 
-    result.sort(key=lambda j: (0 if j.get("progress", {}).get("status") == "running" else 1, j.get("queued_at", "")))
-    return result
+    return jobs
 
 
 # ── History ──────────────────────────────────────────────────────────────────
@@ -79,61 +59,31 @@ async def list_queue():
 
 @router.get("/api/admin/history")
 async def list_history():
-    """List completed/error job records, newest first (excludes active jobs)."""
-    if not JOBS_DIR.exists():
-        return []
-    active_pids = {pid for pid, st in _exec_progress.items()
-                   if st.get("status") in ("queued", "running")}
-    jobs = []
-    for f in sorted(JOBS_DIR.glob("*.json"), reverse=True):
-        try:
-            job = json.loads(f.read_text())
-            pid = job.get("prompt_id")
-            if pid in active_pids:
-                continue
-            status = job.get("status", "")
-            if status in ("queued", "running"):
-                actual_state = "running" if job.get("started_at") else "queued"
-                job["error"] = f"Job was {actual_state} when backend restarted"
-                job["status"] = "stalled"
-                try:
-                    f.write_text(json.dumps(job, indent=2, ensure_ascii=False))
-                except Exception:
-                    pass
-                _events.emit("job.stalled", f"Job stalled: was {actual_state}", severity="warning", data={"prompt_id": pid, "state": actual_state})
-            jobs.append(job)
-        except Exception:
-            pass
-    return jobs
+    """List completed/error/stalled job records, newest first."""
+    return db.list_history()
 
 
 @router.post("/api/admin/history/delete")
 async def delete_history_jobs(request: Request):
-    """Delete job records and optionally their output files."""
+    """Delete job records and their output files."""
     body = await request.json()
-    prompt_ids = set(body.get("prompt_ids", []))
+    prompt_ids = list(set(body.get("prompt_ids", [])))
     if not prompt_ids:
         return {"deleted": []}
 
-    deleted = []
-    if JOBS_DIR.exists():
-        for f in list(JOBS_DIR.glob("*.json")):
-            try:
-                data = json.loads(f.read_text())
-                pid = data.get("prompt_id")
-                if pid in prompt_ids:
-                    output_dir_name = data.get("output_dir")
-                    if output_dir_name:
-                        out_dir = ASSETS_OUTPUT_DIR / output_dir_name
-                        if out_dir.exists() and out_dir.is_dir():
-                            shutil.rmtree(out_dir)
-                    f.unlink()
-                    deleted.append(pid)
-                    _events.emit("job.deleted", f"Job deleted: {pid[:12]}", data={"prompt_id": pid})
-            except Exception:
-                pass
+    deleted_items = db.delete_jobs(prompt_ids)
+    deleted_pids = []
+    for item in deleted_items:
+        pid = item["prompt_id"]
+        output_dir_name = item.get("output_dir")
+        if output_dir_name:
+            out_dir = ASSETS_OUTPUT_DIR / output_dir_name
+            if out_dir.exists() and out_dir.is_dir():
+                shutil.rmtree(out_dir)
+        deleted_pids.append(pid)
+        _events.emit("job.deleted", f"Job deleted: {pid[:12]}", data={"prompt_id": pid})
 
-    return {"deleted": deleted}
+    return {"deleted": deleted_pids}
 
 
 @router.post("/api/admin/history/retry")
@@ -144,16 +94,7 @@ async def retry_job(request: Request):
     if not source_pid:
         raise HTTPException(400, "prompt_id required")
 
-    source_job = None
-    if JOBS_DIR.exists():
-        for f in JOBS_DIR.glob("*.json"):
-            try:
-                data = json.loads(f.read_text())
-                if data.get("prompt_id") == source_pid:
-                    source_job = data
-                    break
-            except Exception:
-                pass
+    source_job = db.get_job(source_pid)
     if not source_job:
         raise HTTPException(404, "Job not found")
 
@@ -252,16 +193,7 @@ async def retry_job(request: Request):
 @router.get("/api/admin/history/{prompt_id}/package")
 async def download_job_package(prompt_id: str):
     """Download a ZIP with job.json, input image, and output files."""
-    job_data = None
-    if JOBS_DIR.exists():
-        for f in JOBS_DIR.glob("*.json"):
-            try:
-                data = json.loads(f.read_text())
-                if data.get("prompt_id") == prompt_id:
-                    job_data = data
-                    break
-            except Exception:
-                pass
+    job_data = db.get_job(prompt_id)
     if not job_data:
         raise HTTPException(404, "Job not found")
 

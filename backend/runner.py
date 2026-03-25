@@ -8,7 +8,7 @@ from typing import Optional
 import httpx
 from fastapi import HTTPException, UploadFile
 
-from config import COMFY_URL, JOBS_DIR, ASSETS_OUTPUT_DIR
+from config import COMFY_URL, ASSETS_OUTPUT_DIR
 from catalogs import _reload_models
 from workflows import (
     _load_workflows_index, _load_manifest, _load_workflow_json,
@@ -41,12 +41,9 @@ def _pick_best_output(hist_outputs: dict):
 
 
 def _save_job(job_data: dict):
-    """Save a job record to JOBS_DIR/<timestamp>_<prompt_id>.json"""
-    JOBS_DIR.mkdir(parents=True, exist_ok=True)
-    ts = (job_data.get("queued_at") or job_data.get("started_at") or "").replace(":", "").replace("-", "").replace("T", "_").replace(" ", "_")
-    prompt_id = job_data.get("prompt_id", "unknown")
-    fname = f"{ts}_{prompt_id}.json"
-    (JOBS_DIR / fname).write_text(json.dumps(job_data, indent=2, ensure_ascii=False))
+    """Save a job record to the database."""
+    from db import save_job
+    save_job(job_data)
 
 
 def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_record: dict = None):

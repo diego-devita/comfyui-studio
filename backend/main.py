@@ -1,6 +1,10 @@
 """ComfyUI Studio — Entry Point"""
 from config import app
 
+# Initialize database
+import db
+db.init_db()
+
 # Register middleware and auth
 import auth
 
