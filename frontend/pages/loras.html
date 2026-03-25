@@ -30,6 +30,124 @@
   .status-badge.queued      { color: var(--queued); animation: pulse 2s ease-in-out infinite; }
   .status-badge.downloading { color: var(--accent); }
   .status-badge.error       { color: var(--error); }
+
+  /* ── Overlay shared ── */
+  .civitai-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000;
+    overflow-y: auto; padding: 20px; display: flex; justify-content: center; align-items: flex-start;
+  }
+  .civitai-dialog {
+    background: var(--bg-card, #1a1a2e); border-radius: 12px; max-width: 960px; width: 100%;
+    padding: 24px; position: relative; margin-top: 20px;
+  }
+  .civitai-close {
+    position: absolute; top: 10px; right: 14px; background: none; border: none;
+    color: var(--muted); font-size: 26px; cursor: pointer; line-height: 1;
+  }
+  .civitai-close:hover { color: var(--text); }
+
+  /* ── Lookup dialog ── */
+  .lookup-url-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .lookup-url-row input {
+    flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .lookup-info { margin-bottom: 12px; }
+  .lookup-info h3 { margin: 0 0 4px; font-size: 18px; display: flex; align-items: baseline; gap: 10px; }
+  .lookup-info h3 .author { color: var(--muted); font-size: 13px; font-weight: normal; }
+  .lookup-stats { display: flex; gap: 16px; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .lookup-stats .stars { color: #f5a623; }
+  .lookup-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .lookup-pill {
+    padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    background: var(--bg); color: var(--muted); border: 1px solid var(--border);
+  }
+  .lookup-pill.trigger { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .lookup-images {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 4px; margin-bottom: 16px; max-height: 280px; overflow-y: auto;
+  }
+  .lookup-images img {
+    width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .lookup-images img:hover { opacity: 0.8; }
+  .lookup-versions { margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
+  .lookup-version {
+    display: flex; align-items: center; gap: 8px; padding: 8px 4px;
+    border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .lookup-version label { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; min-width: 0; }
+  .lookup-version .ver-name { font-weight: 500; min-width: 100px; flex-shrink: 0; }
+  .lookup-version .ver-file { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lookup-version .ver-size { color: var(--muted); min-width: 60px; text-align: right; flex-shrink: 0; }
+  .lookup-version .ver-base {
+    font-size: 11px; padding: 1px 6px; border-radius: 8px;
+    background: var(--bg); color: var(--muted); flex-shrink: 0;
+  }
+  .lookup-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+
+  /* ── Image modal ── */
+  .img-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .img-modal-inner {
+    display: flex; gap: 20px; max-width: 1100px; max-height: calc(100vh - 40px); width: 100%;
+  }
+  .img-modal-inner > img { max-width: 60%; max-height: calc(100vh - 80px); object-fit: contain; border-radius: 8px; }
+
+  /* ── Gallery ── */
+  .gallery-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+  .gallery-header h3 { margin: 0; font-size: 18px; }
+  .gallery-count { color: var(--muted); font-size: 13px; }
+  .gallery-progress { margin-bottom: 10px; }
+  .gallery-progress .progress-bar { height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .gallery-progress .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .gallery-progress .progress-text { font-size: 12px; color: var(--muted); }
+  .gallery-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  .gallery-controls input[type=range] { width: 120px; }
+  .gallery-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 150px), 1fr));
+    gap: 4px; max-height: calc(100vh - 280px); overflow-y: auto;
+  }
+  .gallery-grid img {
+    width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .gallery-grid img:hover { opacity: 0.85; }
+  .gallery-empty { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+
+  /* ── Detail view ── */
+  .detail-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.94); z-index: 1100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .detail-content { display: flex; gap: 20px; max-width: 1200px; width: 100%; max-height: calc(100vh - 40px); }
+  .detail-image { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
+  .detail-image img { max-width: 100%; max-height: calc(100vh - 80px); object-fit: contain; border-radius: 8px; }
+  .detail-meta {
+    width: 320px; flex-shrink: 0; overflow-y: auto; background: var(--bg-card, #1a1a2e);
+    border-radius: 8px; padding: 16px; font-size: 13px; color: var(--text); max-height: calc(100vh - 80px);
+  }
+  .detail-meta h4 { margin: 0 0 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .detail-meta p { margin: 0 0 14px; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; line-height: 1.5; }
+  .detail-meta .meta-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .detail-meta .meta-row span:first-child { color: var(--muted); }
+  .detail-meta .meta-loras { margin: 0 0 14px; }
+  .detail-meta .meta-loras span { display: block; padding: 2px 0; }
+  .detail-nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,0.08); border: none; color: #fff;
+    font-size: 28px; padding: 16px 18px; cursor: pointer; border-radius: 8px; z-index: 10;
+  }
+  .detail-nav:hover { background: rgba(255,255,255,0.15); }
+  .detail-nav.prev { left: 8px; }
+  .detail-nav.next { right: 8px; }
+  .detail-close {
+    position: absolute; top: 10px; right: 16px; background: none; border: none;
+    color: #fff; font-size: 28px; cursor: pointer; z-index: 10;
+  }
 </style>
 </head>
 <body>
@@ -53,7 +171,7 @@
 <!-- Header -->
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>LoRAs</small></div>
-  <div class="header-actions"></div>
+  <div class="header-actions"><button class="btn" id="addLoraBtn">Add LoRA from CivitAI...</button></div>
 </header>
 
 <!-- Status bar -->
@@ -116,6 +234,60 @@
     Loading LoRAs...
   </div>
 </main>
+
+<!-- Lookup Overlay -->
+<div class="civitai-overlay" id="lookupOverlay" style="display:none">
+  <div class="civitai-dialog">
+    <button class="civitai-close" id="lookupClose">&times;</button>
+    <h2 style="margin:0 0 16px">Add LoRA from CivitAI</h2>
+    <div class="lookup-url-row">
+      <input type="text" id="lookupUrl" placeholder="Paste CivitAI URL... (e.g. https://civitai.com/models/12345)">
+      <button class="btn" id="lookupBtn">Lookup</button>
+    </div>
+    <div id="lookupSpinner" style="display:none"><span class="spinner"></span> Looking up model...</div>
+    <div id="lookupError" class="card-error" style="display:none"></div>
+    <div id="lookupCard"></div>
+  </div>
+</div>
+
+<!-- Image Modal (lookup image enlargement) -->
+<div id="imgModal" style="display:none" class="img-modal">
+  <div class="img-modal-inner">
+    <img id="imgModalImg" src="">
+    <div class="detail-meta" id="imgModalMeta"></div>
+  </div>
+</div>
+
+<!-- Gallery Overlay -->
+<div class="civitai-overlay" id="galleryOverlay" style="display:none">
+  <div class="civitai-dialog" style="max-width:1200px">
+    <button class="civitai-close" id="galleryClose">&times;</button>
+    <div class="gallery-header">
+      <h3 id="galleryTitle"></h3>
+      <span class="gallery-count" id="galleryCount"></span>
+      <button class="btn btn--sm" id="galleryDlBtn">Download Images</button>
+    </div>
+    <div class="gallery-progress" id="galleryProgress" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
+      <div class="progress-text" id="galleryProgressText"></div>
+    </div>
+    <div class="gallery-controls">
+      <label style="display:flex;align-items:center;gap:8px">Size <input type="range" id="galleryThumbSize" min="80" max="300" value="150"></label>
+    </div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+</div>
+
+<!-- Detail Overlay (gallery image detail) -->
+<div id="detailOverlay" style="display:none" class="detail-overlay">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <button class="detail-nav prev" id="detailPrev">&larr;</button>
+  <button class="detail-nav next" id="detailNext">&rarr;</button>
+  <div class="detail-content">
+    <div class="detail-image"><img id="detailImg" src=""></div>
+    <div class="detail-meta" id="detailMeta"></div>
+  </div>
+</div>
 
 <script src="/static/js/shared.js"></script>
 <script>
@@ -615,6 +787,7 @@
       '</div>' +
       '<div class="card-error" data-ref="error"></div>' +
       '<div class="card-actions">' +
+        '<button class="btn btn--sm" data-ref="galleryBtn" style="display:none">Gallery</button>' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
       '</div>';
 
@@ -674,6 +847,14 @@
     refs.tags.innerHTML = '';
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+
+    if (m.civitai_model_id) {
+      refs.galleryBtn.style.display = '';
+      refs.galleryBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openGallery(m.civitai_model_id, m.name);
+      });
+    }
 
     const grid = document.querySelector('[data-grid="' + catId + '"]');
     if (grid) grid.appendChild(card);
@@ -911,6 +1092,451 @@
     }
     $jsonOverlay.style.display = 'block';
   };
+
+  // ── Shared: render generation metadata ──
+  function renderMeta(meta) {
+    if (!meta || Object.keys(meta).length === 0)
+      return '<p style="color:var(--muted)">No generation data available</p>';
+    var h = '';
+    if (meta.prompt) h += '<h4>Positive Prompt</h4><p>' + escHtml(meta.prompt) + '</p>';
+    if (meta.negativePrompt) h += '<h4>Negative Prompt</h4><p>' + escHtml(meta.negativePrompt) + '</p>';
+    if (meta.model) h += '<div class="meta-row"><span>Checkpoint</span><span>' + escHtml(meta.model) + '</span></div>';
+    if (meta.loras && meta.loras.length) {
+      h += '<h4>LoRAs Used</h4><div class="meta-loras">';
+      meta.loras.forEach(function(l) {
+        h += '<span>' + escHtml(l.name) + (l.weight != null ? ' (' + l.weight + ')' : '') + '</span>';
+      });
+      h += '</div>';
+    }
+    if (meta.seed != null) h += '<div class="meta-row"><span>Seed</span><span>' + meta.seed + '</span></div>';
+    if (meta.steps != null) h += '<div class="meta-row"><span>Steps</span><span>' + meta.steps + '</span></div>';
+    if (meta.cfgScale != null) h += '<div class="meta-row"><span>CFG</span><span>' + meta.cfgScale + '</span></div>';
+    if (meta.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(meta.sampler) + '</span></div>';
+    if (meta.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + meta.clipSkip + '</span></div>';
+    if (meta.size) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.size + '</span></div>';
+    return h;
+  }
+
+  // ── Lookup Dialog ──
+  var lookupData = null;
+
+  function openLookup() {
+    var ov = document.getElementById('lookupOverlay');
+    ov.style.display = 'flex';
+    document.getElementById('lookupUrl').value = '';
+    document.getElementById('lookupUrl').focus();
+    document.getElementById('lookupSpinner').style.display = 'none';
+    document.getElementById('lookupError').style.display = 'none';
+    document.getElementById('lookupCard').innerHTML = '';
+    lookupData = null;
+  }
+
+  function closeLookup() {
+    document.getElementById('lookupOverlay').style.display = 'none';
+  }
+
+  async function doLookup() {
+    var url = document.getElementById('lookupUrl').value.trim();
+    if (!url) return;
+    document.getElementById('lookupSpinner').style.display = '';
+    document.getElementById('lookupError').style.display = 'none';
+    document.getElementById('lookupCard').innerHTML = '';
+    try {
+      var resp = await apiFetch('/api/admin/loras/lookup-civitai', {
+        method: 'POST', body: { url: url }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'Lookup failed (HTTP ' + resp.status + ')');
+      }
+      lookupData = await resp.json();
+      document.getElementById('lookupSpinner').style.display = 'none';
+      renderLookupResult(lookupData);
+    } catch (e) {
+      document.getElementById('lookupSpinner').style.display = 'none';
+      if (e.message !== 'auth') {
+        var errEl = document.getElementById('lookupError');
+        errEl.textContent = e.message;
+        errEl.style.display = '';
+      }
+    }
+  }
+
+  function renderLookupResult(d) {
+    var card = document.getElementById('lookupCard');
+
+    // Stars
+    var rating = d.stats.rating || 0;
+    var stars = '';
+    for (var i = 1; i <= 5; i++) stars += i <= Math.round(rating) ? '\u2605' : '\u2606';
+
+    // Tags
+    var tagsHtml = d.tags.map(function(t) { return '<span class="lookup-pill">' + escHtml(t) + '</span>'; }).join('');
+
+    // Trigger words from all versions
+    var triggers = new Set();
+    d.versions.forEach(function(v) { (v.trigger_words || []).forEach(function(w) { triggers.add(w); }); });
+    var triggerHtml = '';
+    if (triggers.size > 0) {
+      triggerHtml = '<div class="lookup-pills" style="margin-top:4px">' +
+        Array.from(triggers).map(function(w) { return '<span class="lookup-pill trigger">' + escHtml(w) + '</span>'; }).join('') +
+        '</div>';
+    }
+
+    // Preview images
+    var imgsHtml = '';
+    if (d.preview_images && d.preview_images.length) {
+      imgsHtml = '<div class="lookup-images">';
+      d.preview_images.forEach(function(img) {
+        imgsHtml += '<img src="' + escHtml(img.url) + '" data-meta="' + escHtml(JSON.stringify(img.meta || {})) + '" data-url="' + escHtml(img.url) + '" loading="lazy">';
+      });
+      imgsHtml += '</div>';
+    }
+
+    // Versions
+    var versHtml = '<div class="lookup-versions">';
+    d.versions.forEach(function(v) {
+      var f = v.files && v.files[0];
+      if (!f) return;
+      var checked = v.version_id === d.selected_version_id ? ' checked' : '';
+      var sizeStr = f.size_kb ? (f.size_kb / 1000000).toFixed(2) + ' GB' : '--';
+      versHtml += '<div class="lookup-version">' +
+        '<label><input type="checkbox" data-vid="' + v.version_id + '"' + checked + '>' +
+        '<span class="ver-name">' + escHtml(v.name) + '</span>' +
+        '<span class="ver-file" title="' + escHtml(f.name) + '">' + escHtml(f.name) + '</span>' +
+        '<span class="ver-size">' + sizeStr + '</span>' +
+        '</label>' +
+        (v.base_model ? '<span class="ver-base">' + escHtml(v.base_model) + '</span>' : '') +
+        '</div>';
+    });
+    versHtml += '</div>';
+
+    card.innerHTML =
+      '<div class="lookup-info">' +
+        '<h3>' + escHtml(d.name) + ' <span class="author">by ' + escHtml(d.author) + '</span></h3>' +
+        '<div class="lookup-stats">' +
+          '<span class="stars">' + stars + ' ' + rating.toFixed(1) + '</span>' +
+          '<span>' + (d.stats.download_count || 0).toLocaleString() + ' downloads</span>' +
+          '<span>' + escHtml(d.type) + '</span>' +
+        '</div>' +
+        '<div class="lookup-pills">' + tagsHtml + '</div>' +
+        triggerHtml +
+      '</div>' +
+      imgsHtml +
+      '<h4 style="margin:12px 0 8px;font-size:14px">Versions</h4>' +
+      versHtml +
+      '<div class="lookup-actions">' +
+        '<button class="btn" id="lookupDownloadBtn" disabled>Download Selected</button>' +
+        '<button class="btn btn--muted lookup-cancel">Cancel</button>' +
+      '</div>';
+
+    // Update download button on checkbox change
+    card.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+      cb.addEventListener('change', updateLookupDownloadBtn);
+    });
+    updateLookupDownloadBtn();
+  }
+
+  function updateLookupDownloadBtn() {
+    var card = document.getElementById('lookupCard');
+    var count = card.querySelectorAll('input[type=checkbox]:checked').length;
+    var btn = document.getElementById('lookupDownloadBtn');
+    if (!btn) return;
+    btn.disabled = count === 0;
+    btn.textContent = count > 0 ? 'Download ' + count + ' Version' + (count > 1 ? 's' : '') : 'Download Selected';
+  }
+
+  async function addSelectedVersions() {
+    if (!lookupData) return;
+    var card = document.getElementById('lookupCard');
+    var checked = new Set();
+    card.querySelectorAll('input[type=checkbox]:checked').forEach(function(cb) {
+      checked.add(parseInt(cb.dataset.vid, 10));
+    });
+    if (checked.size === 0) return;
+
+    var selected = lookupData.versions.filter(function(v) { return checked.has(v.version_id); });
+    var btn = document.getElementById('lookupDownloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner sm"></span> Adding...';
+
+    try {
+      var resp = await apiFetch('/api/admin/loras/add-civitai', {
+        method: 'POST',
+        body: {
+          model_id: lookupData.model_id,
+          model_name: lookupData.name,
+          author: lookupData.author,
+          description: lookupData.description,
+          tags: lookupData.tags,
+          rating: lookupData.stats.rating,
+          downloads: lookupData.stats.download_count,
+          versions: selected,
+          preview_images: lookupData.preview_images
+        }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Error: ' + (err.detail || 'Add failed'), 5000, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Download Selected';
+        return;
+      }
+      var result = await resp.json();
+      closeLookup();
+      showToast('Added ' + result.added.length + ' LoRA(s)' +
+        (result.skipped.length ? ', ' + result.skipped.length + ' skipped (already in catalog)' : ''));
+      initialLoad();
+    } catch (e) {
+      if (e.message !== 'auth') {
+        showToast('Error: ' + e.message, 5000, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Download Selected';
+      }
+    }
+  }
+
+  // Lookup event delegation
+  document.getElementById('lookupCard').addEventListener('click', function(e) {
+    var btn = e.target.closest('#lookupDownloadBtn');
+    if (btn) { addSelectedVersions(); return; }
+    if (e.target.classList.contains('lookup-cancel')) { closeLookup(); return; }
+    var img = e.target.closest('.lookup-images img');
+    if (img) { showLookupImage(img); }
+  });
+
+  // Lookup button handlers
+  document.getElementById('addLoraBtn').addEventListener('click', openLookup);
+  document.getElementById('lookupClose').addEventListener('click', closeLookup);
+  document.getElementById('lookupOverlay').addEventListener('click', function(e) { if (e.target === this) closeLookup(); });
+  document.getElementById('lookupBtn').addEventListener('click', doLookup);
+  document.getElementById('lookupUrl').addEventListener('keydown', function(e) { if (e.key === 'Enter') doLookup(); });
+
+  // ── Image Modal (lookup preview enlargement) ──
+
+  function showLookupImage(img) {
+    var modal = document.getElementById('imgModal');
+    document.getElementById('imgModalImg').src = img.dataset.url;
+    var meta = {};
+    try { meta = JSON.parse(img.dataset.meta); } catch(ex) {}
+    document.getElementById('imgModalMeta').innerHTML = renderMeta(meta);
+    modal.style.display = 'flex';
+  }
+
+  function closeImgModal() {
+    document.getElementById('imgModal').style.display = 'none';
+  }
+
+  document.getElementById('imgModal').addEventListener('click', function(e) {
+    if (e.target === this) closeImgModal();
+  });
+
+  // ── Gallery Viewer ──
+
+  var galleryModelId = null;
+  var galleryModelName = '';
+  var galleryPollTimer = null;
+  var galleryImages = [];
+  var galleryDownloading = false;
+
+  function openGallery(modelId, name) {
+    galleryModelId = modelId;
+    galleryModelName = name;
+    galleryImages = [];
+    galleryDownloading = false;
+
+    document.getElementById('galleryOverlay').style.display = 'flex';
+    document.getElementById('galleryTitle').textContent = name;
+    document.getElementById('galleryCount').textContent = '';
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">Loading...</div>';
+    document.getElementById('galleryProgress').style.display = 'none';
+    document.getElementById('galleryDlBtn').textContent = 'Download Images';
+    document.getElementById('galleryDlBtn').disabled = false;
+
+    pollGallery();
+  }
+
+  function closeGallery() {
+    document.getElementById('galleryOverlay').style.display = 'none';
+    if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
+    galleryModelId = null;
+  }
+
+  async function toggleGalleryDl() {
+    if (!galleryModelId) return;
+    var btn = document.getElementById('galleryDlBtn');
+
+    if (galleryDownloading) {
+      btn.disabled = true;
+      btn.textContent = 'Stopping...';
+      try {
+        await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
+          method: 'POST', body: { action: 'stop' }
+        });
+      } catch(ex) {}
+      return;
+    }
+
+    btn.textContent = 'Stop';
+    galleryDownloading = true;
+    try {
+      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
+        method: 'POST', body: { action: 'start' }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Error: ' + (err.detail || 'Failed'), 5000, 'error');
+        btn.textContent = 'Download Images';
+        galleryDownloading = false;
+        return;
+      }
+      if (!galleryPollTimer) {
+        galleryPollTimer = setInterval(pollGallery, 2000);
+      }
+    } catch(e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
+      btn.textContent = 'Download Images';
+      galleryDownloading = false;
+    }
+  }
+
+  async function pollGallery() {
+    if (!galleryModelId) return;
+    try {
+      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery');
+      if (!resp.ok) return;
+      var data = await resp.json();
+
+      var status = data.status;
+      var btn = document.getElementById('galleryDlBtn');
+      var progress = document.getElementById('galleryProgress');
+      var progressFill = document.getElementById('galleryProgressFill');
+      var progressText = document.getElementById('galleryProgressText');
+
+      if (status === 'counting') {
+        btn.textContent = 'Stop';
+        btn.disabled = false;
+        galleryDownloading = true;
+        progress.style.display = '';
+        progressText.textContent = 'Counting images... (page ' + (data.pages_fetched || 0) + ')';
+        progressFill.style.width = '0%';
+      } else if (status === 'downloading') {
+        btn.textContent = 'Stop';
+        btn.disabled = false;
+        galleryDownloading = true;
+        progress.style.display = '';
+        var total = data.total || 0;
+        var done = (data.downloaded || 0) + (data.skipped || 0);
+        var pct = total > 0 ? Math.round(done / total * 100) : 0;
+        progressFill.style.width = pct + '%';
+        progressText.textContent = 'Downloaded ' + (data.downloaded || 0) + ' of ' + total + ' (' + (data.skipped || 0) + ' skipped)';
+      } else if (status === 'stopping') {
+        btn.textContent = 'Stopping...';
+        btn.disabled = true;
+      } else {
+        btn.textContent = 'Download Images';
+        btn.disabled = false;
+        galleryDownloading = false;
+        if (status === 'done' || status === 'stopped') {
+          progress.style.display = '';
+          progressFill.style.width = '100%';
+          progressText.textContent = status === 'done'
+            ? 'Complete — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped'
+            : 'Stopped — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped';
+        }
+        if (galleryPollTimer) {
+          clearInterval(galleryPollTimer);
+          galleryPollTimer = null;
+        }
+      }
+
+      // Build image list (previews + gallery)
+      var all = (data.previews || []).map(function(img) {
+        return { id: img.id, type: 'previews', meta: img.meta || {} };
+      }).concat((data.gallery || []).map(function(img) {
+        return { id: img.id, type: 'gallery', meta: img.meta || {} };
+      }));
+
+      if (all.length !== galleryImages.length) {
+        galleryImages = all;
+        renderGalleryGrid();
+      }
+
+      document.getElementById('galleryCount').textContent = all.length + ' images';
+    } catch(e) {
+      if (e.message !== 'auth') console.error('Gallery poll error:', e);
+    }
+  }
+
+  function renderGalleryGrid() {
+    var grid = document.getElementById('galleryGrid');
+    grid.innerHTML = '';
+    if (galleryImages.length === 0) {
+      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download Images" to fetch community images from CivitAI.</div>';
+      return;
+    }
+    galleryImages.forEach(function(img, idx) {
+      var el = document.createElement('img');
+      el.src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.jpeg';
+      el.loading = 'lazy';
+      el.addEventListener('click', function() { openDetail(idx); });
+      grid.appendChild(el);
+    });
+  }
+
+  // Gallery button handlers
+  document.getElementById('galleryClose').addEventListener('click', closeGallery);
+  document.getElementById('galleryOverlay').addEventListener('click', function(e) { if (e.target === this) closeGallery(); });
+  document.getElementById('galleryDlBtn').addEventListener('click', toggleGalleryDl);
+  document.getElementById('galleryThumbSize').addEventListener('input', function() {
+    document.getElementById('galleryGrid').style.setProperty('--thumb-size', this.value + 'px');
+  });
+
+  // ── Detail View ──
+
+  var detailIdx = -1;
+
+  function openDetail(idx) {
+    detailIdx = idx;
+    var img = galleryImages[idx];
+    if (!img) return;
+
+    document.getElementById('detailOverlay').style.display = 'flex';
+    document.getElementById('detailImg').src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.jpeg';
+    document.getElementById('detailMeta').innerHTML = renderMeta(img.meta);
+    document.getElementById('detailPrev').style.display = idx > 0 ? '' : 'none';
+    document.getElementById('detailNext').style.display = idx < galleryImages.length - 1 ? '' : 'none';
+  }
+
+  function closeDetail() {
+    document.getElementById('detailOverlay').style.display = 'none';
+    detailIdx = -1;
+  }
+
+  function navDetail(dir) {
+    var newIdx = detailIdx + dir;
+    if (newIdx >= 0 && newIdx < galleryImages.length) openDetail(newIdx);
+  }
+
+  document.getElementById('detailClose').addEventListener('click', closeDetail);
+  document.getElementById('detailPrev').addEventListener('click', function() { navDetail(-1); });
+  document.getElementById('detailNext').addEventListener('click', function() { navDetail(1); });
+  document.getElementById('detailOverlay').addEventListener('click', function(e) { if (e.target === this) closeDetail(); });
+
+  // ── Keyboard navigation ──
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (document.getElementById('imgModal').style.display !== 'none') { closeImgModal(); return; }
+      if (document.getElementById('detailOverlay').style.display !== 'none') { closeDetail(); return; }
+      if (document.getElementById('galleryOverlay').style.display !== 'none') { closeGallery(); return; }
+      if (document.getElementById('lookupOverlay').style.display !== 'none') { closeLookup(); return; }
+    }
+    if (document.getElementById('detailOverlay').style.display !== 'none') {
+      if (e.key === 'ArrowLeft') navDetail(-1);
+      if (e.key === 'ArrowRight') navDetail(1);
+    }
+  });
 
   // ── Boot ──
   initialLoad();
