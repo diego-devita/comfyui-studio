@@ -316,6 +316,9 @@
         <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
       </select></label>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
+    </div>
     <div class="gallery-urls" id="galleryUrls"></div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
@@ -1578,6 +1581,7 @@
     document.getElementById('galleryDlBtn').disabled = false;
     document.getElementById('galleryDeleteBtn').disabled = false;
     document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty"><span class="spinner sm" style="vertical-align:middle;margin-right:8px"></span>Loading...</div>';
+    document.getElementById('gallerySearch').value = '';
     updateGalleryUrls();
     pollGallery();
   }
@@ -1886,6 +1890,13 @@
   });
   ['galleryNsfw', 'gallerySort', 'galleryPeriod', 'galleryCap'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
+  });
+  document.getElementById('gallerySearch').addEventListener('input', function() {
+    var q = this.value.trim();
+    document.querySelectorAll('#galleryGrid .gallery-thumb').forEach(function(thumb) {
+      var id = thumb.dataset.key.replace(/^(card|comm)-/, '');
+      thumb.style.display = (!q || id.indexOf(q) !== -1) ? '' : 'none';
+    });
   });
 
   // ── Detail View ──
