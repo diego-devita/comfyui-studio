@@ -18,6 +18,7 @@
 #   GPUS=all                             GPU devices (--gpus flag)
 
 set -e
+cd "$(dirname "$0")/.."
 
 NAME="${NAME:-comfyui-studio}"
 IMAGE="${IMAGE:-ghcr.io/diego-devita/comfyui-studio:latest}"
@@ -69,13 +70,22 @@ case "${1:-start}" in
         docker pull "$IMAGE"
         ;;
     build)
-        # Build production image locally using the interactive configurator.
-        # The configurator asks about your GPU and generates the right build command.
-        # The resulting image is tagged as IMAGE (default: ghcr.io/.../comfyui-studio:latest)
-        echo "Starting interactive build configurator..."
-        echo "The image will be tagged as: ${IMAGE}"
+        echo "Build production image"
         echo ""
-        bash docker/configure.sh
+        echo "  1) Use existing Dockerfile as-is (default settings)"
+        echo "  2) Configure with interactive wizard (choose GPU, options)"
+        echo ""
+        read -rp "Choice [1/2]: " choice
+        case "$choice" in
+            2)
+                bash docker/configure.sh
+                ;;
+            *)
+                docker build -f docker/production/Dockerfile -t "$IMAGE" .
+                echo ""
+                echo "Built as: ${IMAGE}"
+                ;;
+        esac
         ;;
     *)
         echo "Usage: ./prod.sh [start|stop|logs|bash|pull|build]"

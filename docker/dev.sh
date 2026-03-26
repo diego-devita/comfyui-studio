@@ -9,7 +9,7 @@
 #   ./dev.sh reset    Wipe all data and restart fresh
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 NAME="studio-dev"
 IMAGE="comfyui-studio-dev"
