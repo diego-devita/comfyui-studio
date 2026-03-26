@@ -114,21 +114,33 @@
   .gallery-progress .progress-text { font-size: 12px; color: var(--muted); }
   .gallery-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
   .gallery-filters select { padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 12px; }
-  .gallery-urls { font-size: 11px; color: var(--muted); margin-bottom: 10px; word-break: break-all; line-height: 1.6; }
+  .gallery-urls { font-size: 11px; color: var(--muted); margin-bottom: 10px; word-break: break-all; line-height: 1.8; }
   .gallery-urls code { background: var(--bg); padding: 2px 5px; border-radius: 3px; }
-  #galleryGrid { max-height: calc(100vh - 380px); overflow-y: auto; }
-  .gallery-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; }
-  .gallery-section-label:first-child { margin-top: 0; }
+  .gallery-urls .copy-btn { background: none; border: none; cursor: pointer; padding: 2px 4px; vertical-align: middle; opacity: 0.5; }
+  .gallery-urls .copy-btn:hover { opacity: 1; }
+  .gallery-urls .copy-btn svg { width: 14px; height: 14px; fill: var(--muted); vertical-align: middle; }
+  .gallery-urls .copied-flash { color: var(--accent); font-size: 11px; margin-left: 4px; }
+  #galleryGrid { max-height: calc(100vh - 400px); overflow-y: auto; }
+  .gallery-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+  .gallery-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   .gallery-section { display: flex; flex-wrap: wrap; gap: 6px; }
-  .gallery-thumb { position: relative; width: 150px; cursor: pointer; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
-  .gallery-thumb img, .gallery-thumb video { width: 150px; display: block; border-radius: 4px; }
+  .gallery-thumb { position: relative; width: 150px; height: 150px; cursor: pointer; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+  .gallery-thumb img, .gallery-thumb video { width: 150px; height: 150px; object-fit: cover; display: block; }
   .gallery-thumb .play-overlay {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.3); opacity: 1; transition: opacity 0.15s; pointer-events: none;
+    background: rgba(0,0,0,0.15); opacity: 1; transition: opacity 0.15s; pointer-events: none;
   }
-  .gallery-thumb .play-overlay svg { width: 36px; height: 36px; fill: #fff; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+  .gallery-thumb .play-overlay svg { width: 32px; height: 32px; fill: rgba(255,255,255,0.85); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
   .gallery-thumb.playing .play-overlay { opacity: 0; }
   .gallery-thumb:hover .play-overlay { opacity: 1 !important; }
+  .gallery-thumb .expand-btn {
+    position: absolute; top: 4px; right: 4px; width: 26px; height: 26px;
+    background: rgba(0,0,0,0.5); border: none; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
+  }
+  .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
+  .gallery-thumb:hover .expand-btn { opacity: 1; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
 
   /* ── Detail view ── */
@@ -1400,41 +1412,63 @@
 
   var galleryModelId = null;
   var galleryVersionId = null;
-  var galleryModelName = '';
   var galleryPollTimer = null;
   var galleryImages = [];
+  var galleryImageIds = new Set();
   var galleryDownloading = false;
   var galleryPlayingVideo = null;
 
   var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
   var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+  var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
+  var COPY_SVG = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 
   function getGalleryUrls() {
-    var mid = galleryModelId;
-    var vid = galleryVersionId;
+    var mid = galleryModelId, vid = galleryVersionId;
     var nsfw = document.getElementById('galleryNsfw').value;
     var sort = document.getElementById('gallerySort').value;
     var period = document.getElementById('galleryPeriod').value;
     var cap = document.getElementById('galleryCap').value;
-    var cardUrl = 'https://civitai.com/api/v1/models/' + mid;
-    var communityUrl = 'https://civitai.com/api/v1/images?modelId=' + mid +
-      '&modelVersionId=' + vid + '&limit=' + cap + '&nsfw=' + nsfw +
-      '&sort=' + encodeURIComponent(sort) + '&period=' + period;
-    return { card: cardUrl, community: communityUrl };
+    return {
+      card: 'https://civitai.com/api/v1/models/' + mid,
+      community: 'https://civitai.com/api/v1/images?modelId=' + mid +
+        '&modelVersionId=' + vid + '&limit=' + cap + '&nsfw=' + nsfw +
+        '&sort=' + encodeURIComponent(sort) + '&period=' + period
+    };
+  }
+
+  function copyUrlFlash(btn, url) {
+    navigator.clipboard.writeText(url);
+    var flash = document.createElement('span');
+    flash.className = 'copied-flash';
+    flash.textContent = 'Copied';
+    btn.parentNode.insertBefore(flash, btn.nextSibling);
+    setTimeout(function() { flash.remove(); }, 3000);
   }
 
   function updateGalleryUrls() {
     if (!galleryModelId) return;
     var urls = getGalleryUrls();
-    document.getElementById('galleryUrls').innerHTML =
-      'Card: <code>' + urls.card + '</code><br>Community: <code>' + urls.community + '</code>';
+    var el = document.getElementById('galleryUrls');
+    el.innerHTML = '';
+    ['Card', 'Community'].forEach(function(label) {
+      var url = label === 'Card' ? urls.card : urls.community;
+      var line = document.createElement('div');
+      line.innerHTML = label + ': <code>' + url + '</code>';
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerHTML = COPY_SVG;
+      btn.addEventListener('click', function() { copyUrlFlash(btn, url); });
+      line.appendChild(btn);
+      el.appendChild(line);
+    });
   }
 
   function openGallery(modelId, versionId, name) {
     galleryModelId = modelId;
     galleryVersionId = versionId;
-    galleryModelName = name;
     galleryImages = [];
+    galleryImageIds = new Set();
     galleryDownloading = false;
     galleryPlayingVideo = null;
 
@@ -1445,8 +1479,8 @@
     document.getElementById('galleryDlBtn').textContent = 'Download';
     document.getElementById('galleryDlBtn').disabled = false;
     document.getElementById('galleryDeleteBtn').disabled = false;
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
     updateGalleryUrls();
-    renderGalleryGrid();
     pollGallery();
   }
 
@@ -1464,28 +1498,19 @@
     var delBtn = document.getElementById('galleryDeleteBtn');
 
     if (galleryDownloading) {
-      btn.disabled = true;
-      btn.textContent = 'Stopping...';
-      try {
-        await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-          method: 'POST', body: { action: 'stop' }
-        });
-      } catch(ex) {}
+      btn.disabled = true; btn.textContent = 'Stopping...';
+      try { await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', { method: 'POST', body: { action: 'stop' } }); } catch(ex) {}
       return;
     }
 
-    // Start downloading
     btn.textContent = 'Stop';
     delBtn.disabled = true;
     galleryDownloading = true;
-
-    // Show indeterminate progress immediately
     var progress = document.getElementById('galleryProgress');
     var progressFill = document.getElementById('galleryProgressFill');
-    var progressText = document.getElementById('galleryProgressText');
     progress.style.display = '';
     progressFill.classList.add('indeterminate');
-    progressText.textContent = 'Starting download...';
+    document.getElementById('galleryProgressText').textContent = 'Starting download...';
 
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
@@ -1500,23 +1525,15 @@
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
         showToast('Error: ' + (err.detail || 'Failed'), 5000, 'error');
-        btn.textContent = 'Download';
-        delBtn.disabled = false;
-        galleryDownloading = false;
-        progress.style.display = 'none';
-        progressFill.classList.remove('indeterminate');
+        btn.textContent = 'Download'; delBtn.disabled = false; galleryDownloading = false;
+        progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
         return;
       }
-      if (!galleryPollTimer) {
-        galleryPollTimer = setInterval(pollGallery, 2000);
-      }
+      if (!galleryPollTimer) galleryPollTimer = setInterval(pollGallery, 2000);
     } catch(e) {
       if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
-      btn.textContent = 'Download';
-      delBtn.disabled = false;
-      galleryDownloading = false;
-      progress.style.display = 'none';
-      progressFill.classList.remove('indeterminate');
+      btn.textContent = 'Download'; delBtn.disabled = false; galleryDownloading = false;
+      progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
     }
   }
 
@@ -1535,51 +1552,43 @@
       var progressText = document.getElementById('galleryProgressText');
 
       if (status === 'downloading') {
-        btn.textContent = 'Stop';
-        btn.disabled = false;
-        delBtn.disabled = true;
-        galleryDownloading = true;
-        progress.style.display = '';
-        var total = data.total || 0;
-        var done = (data.downloaded || 0) + (data.skipped || 0);
+        btn.textContent = 'Stop'; btn.disabled = false; delBtn.disabled = true;
+        galleryDownloading = true; progress.style.display = '';
+        var total = data.total || 0, done = (data.downloaded || 0) + (data.skipped || 0);
         if (done > 0) {
           progressFill.classList.remove('indeterminate');
-          var pct = total > 0 ? Math.round(done / total * 100) : 0;
-          progressFill.style.width = Math.min(pct, 100) + '%';
+          progressFill.style.width = Math.min(total > 0 ? Math.round(done / total * 100) : 0, 100) + '%';
         }
         progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' / ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
       } else if (status === 'stopping') {
-        btn.textContent = 'Stopping...';
-        btn.disabled = true;
+        btn.textContent = 'Stopping...'; btn.disabled = true;
       } else {
-        btn.textContent = 'Download';
-        btn.disabled = false;
-        delBtn.disabled = false;
-        galleryDownloading = false;
-        progressFill.classList.remove('indeterminate');
+        btn.textContent = 'Download'; btn.disabled = false; delBtn.disabled = false;
+        galleryDownloading = false; progressFill.classList.remove('indeterminate');
         if (status === 'done' || status === 'stopped') {
-          progress.style.display = '';
-          progressFill.style.width = '100%';
+          progress.style.display = ''; progressFill.style.width = '100%';
           progressText.textContent = (status === 'done' ? 'Complete' : 'Stopped') + ' — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped';
         }
-        if (galleryPollTimer) {
-          clearInterval(galleryPollTimer);
-          galleryPollTimer = null;
-        }
+        if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
       }
 
-      // Build image list
+      // Build deduplicated lists
       var card = (data.gallery_card || []).map(function(img) {
-        return { id: img.id, type: 'gallery-card', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'card' };
+        return { id: img.id, type: 'gallery-card', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'card', key: 'card-' + img.id };
       });
-      var community = (data.gallery_community || []).map(function(img) {
-        return { id: img.id, type: 'gallery-community', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'community' };
+      var community = (data.gallery_community || []).filter(function(img) {
+        // skip community images already in card (same file stem)
+        return !card.some(function(c) { return c.id === img.id; });
+      }).map(function(img) {
+        return { id: img.id, type: 'gallery-community', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'community', key: 'comm-' + img.id };
       });
       var all = card.concat(community);
 
-      if (all.length !== galleryImages.length) {
-        galleryImages = all;
-        renderGalleryGrid();
+      // Incremental append — only add new items
+      var newItems = all.filter(function(img) { return !galleryImageIds.has(img.key); });
+      if (newItems.length > 0) {
+        newItems.forEach(function(img) { galleryImageIds.add(img.key); galleryImages.push(img); });
+        appendNewThumbs(newItems);
       }
 
       document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community';
@@ -1593,73 +1602,100 @@
     if (!video) return;
     var overlay = thumb.querySelector('.play-overlay');
     if (video.paused) {
-      // Pause any other playing video
       if (galleryPlayingVideo && galleryPlayingVideo !== thumb) {
         var prev = galleryPlayingVideo.querySelector('video');
         if (prev) prev.pause();
         galleryPlayingVideo.classList.remove('playing');
-        var prevOverlay = galleryPlayingVideo.querySelector('.play-overlay');
-        if (prevOverlay) prevOverlay.innerHTML = PLAY_SVG;
+        var po = galleryPlayingVideo.querySelector('.play-overlay');
+        if (po) po.innerHTML = PLAY_SVG;
       }
-      video.play();
-      thumb.classList.add('playing');
-      overlay.innerHTML = PAUSE_SVG;
+      video.play(); thumb.classList.add('playing'); overlay.innerHTML = PAUSE_SVG;
       galleryPlayingVideo = thumb;
     } else {
-      video.pause();
-      thumb.classList.remove('playing');
-      overlay.innerHTML = PLAY_SVG;
+      video.pause(); thumb.classList.remove('playing'); overlay.innerHTML = PLAY_SVG;
       galleryPlayingVideo = null;
     }
   }
 
-  function renderGalleryGrid() {
+  function makeThumb(img) {
+    var ext = img.ext || '.jpeg';
+    var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+    var idx = galleryImages.indexOf(img);
+    var thumb = document.createElement('div');
+    thumb.className = 'gallery-thumb';
+    thumb.dataset.key = img.key;
+
+    // Expand button (top-right) → detail view
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'expand-btn';
+    expandBtn.innerHTML = EXPAND_SVG;
+    expandBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openDetail(galleryImages.indexOf(img));
+    });
+
+    if (ext === '.mp4') {
+      thumb.innerHTML = '<video src="' + src + '" muted loop playsinline preload="metadata"></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+      thumb.appendChild(expandBtn);
+      thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
+    } else {
+      thumb.innerHTML = '<img src="' + src + '" loading="lazy">';
+      thumb.appendChild(expandBtn);
+      thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
+    }
+    return thumb;
+  }
+
+  function getOrCreateSection(source) {
     var grid = document.getElementById('galleryGrid');
-    grid.innerHTML = '';
-    if (galleryImages.length === 0) {
-      grid.innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
-      return;
-    }
+    var sectionId = 'gallerySection-' + source;
+    var section = document.getElementById(sectionId);
+    if (section) return section;
 
-    function makeThumb(img, idx) {
-      var ext = img.ext || '.jpeg';
-      var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
-      var thumb = document.createElement('div');
-      thumb.className = 'gallery-thumb';
-      if (ext === '.mp4') {
-        thumb.innerHTML = '<video src="' + src + '" muted loop playsinline preload="metadata"></video>' +
-          '<div class="play-overlay">' + PLAY_SVG + '</div>';
-        thumb.addEventListener('click', function(e) {
-          e.stopPropagation();
-          toggleVideoPlay(thumb);
-        });
-      } else {
-        thumb.innerHTML = '<img src="' + src + '" loading="lazy">';
-        thumb.addEventListener('click', function() { openDetail(idx); });
+    // Remove empty message if present
+    var empty = grid.querySelector('.gallery-empty');
+    if (empty) empty.remove();
+
+    // Ensure card section comes before community, with HR between
+    var cardSection = document.getElementById('gallerySection-card');
+    var commSection = document.getElementById('gallerySection-community');
+
+    var lbl = document.createElement('div');
+    lbl.className = 'gallery-section-label';
+    lbl.id = 'galleryLabel-' + source;
+    lbl.textContent = source === 'card' ? 'Model Card' : 'Community';
+
+    section = document.createElement('div');
+    section.className = 'gallery-section';
+    section.id = sectionId;
+
+    if (source === 'card') {
+      // Card always first
+      grid.insertBefore(section, grid.firstChild);
+      grid.insertBefore(lbl, grid.firstChild);
+    } else {
+      // Community: add HR if card exists, then append
+      if (cardSection) {
+        var hr = document.createElement('hr');
+        hr.className = 'gallery-hr';
+        hr.id = 'galleryHr';
+        if (!document.getElementById('galleryHr')) grid.appendChild(hr);
       }
-      return thumb;
-    }
-
-    function appendSection(label, items, startIdx) {
-      if (items.length === 0) return;
-      var lbl = document.createElement('div');
-      lbl.className = 'gallery-section-label';
-      lbl.textContent = label + ' (' + items.length + ')';
       grid.appendChild(lbl);
-      var section = document.createElement('div');
-      section.className = 'gallery-section';
-      items.forEach(function(img, i) {
-        section.appendChild(makeThumb(img, startIdx + i));
-      });
       grid.appendChild(section);
     }
+    return section;
+  }
 
-    var card = galleryImages.filter(function(i) { return i.source === 'card'; });
-    var community = galleryImages.filter(function(i) { return i.source === 'community'; });
-
-    var offset = 0;
-    if (card.length) { appendSection('Model Card', card, offset); offset += card.length; }
-    if (community.length) { appendSection('Community', community, offset); }
+  function appendNewThumbs(newItems) {
+    newItems.forEach(function(img) {
+      var section = getOrCreateSection(img.source);
+      section.appendChild(makeThumb(img));
+      // Update label count
+      var lbl = document.getElementById('galleryLabel-' + img.source);
+      var count = section.children.length;
+      lbl.textContent = (img.source === 'card' ? 'Model Card' : 'Community') + ' (' + count + ')';
+    });
   }
 
   // Gallery button handlers
@@ -1672,16 +1708,15 @@
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', { method: 'DELETE' });
       if (resp.ok) {
-        var data = await resp.json();
-        showToast('Deleted ' + data.deleted + ' images');
-        galleryImages = [];
-        renderGalleryGrid();
+        var d = await resp.json();
+        showToast('Deleted ' + d.deleted + ' images');
+        galleryImages = []; galleryImageIds = new Set();
+        document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
         document.getElementById('galleryProgress').style.display = 'none';
         document.getElementById('galleryCount').textContent = '';
       }
     } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
   });
-  // Update URLs when filters change
   ['galleryNsfw', 'gallerySort', 'galleryPeriod', 'galleryCap'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
