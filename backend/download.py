@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from config import MODELS_BASE, CIVITAI_API_KEY, HF_TOKEN
+from config import MODELS_BASE, CIVITAI_API_KEY, HF_TOKEN, DEV_MODE
 
 # ── Download state & parallel pool ──────────────────────────────────────────
 # In-memory state, resets on process restart.
@@ -104,6 +104,36 @@ def _do_download(item: dict) -> None:
         "_last_bytes": 0,
         "_last_time": now,
     }
+
+    # DEV_MODE: create empty stub file instead of downloading
+    if DEV_MODE:
+        try:
+            time.sleep(0.3)  # brief delay for realistic UX
+            dest_file.touch()
+            _download_state[filename] = {
+                "status": "done",
+                "bytes": 0,
+                "total": 0,
+                "speed": 0.0,
+                "error": None,
+                "_last_bytes": 0,
+                "_last_time": 0.0,
+            }
+            _events.emit("model.download.completed", f"Downloaded (stub): {filename}", severity="success", data={"filename": filename, "size": 0})
+        except Exception as e:
+            _download_state[filename] = {
+                "status": "error",
+                "bytes": 0,
+                "total": 0,
+                "speed": 0.0,
+                "error": str(e),
+                "_last_bytes": 0,
+                "_last_time": 0.0,
+            }
+            _events.emit("model.download.failed", f"Download failed: {filename}", severity="error", data={"filename": filename, "error": str(e)})
+        finally:
+            _on_download_complete()
+        return
 
     url, headers = _inject_auth(_get_download_url(item))
 
