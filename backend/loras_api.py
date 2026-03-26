@@ -583,19 +583,22 @@ async def gallery_delete(model_id: int):
 
 @router.get("/api/admin/loras/fetch-civitai-meta/{image_id}")
 async def fetch_image_meta(image_id: int):
-    """Fetch full metadata for a CivitAI image by its numeric ID."""
+    """Fetch generation data for a CivitAI image via tRPC endpoint."""
     if not CIVITAI_API_KEY:
         raise HTTPException(403, "CIVITAI_API_KEY not configured")
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"}
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+               "Content-Type": "application/json"}
+    params = json.dumps({"json": {"id": image_id, "authed": True}})
+    url = f"https://civitai.com/api/trpc/image.getGenerationData?input={params}"
     async with httpx.AsyncClient(timeout=20, headers=headers) as client:
         try:
-            r = await client.get(f"https://civitai.com/api/v1/images/{image_id}")
+            r = await client.get(url)
         except httpx.RequestError:
             raise HTTPException(502, "Could not reach CivitAI")
-        if r.status_code == 404:
-            raise HTTPException(404, "Image not found on CivitAI")
-        r.raise_for_status()
-        return JSONResponse(r.json())
+        if r.status_code != 200:
+            raise HTTPException(r.status_code, "CivitAI returned " + str(r.status_code))
+        data = r.json()
+    return JSONResponse(data.get("result", {}).get("data", {}).get("json", {}))
 
 
 @router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")

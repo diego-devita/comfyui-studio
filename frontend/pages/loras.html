@@ -1182,7 +1182,7 @@
       h += '<div class="meta-row" style="margin-top:8px"><span>Raw Metadata</span><span>' +
         '<button class="copy-meta-btn" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:11px">Copy JSON</button></span></div>';
     }
-    // Extract Metadata button (needs civitai_id)
+    // Extract Metadata button (fetches from CivitAI tRPC)
     if (meta.civitai_id) {
       h += '<div style="margin-top:12px;text-align:center">' +
         '<button class="btn btn--sm extract-meta-btn" data-civitai-id="' + meta.civitai_id + '">Extract Metadata</button></div>';
@@ -1204,7 +1204,7 @@
       setTimeout(function() { copyBtn.textContent = orig; copyBtn.style.color = ''; }, 3000);
       return;
     }
-    // Extract Metadata from CivitAI
+    // Extract Metadata from CivitAI tRPC
     var extractBtn = e.target.closest('.extract-meta-btn');
     if (extractBtn) {
       var civitaiId = extractBtn.dataset.civitaiId;
@@ -1215,7 +1215,7 @@
         return resp.json();
       }).then(function(data) {
         _extractMetaJson = JSON.stringify(data, null, 2);
-        document.getElementById('extractMetaTitle').textContent = 'CivitAI Metadata — Image #' + civitaiId;
+        document.getElementById('extractMetaTitle').textContent = 'Generation Data — Image #' + civitaiId;
         document.getElementById('extractMetaContent').textContent = _extractMetaJson;
         document.getElementById('extractMetaOverlay').style.display = 'flex';
       }).catch(function(err) {
