@@ -327,55 +327,64 @@
     </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:8px 0 12px">
 
+    <!-- Card URLs (model + version page) -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:var(--muted)">
+      <span style="flex-shrink:0">Card:</span>
+      <div style="display:flex;flex-direction:column;gap:1px;min-width:0" id="galleryCardUrls"></div>
+    </div>
+
     <!-- Two panels side by side: CivitAI filters | Download controls -->
-    <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+    <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:stretch">
       <!-- CivitAI Filters panel -->
-      <div style="flex:1;min-width:280px;border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+      <div style="flex:1;min-width:280px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column">
         <div class="gallery-filters" style="margin-bottom:0">
-          <label>Mode <select id="galleryMode">
+          <label title="CivitAI API mode: tRPC (internal, more reliable) or REST (public)">Mode <select id="galleryMode">
             <!-- Fixed mode hidden from UI but code preserved -->
             <!--<option value="fixed">Fixed</option>-->
             <option value="trpc" selected>tRPC</option><option value="rest">REST API</option>
           </select></label>
           <!-- REST filters -->
           <span id="filtersRest" style="display:none">
-            <label>NSFW <select id="galleryNsfw">
+            <label title="NSFW content level filter">NSFW <select id="galleryNsfw">
               <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
             </select></label>
-            <label>Sort <select id="gallerySortRest">
+            <label title="Sort order for results">Sort <select id="gallerySortRest">
               <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
             </select></label>
-            <label>Period <select id="galleryPeriodRest">
+            <label title="Time period filter">Period <select id="galleryPeriodRest">
               <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
             </select></label>
           </span>
           <!-- tRPC filters -->
           <span id="filtersTrpc" style="display:contents">
-            <label>Sort <select id="gallerySortTrpc">
+            <label title="Sort order for results">Sort <select id="gallerySortTrpc">
               <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option><option value="Oldest">Oldest</option>
             </select></label>
-            <label>Period <select id="galleryPeriodTrpc">
+            <label title="Time period filter">Period <select id="galleryPeriodTrpc">
               <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
             </select></label>
-            <label>Type <select id="galleryType">
+            <label title="Filter by media type">Type <select id="galleryType">
               <option value="" selected>All</option><option value="image">Image</option><option value="video">Video</option>
             </select></label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
-            <label>Remix <select id="galleryRemix">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Only show items with generation metadata (prompt, params)"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Only show items created on CivitAI platform"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
+            <label title="Filter originals vs remixes">Remix <select id="galleryRemix">
               <option value="" selected>All</option><option value="false">Originals</option><option value="true">Remixes</option>
             </select></label>
           </span>
         </div>
+        <!-- Community search URL (truncated to fit panel) -->
+        <div id="galleryCommunityUrl" style="margin-top:8px;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;min-width:0">
+        </div>
       </div>
 
       <!-- Download controls panel -->
-      <div style="min-width:200px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <select id="galleryCap" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+      <div style="min-width:200px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;align-content:center">
+        <select id="galleryCap" title="Maximum number of community images to download" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
           <option value="10">10</option><option value="50">50</option><option value="100">100</option>
           <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
         </select>
-        <select id="galleryWorkers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px" title="Workers">
+        <select id="galleryWorkers" title="Number of parallel download workers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
           <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
           <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
         </select>
@@ -385,11 +394,9 @@
 
     <!-- Local filters row (search + starred) -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox" id="galleryStarredOnly"> Starred only</label>
+      <input type="text" id="gallerySearch" title="Filter thumbnails by CivitAI image ID" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--muted)" title="Show only images you have starred"><input type="checkbox" id="galleryStarredOnly"> Starred only</label>
     </div>
-
-    <div class="gallery-urls" id="galleryUrls"></div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
       <div class="progress-text" id="galleryProgressText"></div>
@@ -988,7 +995,7 @@
       refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
       refs.galleryBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        openGallery(m.civitai_model_id, m.civitai_version_id, m.name);
+        openGallery(m.civitai_model_id, m.civitai_version_id, m.name, m.base_model || '');
       });
     }
 
@@ -1771,25 +1778,43 @@
     setTimeout(function() { flash.remove(); }, 3000);
   }
 
+  function _makeUrlLine(url) {
+    // Helper: creates a truncated URL code + copy button
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:4px;min-width:0';
+    var code = document.createElement('code');
+    code.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--bg);padding:1px 5px;border-radius:3px;font-size:10px';
+    code.textContent = url;
+    code.title = url;
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = COPY_SVG;
+    btn.style.flexShrink = '0';
+    btn.addEventListener('click', function() { copyUrlFlash(btn, url); });
+    wrap.appendChild(code);
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
   function updateGalleryUrls() {
     if (!galleryModelId) return;
     var urls = getGalleryUrls();
-    var el = document.getElementById('galleryUrls');
-    el.innerHTML = '';
-    ['Card', 'Community'].forEach(function(label) {
-      var url = label === 'Card' ? urls.card : urls.community;
-      var line = document.createElement('div');
-      line.innerHTML = label + ': <code>' + url + '</code>';
-      var btn = document.createElement('button');
-      btn.className = 'copy-btn';
-      btn.innerHTML = COPY_SVG;
-      btn.addEventListener('click', function() { copyUrlFlash(btn, url); });
-      line.appendChild(btn);
-      el.appendChild(line);
-    });
+
+    // Card URLs: model page + version page, stacked vertically
+    var cardEl = document.getElementById('galleryCardUrls');
+    cardEl.innerHTML = '';
+    var modelUrl = 'https://civitai.com/models/' + galleryModelId;
+    var versionUrl = modelUrl + '?modelVersionId=' + (galleryVersionId || '');
+    cardEl.appendChild(_makeUrlLine(modelUrl));
+    if (galleryVersionId) cardEl.appendChild(_makeUrlLine(versionUrl));
+
+    // Community URL: inside the filters panel, truncated
+    var commEl = document.getElementById('galleryCommunityUrl');
+    commEl.innerHTML = '';
+    commEl.appendChild(_makeUrlLine(urls.community));
   }
 
-  function openGallery(modelId, versionId, name) {
+  function openGallery(modelId, versionId, name, baseModel) {
     galleryModelId = modelId;
     galleryVersionId = versionId;
     galleryImages = [];
@@ -1798,7 +1823,8 @@
     galleryPlayingVideo = null;
 
     document.getElementById('galleryOverlay').style.display = 'flex';
-    document.getElementById('galleryTitle').textContent = name;
+    var titleEl = document.getElementById('galleryTitle');
+    titleEl.innerHTML = escHtml(name) + (baseModel ? ' <span class="base-model-pill" style="vertical-align:middle;margin-left:6px">' + escHtml(baseModel) + '</span>' : '');
     document.getElementById('galleryCount').textContent = '';
     document.getElementById('galleryProgress').style.display = 'none';
     document.getElementById('galleryDlBtn').textContent = 'Download';
@@ -2181,7 +2207,7 @@
     var container = document.querySelector('.detail-image');
     var isVideo = ext === '.mp4';
     if (isVideo) {
-      container.innerHTML = '<video id="detailImg" src="' + src + '" controls autoplay style="max-width:100%;max-height:calc(100vh - 80px);border-radius:8px"></video>';
+      container.innerHTML = '<video id="detailImg" src="' + src + '" controls autoplay muted style="max-width:100%;max-height:calc(100vh - 80px);border-radius:8px"></video>';
     } else {
       container.innerHTML = '<img id="detailImg" src="' + src + '" style="max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px">';
     }
