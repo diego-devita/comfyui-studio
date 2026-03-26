@@ -613,6 +613,8 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
     max_community = state.get("max_images", 200)
     num_workers = api_params.get("workers", 6)
+    mode = api_params.get("mode", "fixed")
+    version_id = api_params.get("version_id")
 
     # ── Phase 1: model card images (always all of them) ──
     try:
@@ -638,12 +640,11 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             meta = {"civitai_id": img.get("id"), "url": url,
                     "type": img.get("type", "image"),
                     "width": img.get("width"), "height": img.get("height"),
-                    "_source": "card"}
+                    "_source": "original"}
             if img.get("id"):
                 meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}"
             card_imgs.append((str(iid), url, meta))
 
-    version_id = api_params.get("version_id")
     state["total"] = len(card_imgs) + max_community
     seen: set[str] = set()
 
@@ -669,7 +670,6 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     community_downloaded = 0
     cursor = None
     state["pages_fetched"] = 0
-    mode = api_params.get("mode", "fixed")
     print(f"[gallery] {model_id}: mode={mode}, max={max_community}, seen={len(seen)}, creator={creator_id}", flush=True)
 
     while community_downloaded < max_community:
