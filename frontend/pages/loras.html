@@ -939,7 +939,9 @@
     });
 
     // Set static content
-    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye icon-sm"></span></span>';
+    // Highlight [bracket] suffix in card name — typically contains base model info
+    var displayName = escHtml(m.name).replace(/\[([^\]]+)\]$/, '<span class="name-bracket-tag">[$1]</span>');
+    refs.name.innerHTML = displayName + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye icon-sm"></span></span>';
 
     const sizeStr = fmtSize(m.size_gb);
     const sourceClass = (m.source || '').toLowerCase();

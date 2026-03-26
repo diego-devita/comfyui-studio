@@ -997,6 +997,63 @@ async def toggle_star(item_id: str):
 # Tags are resolved from CivitAI's tRPC batch API and cached in SQLite.
 
 
+def _sync_civitai_tags_bg() -> int:
+    """Background (sync) version of tag sync. Called from startup thread.
+
+    Collects tagIds from gallery metadata, resolves unknown ones via
+    CivitAI tRPC batch, stores in DB. Returns count of newly resolved tags.
+    """
+    if not CIVITAI_API_KEY:
+        return 0
+
+    # Collect all unique tagIds from gallery images' raw metadata
+    all_tag_ids = set()
+    conn = _gdb._get_conn()
+    rows = conn.execute("SELECT meta_path FROM gallery_images WHERE meta_path IS NOT NULL").fetchall()
+    for row in rows:
+        meta_file = _gdb.abs_path(row["meta_path"])
+        if not meta_file.exists():
+            continue
+        try:
+            meta = json.loads(meta_file.read_text())
+            raw_item = meta.get("raw_item") or {}
+            tag_ids = raw_item.get("tagIds") or []
+            all_tag_ids.update(tag_ids)
+        except Exception:
+            pass
+
+    unknown = _gdb.get_unknown_tag_ids(list(all_tag_ids))
+    if not unknown:
+        return 0
+
+    # Resolve via tRPC batch (sync httpx, not async)
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+               "Content-Type": "application/json"}
+    resolved = []
+    chunk_size = 50
+    for i in range(0, len(unknown), chunk_size):
+        chunk = unknown[i:i + chunk_size]
+        batch_input = {str(j): {"json": {"id": tid}} for j, tid in enumerate(chunk)}
+        procedure = ",".join(["tag.getById"] * len(chunk))
+        try:
+            r = httpx.get(f"https://civitai.com/api/trpc/{procedure}",
+                          params={"batch": "1", "input": json.dumps(batch_input)},
+                          headers=headers, timeout=15)
+            if r.status_code == 200:
+                results = r.json()
+                if isinstance(results, list):
+                    for item in results:
+                        tag = item.get("result", {}).get("data", {}).get("json", {})
+                        if tag.get("id"):
+                            resolved.append(tag)
+        except Exception:
+            pass
+
+    if resolved:
+        _gdb.upsert_tags(resolved)
+    return len(resolved)
+
+
 @router.post("/api/admin/civitai/tags/sync")
 async def sync_civitai_tags():
     """Sync CivitAI tags: collect all tag IDs from downloaded gallery images,

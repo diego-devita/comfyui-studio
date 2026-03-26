@@ -356,6 +356,12 @@ main { padding: 32px 40px 64px; }
   border: none;
 }
 
+/* ── Name bracket tag (e.g. [SDXL] suffix in card titles) ── */
+.name-bracket-tag {
+  color: brown;
+  font-weight: 500;
+}
+
 /* ── Progress Bar (models/loras download) ── */
 .progress-wrap {
   display: none;

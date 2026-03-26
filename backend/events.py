@@ -176,6 +176,20 @@ async def _start_event_consumer():
     import gallery_db as _gdb
     _gdb.init_gallery_db()
 
+    # Background sync CivitAI tags — non-blocking, runs after startup completes.
+    # Resolves tag IDs from downloaded gallery metadata into human-readable names.
+    import threading as _threading
+    def _bg_tag_sync():
+        import time; time.sleep(5)  # wait for server to fully start
+        try:
+            from loras_api import _sync_civitai_tags_bg
+            count = _sync_civitai_tags_bg()
+            if count > 0:
+                _events.emit("system.startup", f"Synced {count} CivitAI tags", severity="info")
+        except Exception as e:
+            print(f"[startup] Tag sync failed: {e}", flush=True)
+    _threading.Thread(target=_bg_tag_sync, daemon=True).start()
+
     # Mark any jobs that were running/queued as stalled
     stalled = _db.mark_stalled_jobs()
     if stalled > 0:
