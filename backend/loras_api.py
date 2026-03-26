@@ -520,7 +520,8 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
     prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
 
     # Insert into gallery database
-    _gdb.insert_image({
+    try:
+        _gdb.insert_image({
         "civitai_id": iid,
         "file_uuid": _url_to_id(url),
         "type": meta.get("type", "video" if ext == ".mp4" else "image"),
@@ -548,11 +549,16 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
         "search_mode": search_mode,
         "prompt": prompt,
     })
+    except Exception as e:
+        print(f"[gallery] DB insert failed for {iid}: {e}", flush=True)
 
     # Link this image to the specific version it was found under.
     # The same image can be linked to multiple versions.
     if version_id:
-        _gdb.link_version(iid, version_id)
+        try:
+            _gdb.link_version(iid, version_id)
+        except Exception as e:
+            print(f"[gallery] DB link_version failed for {iid}: {e}", flush=True)
 
     return "ok"
 
