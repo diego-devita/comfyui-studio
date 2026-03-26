@@ -62,7 +62,12 @@
     padding: 2px 8px; border-radius: 10px; font-size: 11px;
     background: var(--bg); color: var(--muted); border: 1px solid var(--border);
   }
-  .lookup-pill.trigger { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .lookup-pill.trigger {
+    background: rgba(121, 80, 242, 0.15); color: #b197fc; border-color: transparent;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.25px; font-size: 10px;
+    cursor: pointer; padding: 3px 8px;
+  }
+  .lookup-pill.trigger:hover { background: rgba(121, 80, 242, 0.25); }
   .lookup-images {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 4px; margin-bottom: 16px; max-height: 280px; overflow-y: auto;
@@ -1184,11 +1189,30 @@
     }
 
     // Preview images
+    // Collect version images (model card images) + build meta lookup from preview_images
+    var metaById = {};
+    (d.preview_images || []).forEach(function(img) { if (img.id && img.meta) metaById[img.id] = img.meta; });
+    var allImages = [];
+    d.versions.forEach(function(v) {
+      (v.images || []).forEach(function(img) {
+        if (img.url) allImages.push({ url: img.url, id: img.id, type: img.type || 'image', meta: metaById[img.id] || {} });
+      });
+    });
+    if (allImages.length === 0) {
+      (d.preview_images || []).forEach(function(img) {
+        if (img.url) allImages.push({ url: img.url, id: img.id, type: 'image', meta: img.meta || {} });
+      });
+    }
     var imgsHtml = '';
-    if (d.preview_images && d.preview_images.length) {
+    if (allImages.length) {
       imgsHtml = '<div class="lookup-images">';
-      d.preview_images.forEach(function(img) {
-        imgsHtml += '<img src="' + escHtml(img.url) + '" data-meta="' + escHtml(JSON.stringify(img.meta || {})) + '" data-url="' + escHtml(img.url) + '" loading="lazy">';
+      allImages.forEach(function(img) {
+        var metaAttr = ' data-meta="' + escHtml(JSON.stringify(img.meta)) + '" data-url="' + escHtml(img.url) + '"';
+        if (img.type === 'video' || img.url.match(/\.(mp4|webm)(\?|$)/i)) {
+          imgsHtml += '<video src="' + escHtml(img.url) + '"' + metaAttr + ' muted autoplay loop playsinline preload="metadata" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer"></video>';
+        } else {
+          imgsHtml += '<img src="' + escHtml(img.url) + '"' + metaAttr + ' loading="lazy">';
+        }
       });
       imgsHtml += '</div>';
     }
@@ -1301,7 +1325,7 @@
     var btn = e.target.closest('#lookupDownloadBtn');
     if (btn) { addSelectedVersions(); return; }
     if (e.target.classList.contains('lookup-cancel')) { closeLookup(); return; }
-    var img = e.target.closest('.lookup-images img');
+    var img = e.target.closest('.lookup-images img') || e.target.closest('.lookup-images video');
     if (img) { showLookupImage(img); }
   });
 
@@ -1314,11 +1338,28 @@
 
   // ── Image Modal (lookup preview enlargement) ──
 
-  function showLookupImage(img) {
+  function showLookupImage(el) {
     var modal = document.getElementById('imgModal');
-    document.getElementById('imgModalImg').src = img.dataset.url;
+    var url = el.dataset.url;
+    var isVideo = url.match(/\.(mp4|webm)(\?|$)/i) || el.tagName === 'VIDEO';
+    var mediaEl = document.getElementById('imgModalImg');
+    if (isVideo) {
+      var vid = document.createElement('video');
+      vid.id = 'imgModalImg'; vid.src = url; vid.controls = true; vid.autoplay = true;
+      vid.style.cssText = mediaEl.style.cssText || 'max-width:60%;max-height:calc(100vh - 80px);border-radius:8px';
+      mediaEl.replaceWith(vid);
+    } else {
+      if (mediaEl.tagName === 'VIDEO') {
+        var img = document.createElement('img');
+        img.id = 'imgModalImg'; img.src = url;
+        img.style.cssText = 'max-width:60%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px';
+        mediaEl.replaceWith(img);
+      } else {
+        mediaEl.src = url;
+      }
+    }
     var meta = {};
-    try { meta = JSON.parse(img.dataset.meta); } catch(ex) {}
+    try { meta = JSON.parse(el.dataset.meta); } catch(ex) {}
     document.getElementById('imgModalMeta').innerHTML = renderMeta(meta);
     modal.style.display = 'flex';
   }
@@ -1348,10 +1389,10 @@
     document.getElementById('galleryOverlay').style.display = 'flex';
     document.getElementById('galleryTitle').textContent = name;
     document.getElementById('galleryCount').textContent = '';
-    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">Loading...</div>';
     document.getElementById('galleryProgress').style.display = 'none';
     document.getElementById('galleryDlBtn').textContent = 'Download Images';
     document.getElementById('galleryDlBtn').disabled = false;
+    renderGalleryGrid();
 
     pollGallery();
   }
@@ -1413,14 +1454,7 @@
       var progressFill = document.getElementById('galleryProgressFill');
       var progressText = document.getElementById('galleryProgressText');
 
-      if (status === 'counting') {
-        btn.textContent = 'Stop';
-        btn.disabled = false;
-        galleryDownloading = true;
-        progress.style.display = '';
-        progressText.textContent = 'Counting images... (page ' + (data.pages_fetched || 0) + ')';
-        progressFill.style.width = '0%';
-      } else if (status === 'downloading') {
+      if (status === 'downloading') {
         btn.textContent = 'Stop';
         btn.disabled = false;
         galleryDownloading = true;
@@ -1428,8 +1462,8 @@
         var total = data.total || 0;
         var done = (data.downloaded || 0) + (data.skipped || 0);
         var pct = total > 0 ? Math.round(done / total * 100) : 0;
-        progressFill.style.width = pct + '%';
-        progressText.textContent = 'Downloaded ' + (data.downloaded || 0) + ' of ' + total + ' (' + (data.skipped || 0) + ' skipped)';
+        progressFill.style.width = Math.min(pct, 100) + '%';
+        progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' of ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
       } else if (status === 'stopping') {
         btn.textContent = 'Stopping...';
         btn.disabled = true;
@@ -1472,7 +1506,7 @@
     var grid = document.getElementById('galleryGrid');
     grid.innerHTML = '';
     if (galleryImages.length === 0) {
-      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download Images" to fetch community images from CivitAI.</div>';
+      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download Images" to fetch community images from CivitAI (max 1000).</div>';
       return;
     }
     galleryImages.forEach(function(img, idx) {

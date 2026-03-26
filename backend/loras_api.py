@@ -65,6 +65,13 @@ _BASE_MODEL_MAP = {
 }
 
 
+def _nsfw_level(val) -> bool:
+    try:
+        return int(val) > 1
+    except (TypeError, ValueError):
+        return False
+
+
 def _category_for_base_model(bm: str) -> tuple[str, str]:
     if bm in _BASE_MODEL_MAP:
         return _BASE_MODEL_MAP[bm]
@@ -178,7 +185,8 @@ async def lookup_civitai(body: LookupRequest):
         v_images = [
             {"id": img.get("id"), "url": img.get("url", ""),
              "width": img.get("width"), "height": img.get("height"),
-             "nsfw": int(img.get("nsfwLevel", 1) or 1) > 1}
+             "type": img.get("type", "image"),
+             "nsfw": _nsfw_level(img.get("nsfwLevel"))}
             for img in v.get("images", [])
         ]
         versions.append({
@@ -195,7 +203,7 @@ async def lookup_civitai(body: LookupRequest):
     preview_images = [
         {"id": img.get("id"), "url": img.get("url", ""),
          "width": img.get("width"), "height": img.get("height"),
-         "nsfw": int(img.get("nsfwLevel", 1) or 1) > 1,
+         "nsfw": _nsfw_level(img.get("nsfwLevel")),
          "meta": _extract_image_meta(img.get("meta"))}
         for img in imgs_data.get("items", [])
     ]
@@ -341,25 +349,29 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
 
     stop = threading.Event()
     _gallery_state[model_id] = {
-        "status": "counting", "downloaded": 0, "skipped": 0,
-        "total": None, "pages_fetched": 0, "_stop": stop,
+        "status": "downloading", "downloaded": 0, "skipped": 0,
+        "total": 0, "pages_fetched": 0, "_stop": stop,
     }
     threading.Thread(target=_gallery_thread, args=(model_id, stop), daemon=True).start()
-    return JSONResponse({"status": "counting"})
+    return JSONResponse({"status": "downloading"})
+
+
+_GALLERY_MAX_IMAGES = 1000
 
 
 def _gallery_thread(model_id: int, stop: threading.Event):
-    """Two-phase gallery download: count all images, then download."""
+    """Stream gallery download: fetch pages and download immediately, max 1000 images."""
     state = _gallery_state[model_id]
     gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
     gallery_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
 
-    # Phase 1: paginate to collect all image info
-    all_imgs = []
     cursor = None
-    while not stop.is_set():
-        params = {"modelId": model_id, "limit": 200}
+    seen = 0
+    while not stop.is_set() and seen < _GALLERY_MAX_IMAGES:
+        remaining = _GALLERY_MAX_IMAGES - seen
+        limit = min(200, remaining)
+        params = {"modelId": model_id, "limit": limit}
         if cursor:
             params["cursor"] = cursor
         try:
@@ -373,39 +385,35 @@ def _gallery_thread(model_id: int, stop: threading.Event):
         items = data.get("items", [])
         if not items:
             break
-        for img in items:
-            iid, url = img.get("id"), img.get("url", "")
-            if iid and url:
-                all_imgs.append((iid, url, _extract_image_meta(img.get("meta"))))
+
         state["pages_fetched"] += 1
+
+        for img in items:
+            if stop.is_set() or seen >= _GALLERY_MAX_IMAGES:
+                break
+            iid, url = img.get("id"), img.get("url", "")
+            if not iid or not url:
+                continue
+            seen += 1
+            state["total"] = seen
+
+            jpeg = gallery_dir / f"{iid}.jpeg"
+            if jpeg.exists():
+                state["skipped"] += 1
+                continue
+            meta = _extract_image_meta(img.get("meta"))
+            if _download_image(url, jpeg):
+                state["downloaded"] += 1
+                if meta:
+                    jpeg.with_suffix(".json").write_text(
+                        json.dumps(meta, indent=2, ensure_ascii=False))
+            time.sleep(0.05)
+
         cursor = data.get("metadata", {}).get("nextCursor")
         if not cursor:
             break
 
-    if stop.is_set():
-        state["status"] = "stopped"
-        return
-
-    state["total"] = len(all_imgs)
-    state["status"] = "downloading"
-
-    # Phase 2: download images
-    for iid, url, meta in all_imgs:
-        if stop.is_set():
-            state["status"] = "stopped"
-            return
-        jpeg = gallery_dir / f"{iid}.jpeg"
-        if jpeg.exists():
-            state["skipped"] += 1
-            continue
-        if _download_image(url, jpeg):
-            state["downloaded"] += 1
-            if meta:
-                jpeg.with_suffix(".json").write_text(
-                    json.dumps(meta, indent=2, ensure_ascii=False))
-        time.sleep(0.1)
-
-    state["status"] = "done"
+    state["status"] = "stopped" if stop.is_set() else "done"
     _events.emit("lora.gallery.done",
                  f"Gallery done for {model_id}: {state['downloaded']} new, {state['skipped']} skipped",
                  severity="success", data={"model_id": model_id})
@@ -439,6 +447,7 @@ async def gallery_status(model_id: int):
         "skipped": state.get("skipped", 0),
         "total": state.get("total"),
         "pages_fetched": state.get("pages_fetched", 0),
+        "counted": state.get("counted", 0),
         "previews": _list_images(IMAGES_DIR / str(model_id) / "previews"),
         "gallery": _list_images(IMAGES_DIR / str(model_id) / "gallery"),
     })

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from config import MODELS_BASE, MODELS_JSON, REPO_DIR
+import catalogs as _catalogs
 from catalogs import (
     _models_data, _loras_data, _reload_models,
     _find_model, _all_categories, _build_catalog_response,
@@ -346,12 +347,13 @@ async def models_list():
 async def loras_list():
     """List LoRAs catalog with download/presence status."""
     _reload_models()
-    result_categories = _build_catalog_response(_loras_data, MODELS_BASE, _download_state)
+    ld = _catalogs._loras_data  # fresh reference after reload
+    result_categories = _build_catalog_response(ld, MODELS_BASE, _download_state)
 
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
-    lora_filenames = {m["file"] for cat in _loras_data.get("categories", []) for m in cat.get("models", [])}
+    lora_filenames = {m["file"] for cat in ld.get("categories", []) for m in cat.get("models", [])}
     queued_count = sum(1 for fn, s in _download_state.items() if fn in lora_filenames and s.get("status") == "queued")
     downloading_count = sum(1 for fn, s in _download_state.items() if fn in lora_filenames and s.get("status") == "downloading")
     global_speed = sum(s.get("speed", 0) for fn, s in _download_state.items() if fn in lora_filenames and s.get("status") == "downloading")
@@ -366,8 +368,8 @@ async def loras_list():
         free_bytes = 0
 
     return JSONResponse({
-        "version": _loras_data.get("version", 0),
-        "date": _loras_data.get("date", ""),
+        "version": ld.get("version", 0),
+        "date": ld.get("date", ""),
         "stats": {
             "queued_count": queued_count,
             "downloading_count": downloading_count,
