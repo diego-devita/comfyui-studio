@@ -627,6 +627,7 @@ async def gallery_status(model_id: int):
             if sz == 0:
                 continue
             total_bytes += sz
+            # Read metadata but strip heavy fields for listing
             meta = {}
             mf = f.with_suffix(".json")
             if mf.exists():
@@ -634,8 +635,10 @@ async def gallery_status(model_id: int):
                     meta = json.loads(mf.read_text())
                 except Exception:
                     pass
+            light_meta = {k: v for k, v in meta.items()
+                          if k not in ("raw_item", "generation_data", "raw_meta")}
             has_thumb = f.with_suffix(".thumb.jpg").exists()
-            result.append({"id": f.stem, "ext": f.suffix, "meta": meta,
+            result.append({"id": f.stem, "ext": f.suffix, "meta": light_meta,
                            "createdAt": meta.get("createdAt", ""),
                            "has_thumb": has_thumb})
         result.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
@@ -655,8 +658,24 @@ async def gallery_status(model_id: int):
         "previews": prev_list,
         "gallery_card": card_list, "gallery_card_bytes": card_bytes,
         "gallery_community": comm_list, "gallery_community_bytes": comm_bytes,
-        "gallery_community": _list_images(base / "gallery" / "community"),
     })
+
+
+@router.get("/api/admin/loras/{model_id}/gallery/{img_type}/{item_id}/meta")
+async def gallery_item_meta(model_id: int, img_type: str, item_id: str):
+    """Get full metadata (including generation_data) for a single gallery item."""
+    type_dirs = {"card": "gallery/card", "community": "gallery/community"}
+    if img_type not in type_dirs:
+        raise HTTPException(400, "Invalid type")
+    if ".." in item_id or "/" in item_id:
+        raise HTTPException(400, "Invalid id")
+    mf = IMAGES_DIR / str(model_id) / type_dirs[img_type] / f"{item_id}.json"
+    if not mf.exists():
+        raise HTTPException(404, "Metadata not found")
+    try:
+        return JSONResponse(json.loads(mf.read_text()))
+    except Exception:
+        raise HTTPException(500, "Failed to read metadata")
 
 
 @router.delete("/api/admin/loras/{model_id}/gallery")
