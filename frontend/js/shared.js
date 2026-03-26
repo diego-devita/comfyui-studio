@@ -229,8 +229,11 @@ function createLiveBar(elementId, intervalMs) {
 function copyToClipboard(text, triggerEl) {
   navigator.clipboard.writeText(text).then(function() {
     if (triggerEl) {
+      var old = triggerEl.querySelector('.copy-tip');
+      if (old) old.remove();
       triggerEl.style.opacity = '1';
       var tip = document.createElement('span');
+      tip.className = 'copy-tip';
       tip.textContent = 'Copied!';
       tip.style.cssText = 'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;';
       triggerEl.appendChild(tip);
@@ -247,7 +250,7 @@ function copyBtn(text) {
   var escaped = String(text).replace(/'/g, "\\'").replace(/\n/g, '\\n');
   return ' <span style="cursor:pointer;opacity:0.4;font-size:12px;transition:opacity 0.15s;position:relative;" ' +
     'onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" ' +
-    'onclick="event.stopPropagation();var el=this;navigator.clipboard.writeText(\'' + escaped + '\').then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" ' +
+    'onclick="event.stopPropagation();var el=this;var ot=el.querySelector(\'.copy-tip\');if(ot)ot.remove();navigator.clipboard.writeText(\'' + escaped + '\').then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.className=\'copy-tip\';tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" ' +
     'title="Copy"><span class="icon icon-copy icon-sm"></span></span>';
 }
 
@@ -256,6 +259,72 @@ function copyBtn(text) {
    ================================================================ */
 
 document.addEventListener('DOMContentLoaded', function() {
+  // ── Mobile nav: hamburger + drawer ──
+  (function() {
+    var nav = document.querySelector('.main-nav');
+    if (!nav) return;
+
+    // Create hamburger button
+    var hamburger = document.createElement('button');
+    hamburger.className = 'nav-hamburger';
+    hamburger.setAttribute('aria-label', 'Toggle navigation');
+    hamburger.innerHTML = '<span class="nav-hamburger-icon"></span>';
+
+    // Collect drawer links (all nav-links except settings gear, activity bell, logout, db button)
+    var allLinks = Array.prototype.slice.call(nav.querySelectorAll('.nav-link'));
+    var drawerLinks = [];
+    var keepInRow = [];
+    allLinks.forEach(function(link) {
+      if (link.classList.contains('nav-activity') ||
+          link.classList.contains('nav-logout') ||
+          link.querySelector('.icon-gear')) {
+        keepInRow.push(link);
+      } else {
+        drawerLinks.push(link);
+      }
+    });
+
+    // Build wrapper: .nav-links > .nav-links-inner > [links]
+    var wrapper = document.createElement('div');
+    wrapper.className = 'nav-links';
+    var inner = document.createElement('div');
+    inner.className = 'nav-links-inner';
+    drawerLinks.forEach(function(link) { inner.appendChild(link); });
+    wrapper.appendChild(inner);
+
+    // Insert hamburger first, then wrapper, then the kept-in-row items stay
+    nav.insertBefore(hamburger, nav.firstChild);
+    // Insert wrapper before the first remaining element (gear/bell/logout)
+    if (keepInRow.length > 0) {
+      nav.insertBefore(wrapper, keepInRow[0]);
+    } else {
+      nav.appendChild(wrapper);
+    }
+
+    // Toggle
+    hamburger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var isOpen = wrapper.classList.toggle('open');
+      hamburger.classList.toggle('open', isOpen);
+    });
+
+    // Close on link click inside drawer
+    inner.addEventListener('click', function(e) {
+      if (e.target.closest('.nav-link')) {
+        wrapper.classList.remove('open');
+        hamburger.classList.remove('open');
+      }
+    });
+
+    // Close on click outside
+    document.addEventListener('click', function(e) {
+      if (wrapper.classList.contains('open') && !nav.contains(e.target)) {
+        wrapper.classList.remove('open');
+        hamburger.classList.remove('open');
+      }
+    });
+  })();
+
   // Inject confirm dialog if not present
   if (!document.getElementById('studioDialog')) {
     var dlg = document.createElement('dialog');
@@ -290,41 +359,6 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       document.body.insertBefore(panel, document.body.firstChild);
     }
-  }
-
-  // Inject DB safe-shutdown button before the logout link
-  var logoutLink = document.querySelector('.nav-logout');
-  if (logoutLink && !document.getElementById('dbSafeBtn')) {
-    var dbBtn = document.createElement('a');
-    dbBtn.href = '#';
-    dbBtn.id = 'dbSafeBtn';
-    dbBtn.className = 'nav-link';
-    dbBtn.title = 'Prepare safe shutdown (flush DB)';
-    dbBtn.style.cssText = 'color: #4dabf7; transition: color 0.2s;';
-    dbBtn.innerHTML = '<span class="icon icon-database icon-md" style="background-color: #4dabf7;"></span>';
-    dbBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      var icon = dbBtn.querySelector('.icon');
-      dbBtn.style.pointerEvents = 'none';
-      icon.style.backgroundColor = 'var(--muted)';
-      apiFetch('/api/admin/system/prepare-shutdown', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          icon.style.backgroundColor = '#51cf66';
-          dbBtn.title = 'Safe to power off';
-          showToast('DB flushed — safe to power off', 5000, 'success');
-        })
-        .catch(function(err) {
-          icon.style.backgroundColor = '#ff6b6b';
-          dbBtn.title = 'Flush failed';
-          if (err.message !== 'auth') showToast('Flush failed: ' + err.message, 5000, 'error');
-        })
-        .finally(function() {
-          dbBtn.style.pointerEvents = '';
-          setTimeout(function() { icon.style.backgroundColor = '#4dabf7'; dbBtn.title = 'Prepare safe shutdown (flush DB)'; }, 10000);
-        });
-    });
-    logoutLink.parentNode.insertBefore(dbBtn, logoutLink);
   }
 
   initActivityPanel();
