@@ -367,7 +367,7 @@ async def models_download(filename: str):
     if state.get("status") in ("downloading", "queued"):
         return JSONResponse({"status": state["status"], "file": filename})
 
-    _enqueue_download(model)
+    _enqueue_download(model, source="manual")
     return JSONResponse({"status": "queued", "file": filename})
 
 
@@ -388,7 +388,7 @@ async def models_download_batch(body: BatchDownloadRequest):
             skipped.append(filename)
             continue
 
-        _enqueue_download(model)
+        _enqueue_download(model, source="batch")
         queued.append(filename)
 
     return JSONResponse({"queued": queued, "skipped": skipped})

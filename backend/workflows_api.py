@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from config import REPO_DIR, WORKFLOWS_DIR
 from catalogs import _find_model, _reload_models
+import db
 from download import _enqueue_download
 from workflows import (
     _load_workflows_index_raw, _load_workflows_index,
@@ -30,6 +31,11 @@ async def list_workflows():
         required_models = manifest.get("required_models", [])
         missing_models = [m for m in required_models if not _check_model_exists(m)]
 
+        # Check download state from DB for missing models
+        dl_records = db.get_downloads_for_files(missing_models) if missing_models else {}
+        downloading = [f for f in missing_models if dl_records.get(f, {}).get("status") in ("queued", "downloading")]
+        still_missing = [f for f in missing_models if f not in downloading]
+
         required_nodes = manifest.get("required_nodes", [])
         missing_nodes = [n for n in required_nodes if n not in installed_nodes]
 
@@ -51,7 +57,8 @@ async def list_workflows():
             "models_status": {
                 "total": len(required_models),
                 "present": len(required_models) - len(missing_models),
-                "missing": missing_models,
+                "missing": still_missing,
+                "downloading": downloading,
             },
             "nodes_status": {
                 "total": len(required_nodes),
@@ -120,7 +127,7 @@ async def install_workflow_models(workflow_id: str):
     for filename in missing:
         model = _find_model(filename)
         if model:
-            _enqueue_download(model)
+            _enqueue_download(model, source=f"workflow:{workflow_id}")
             queued.append(filename)
         else:
             skipped.append(filename)

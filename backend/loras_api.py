@@ -351,7 +351,7 @@ async def add_civitai(body: AddCivitaiRequest):
         cat_map[cat_id]["models"].append(entry)
         existing.add(filename)
         added.append(filename)
-        _enqueue_download(entry)
+        _enqueue_download(entry, source="civitai-add")
 
         for img in ver.get("images", []):
             url = img.get("url", "")

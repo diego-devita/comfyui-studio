@@ -52,7 +52,7 @@ async def llm_model_download(filename: str):
 
     item = dict(model)
     item["_base_dir"] = str(LLM_MODELS_DIR)
-    _enqueue_download(item)
+    _enqueue_download(item, source="manual")
     return JSONResponse({"status": "queued", "file": filename})
 
 
