@@ -147,6 +147,20 @@
     color: rgba(255,255,255,0.7); font-size: 10px; padding: 1px 5px;
     border-radius: 3px; pointer-events: none; line-height: 1.4;
   }
+  .gallery-thumb .thumb-star {
+    position: absolute; top: 4px; left: 4px; width: 20px; height: 20px;
+    background: none; border: none; cursor: pointer; padding: 0; z-index: 2;
+    font-size: 14px; line-height: 1; opacity: 0.4; transition: opacity 0.15s;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+  }
+  .gallery-thumb .thumb-star.starred { opacity: 1; }
+  .gallery-thumb:hover .thumb-star { opacity: 0.8; }
+  .detail-star {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; font-size: 16px; color: var(--muted);
+    transition: all 0.15s;
+  }
+  .detail-star.starred { color: #f5c518; border-color: #f5c518; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
   #detailsMetaContent::-webkit-scrollbar { display: none; }
   .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
@@ -345,6 +359,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox" id="galleryStarredOnly"> Starred only</label>
     </div>
     <div class="gallery-urls" id="galleryUrls"></div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
@@ -1825,7 +1840,10 @@
     if (!galleryModelId) return;
     try {
       var galleryUrl = '/api/admin/loras/' + galleryModelId + '/gallery';
-      if (galleryVersionId) galleryUrl += '?version_id=' + galleryVersionId;
+      var qs = [];
+      if (galleryVersionId) qs.push('version_id=' + galleryVersionId);
+      if (document.getElementById('galleryStarredOnly').checked) qs.push('starred=true');
+      if (qs.length) galleryUrl += '?' + qs.join('&');
       var resp = await apiFetch(galleryUrl);
       if (!resp.ok) return;
       var data = await resp.json();
@@ -1845,7 +1863,7 @@
           progressFill.classList.remove('indeterminate');
           progressFill.style.width = Math.min(total > 0 ? Math.round(done / total * 100) : 0, 100) + '%';
         }
-        var dlText = 'Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' / ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
+        var dlText = 'Downloaded ' + done + (total > 0 ? ' / ' + total : '') + ((data.skipped || 0) > 0 ? ' (' + (data.skipped || 0) + ' cached)' : '');
         var elapsed = (Date.now() - galleryDlStartTime) / 1000;
         if (done > 0 && elapsed > 3) {
           var rate = (done / elapsed * 60).toFixed(1);
@@ -1886,7 +1904,8 @@
           civitai_id: m.civitai_id || img.id,
           createdAt: img.createdAt || m.createdAt || '',
           username: m.username || '',
-          has_thumb: img.has_thumb || false
+          has_thumb: img.has_thumb || false,
+          starred: img.starred || false
         };
       }
       var card = (data.gallery_card || []).map(function(img) { return mapImg(img, 'gallery-card', 'card', 'card-'); });
@@ -2002,6 +2021,23 @@
     badge.className = 'thumb-idx';
     badge.textContent = idx;
     thumb.appendChild(badge);
+    // Star button on thumbnail
+    var star = document.createElement('button');
+    star.className = 'thumb-star' + (img.starred ? ' starred' : '');
+    star.textContent = img.starred ? '\u2605' : '\u2606';
+    star.title = img.starred ? 'Starred' : 'Not starred';
+    star.addEventListener('click', function(e) {
+      e.stopPropagation();
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
+        return r.json();
+      }).then(function(d) {
+        img.starred = d.starred;
+        star.className = 'thumb-star' + (d.starred ? ' starred' : '');
+        star.textContent = d.starred ? '\u2605' : '\u2606';
+        star.title = d.starred ? 'Starred' : 'Not starred';
+      });
+    });
+    thumb.appendChild(star);
     return thumb;
   }
 
@@ -2087,6 +2123,12 @@
    'galleryType', 'galleryWithMeta', 'galleryFromPlatform', 'galleryRemix', 'galleryCap'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
+  document.getElementById('galleryStarredOnly').addEventListener('change', function() {
+    // Re-poll to get filtered list from server
+    galleryImages = []; galleryImageIds = new Set();
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty"><span class="spinner sm" style="vertical-align:middle;margin-right:8px"></span>Loading...</div>';
+    pollGallery();
+  });
   document.getElementById('gallerySearch').addEventListener('input', function() {
     var q = this.value.trim();
     document.querySelectorAll('#galleryGrid .gallery-thumb').forEach(function(thumb) {
@@ -2115,7 +2157,29 @@
       container.innerHTML = '<img id="detailImg" src="' + src + '" style="max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px">';
     }
     _lastRenderedMeta = img.meta;
-    document.getElementById('detailMeta').innerHTML = renderMeta(img.meta);
+    // Star button at top-right of detail panel
+    var starHtml = '<div style="text-align:right;margin-bottom:8px"><button class="detail-star' +
+      (img.starred ? ' starred' : '') + '" id="detailStarBtn" title="' +
+      (img.starred ? 'Starred' : 'Not starred') + '">' +
+      (img.starred ? '\u2605' : '\u2606') + '</button></div>';
+    document.getElementById('detailMeta').innerHTML = starHtml + renderMeta(img.meta);
+    document.getElementById('detailStarBtn').addEventListener('click', function() {
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
+        return r.json();
+      }).then(function(d) {
+        img.starred = d.starred;
+        var btn = document.getElementById('detailStarBtn');
+        btn.className = 'detail-star' + (d.starred ? ' starred' : '');
+        btn.textContent = d.starred ? '\u2605' : '\u2606';
+        btn.title = d.starred ? 'Starred' : 'Not starred';
+        // Also update thumbnail star
+        var thumb = document.querySelector('[data-key="' + img.key + '"] .thumb-star');
+        if (thumb) {
+          thumb.className = 'thumb-star' + (d.starred ? ' starred' : '');
+          thumb.textContent = d.starred ? '\u2605' : '\u2606';
+        }
+      });
+    });
     document.getElementById('detailPrev').style.display = idx > 0 ? '' : 'none';
     document.getElementById('detailNext').style.display = idx < galleryImages.length - 1 ? '' : 'none';
   }

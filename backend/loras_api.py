@@ -848,7 +848,8 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
 
 
 @router.get("/api/admin/loras/{model_id}/gallery")
-async def gallery_status(model_id: int, version_id: int | None = None):
+async def gallery_status(model_id: int, version_id: int | None = None,
+                         starred: bool = False):
     """Get gallery download status and image listing from SQLite.
 
     This replaces the old filesystem-scanning approach. The DB query is
@@ -863,11 +864,11 @@ async def gallery_status(model_id: int, version_id: int | None = None):
     # Query images from SQLite, split by source (card vs community)
     if version_id:
         # Original images belong to model, not version — always query by model_id
-        card_list = _gdb.list_images_by_model(model_id, source="original")
-        comm_list = _gdb.list_images_by_version(version_id, source="community")
+        card_list = _gdb.list_images_by_model(model_id, source="original", starred_only=starred)
+        comm_list = _gdb.list_images_by_version(version_id, source="community", starred_only=starred)
     else:
-        card_list = _gdb.list_images_by_model(model_id, source="original")
-        comm_list = _gdb.list_images_by_model(model_id, source="community")
+        card_list = _gdb.list_images_by_model(model_id, source="original", starred_only=starred)
+        comm_list = _gdb.list_images_by_model(model_id, source="community", starred_only=starred)
 
     # Convert DB rows to the format the frontend expects.
     # Each item needs: id, ext, meta (light), createdAt, has_thumb
@@ -876,6 +877,7 @@ async def gallery_status(model_id: int, version_id: int | None = None):
             "id": row["civitai_id"],
             "ext": row["ext"],
             "has_thumb": bool(row.get("thumb_path")),
+            "starred": bool(row.get("starred")),
             "createdAt": row.get("created_at", ""),
             "meta": {
                 "civitai_id": row.get("civitai_id"),
@@ -978,6 +980,16 @@ async def gallery_delete(model_id: int, version_id: int | None = None):
         del _gallery_state[model_id]
     return JSONResponse({"deleted": count + len(originals)})
 
+
+
+@router.post("/api/admin/loras/gallery/{item_id}/star")
+async def toggle_star(item_id: str):
+    """Toggle the starred flag on a gallery image.
+
+    Returns the new starred state. Used by the star button in the UI.
+    """
+    new_state = _gdb.toggle_starred(item_id)
+    return JSONResponse({"starred": new_state})
 
 
 @router.get("/api/admin/loras/gallery/media/{item_id}")

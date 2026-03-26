@@ -121,6 +121,9 @@ def init_gallery_db():
             source        TEXT NOT NULL DEFAULT 'community',
             search_mode   TEXT DEFAULT 'fixed',
 
+            -- User flags
+            starred       INTEGER DEFAULT 0,
+
             -- Extracted prompt for full-text search
             prompt        TEXT DEFAULT ''
         );
@@ -312,6 +315,24 @@ def link_version(civitai_id: str, version_id: int):
     conn.commit()
 
 
+def toggle_starred(civitai_id: str) -> bool:
+    """Toggle the starred flag on an image. Returns new starred state.
+
+    Used by the UI star button — one click stars, another unstars.
+    """
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE gallery_images SET starred = NOT starred WHERE civitai_id = ?",
+        (str(civitai_id),)
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT starred FROM gallery_images WHERE civitai_id = ?",
+        (str(civitai_id),)
+    ).fetchone()
+    return bool(row["starred"]) if row else False
+
+
 def get_image(civitai_id: str) -> dict | None:
     """Get a single image record by its ID."""
     conn = _get_conn()
@@ -323,7 +344,8 @@ def get_image(civitai_id: str) -> dict | None:
 
 def list_images_by_version(version_id: int, source: str | None = None,
                            order_by: str = "created_at",
-                           order_desc: bool = True) -> list[dict]:
+                           order_desc: bool = True,
+                           starred_only: bool = False) -> list[dict]:
     """List all images associated with a specific model version.
 
     Primary query for the gallery UI: shows images linked to a version
@@ -335,23 +357,28 @@ def list_images_by_version(version_id: int, source: str | None = None,
         order_by = "created_at"
     direction = "DESC" if order_desc else "ASC"
 
+    wheres = ["iv.version_id = ?"]
+    params: list = [version_id]
+    if source:
+        wheres.append("g.source = ?")
+        params.append(source)
+    if starred_only:
+        wheres.append("g.starred = 1")
+
     sql = f"""
         SELECT g.* FROM gallery_images g
         JOIN image_versions iv ON g.civitai_id = iv.civitai_id
-        WHERE iv.version_id = ?
-        {"AND g.source = ?" if source else ""}
+        WHERE {" AND ".join(wheres)}
         ORDER BY g.{order_by} {direction}
     """
-    params = [version_id]
-    if source:
-        params.append(source)
     rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 
 def list_images_by_model(model_id: int, source: str | None = None,
                          order_by: str = "created_at",
-                         order_desc: bool = True) -> list[dict]:
+                         order_desc: bool = True,
+                         starred_only: bool = False) -> list[dict]:
     """List all images for a model (across all versions).
 
     Used for original/card images which belong to the model, not a version.
@@ -363,15 +390,19 @@ def list_images_by_model(model_id: int, source: str | None = None,
         order_by = "created_at"
     direction = "DESC" if order_desc else "ASC"
 
+    wheres = ["model_id = ?"]
+    params: list = [model_id]
+    if source:
+        wheres.append("source = ?")
+        params.append(source)
+    if starred_only:
+        wheres.append("starred = 1")
+
     sql = f"""
         SELECT * FROM gallery_images
-        WHERE model_id = ?
-        {"AND source = ?" if source else ""}
+        WHERE {" AND ".join(wheres)}
         ORDER BY {order_by} {direction}
     """
-    params = [model_id]
-    if source:
-        params.append(source)
     rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 

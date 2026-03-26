@@ -1,7 +1,7 @@
 {
   "min_runtime": 0,
   "app_version": "13.0.0",
-  "date": "2026-03-26 12:21",
+  "date": "2026-03-26 14:46",
   "components": {
     "runtime": {"version": 3, "date": "2026-03-24 15:47"},
     "backend": {"version": "13.0.0", "date": "2026-03-26 12:02", "dir": "backend/"},
