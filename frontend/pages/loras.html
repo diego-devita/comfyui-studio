@@ -1692,7 +1692,14 @@
         appendNewThumbs(newItems);
       }
 
-      document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community';
+      function fmtSize(bytes) {
+        if (!bytes) return '';
+        if (bytes >= 100 * 1024 * 1024) return (bytes / (1024*1024*1024)).toFixed(1) + ' GB';
+        return (bytes / (1024*1024)).toFixed(0) + ' MB';
+      }
+      var totalBytes = (data.gallery_card_bytes || 0) + (data.gallery_community_bytes || 0);
+      var sizeStr = totalBytes ? ' (' + fmtSize(totalBytes) + ')' : '';
+      document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community' + sizeStr;
       // Replace spinner with empty message if truly empty
       if (all.length === 0 && status !== 'downloading') {
         document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';

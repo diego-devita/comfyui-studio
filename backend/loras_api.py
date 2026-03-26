@@ -615,13 +615,18 @@ async def gallery_status(model_id: int):
     """Get gallery download status and list of images."""
     state = _gallery_state.get(model_id, {})
 
-    def _list_images(dirpath: Path) -> list:
+    def _list_images(dirpath: Path) -> tuple[list, int]:
         if not dirpath.is_dir():
-            return []
+            return [], 0
         result = []
+        total_bytes = 0
         for f in sorted(dirpath.iterdir()):
-            if f.suffix not in (".jpeg", ".mp4") or f.stat().st_size == 0:
+            if f.suffix not in (".jpeg", ".mp4"):
                 continue
+            sz = f.stat().st_size
+            if sz == 0:
+                continue
+            total_bytes += sz
             meta = {}
             mf = f.with_suffix(".json")
             if mf.exists():
@@ -633,11 +638,13 @@ async def gallery_status(model_id: int):
             result.append({"id": f.stem, "ext": f.suffix, "meta": meta,
                            "createdAt": meta.get("createdAt", ""),
                            "has_thumb": has_thumb})
-        # Sort by createdAt descending (newest first)
         result.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-        return result
+        return result, total_bytes
 
     base = IMAGES_DIR / str(model_id)
+    card_list, card_bytes = _list_images(base / "gallery" / "card")
+    comm_list, comm_bytes = _list_images(base / "gallery" / "community")
+    prev_list, _ = _list_images(base / "previews")
     return JSONResponse({
         "status": state.get("status", "idle"),
         "downloaded": state.get("downloaded", 0),
@@ -645,8 +652,9 @@ async def gallery_status(model_id: int):
         "total": state.get("total"),
         "pages_fetched": state.get("pages_fetched", 0),
         "counted": state.get("counted", 0),
-        "previews": _list_images(base / "previews"),
-        "gallery_card": _list_images(base / "gallery" / "card"),
+        "previews": prev_list,
+        "gallery_card": card_list, "gallery_card_bytes": card_bytes,
+        "gallery_community": comm_list, "gallery_community_bytes": comm_bytes,
         "gallery_community": _list_images(base / "gallery" / "community"),
     })
 
