@@ -417,47 +417,74 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
 _GALLERY_MAX_IMAGES = 1000
 
 
+def _gallery_download_one(iid: str, url: str, meta: dict, dest_dir: Path,
+                          fetch_gen_data: bool, stop: threading.Event) -> str:
+    """Download a single gallery item. Returns 'ok', 'skipped', or 'failed'."""
+    ext = ".mp4" if ".mp4" in url else ".jpeg"
+    dest = dest_dir / f"{iid}{ext}"
+    if dest.exists() and dest.stat().st_size > 0:
+        if ext == ".mp4":
+            _extract_thumbnail(dest)
+        return "skipped"
+    # Retry up to 5 times with 2s delay
+    for attempt in range(5):
+        if stop.is_set():
+            return "failed"
+        if _download_image(url, dest):
+            break
+        time.sleep(2)
+    else:
+        return "failed"
+    if ext == ".mp4":
+        _extract_thumbnail(dest)
+    # Fetch generation data from CivitAI tRPC
+    if fetch_gen_data and meta.get("civitai_id"):
+        gen = _fetch_generation_data(meta["civitai_id"])
+        if gen:
+            meta["generation_data"] = gen
+    if meta:
+        dest.with_suffix(".json").write_text(
+            json.dumps(meta, indent=2, ensure_ascii=False))
+    return "ok"
+
+
+_GALLERY_WORKERS = 6
+
+
 def _gallery_download_batch(items: list[tuple], dest_dir: Path,
                             state: dict, stop: threading.Event,
                             seen: set, fetch_gen_data: bool = False) -> bool:
-    """Download a batch of (id, url, meta) items. Returns False if stopped.
-    Deduplicates by URL-derived UUID. Retries failed downloads up to 5 times."""
+    """Download a batch of (id, url, meta) items with parallel workers.
+    Deduplicates by URL-derived UUID. Returns False if stopped."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # Filter duplicates first
+    todo = []
     for iid, url, meta in items:
-        if stop.is_set():
-            return False
         url_key = _url_to_id(url) or iid
         if url_key in seen:
             continue
         seen.add(url_key)
-        ext = ".mp4" if ".mp4" in url else ".jpeg"
-        dest = dest_dir / f"{iid}{ext}"
-        if dest.exists() and dest.stat().st_size > 0:
-            if ext == ".mp4":
-                _extract_thumbnail(dest)
-            state["skipped"] += 1
-            continue
-        # Retry up to 5 times with 2s delay
-        ok = False
-        for attempt in range(5):
+        todo.append((iid, url, meta))
+
+    if not todo:
+        return True
+
+    with ThreadPoolExecutor(max_workers=_GALLERY_WORKERS) as pool:
+        futures = {
+            pool.submit(_gallery_download_one, iid, url, meta, dest_dir,
+                        fetch_gen_data, stop): iid
+            for iid, url, meta in todo
+        }
+        for fut in as_completed(futures):
             if stop.is_set():
+                pool.shutdown(wait=False, cancel_futures=True)
                 return False
-            if _download_image(url, dest):
-                ok = True
-                break
-            time.sleep(2)
-        if not ok:
-            continue
-        if ext == ".mp4":
-            _extract_thumbnail(dest)
-        state["downloaded"] += 1
-        # Fetch generation data from CivitAI tRPC
-        if fetch_gen_data and meta.get("civitai_id"):
-            gen = _fetch_generation_data(meta["civitai_id"])
-            if gen:
-                meta["generation_data"] = gen
-        if meta:
-            dest.with_suffix(".json").write_text(
-                json.dumps(meta, indent=2, ensure_ascii=False))
+            result = fut.result()
+            if result == "ok":
+                state["downloaded"] += 1
+            elif result == "skipped":
+                state["skipped"] += 1
     return True
 
 
