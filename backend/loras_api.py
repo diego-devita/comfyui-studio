@@ -470,7 +470,7 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
     rel_meta = _gdb.meta_path_for(source, model_id, iid)
     dest = _gdb.abs_path(rel_file)
 
-    # Also skip if file exists on disk but not in DB (migration edge case)
+    # Skip if file already on disk (e.g. previous download that wasn't in DB)
     if dest.exists() and dest.stat().st_size > 0:
         return "skipped"
 

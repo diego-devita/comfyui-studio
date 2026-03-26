@@ -171,13 +171,9 @@ async def _start_event_consumer():
             import shutil
             shutil.move(str(JOBS_DIR), str(JOBS_DIR.parent / "jobs_old"))
 
-    # Initialize gallery image store (SQLite) and migrate old directory structure
+    # Initialize gallery image store (SQLite)
     import gallery_db as _gdb
     _gdb.init_gallery_db()
-    migrated = _gdb.migrate_from_directories(_gdb.IMAGES_DIR)
-    if migrated > 0:
-        _events.emit("system.migration", f"Migrated {migrated} gallery images to flat store",
-                     severity="info")
 
     # Mark any jobs that were running/queued as stalled
     stalled = _db.mark_stalled_jobs()
