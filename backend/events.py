@@ -178,7 +178,9 @@ async def _start_event_consumer():
             p.unlink()
     for legacy_dir in ["jobs", "jobs_old"]:
         p = STUDIO_DIR / legacy_dir
-        if p.is_dir():
+        if p.is_symlink():
+            p.unlink()
+        elif p.is_dir():
             _shutil.rmtree(p)
 
     # Initialize gallery image store (SQLite)
