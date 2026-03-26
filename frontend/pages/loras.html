@@ -1252,9 +1252,8 @@
       if (!_lastRenderedMeta || !galleryModelId) return;
       var img = galleryImages[detailIdx];
       if (!img) return;
-      var source = img.source === 'card' ? 'card' : 'community';
       detailsBtn.disabled = true; detailsBtn.textContent = 'Loading...';
-      apiFetch('/api/admin/loras/' + galleryModelId + '/gallery/' + source + '/' + img.id + '/meta').then(function(resp) {
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/meta').then(function(resp) {
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         return resp.json();
       }).then(function(fullMeta) {
@@ -1825,7 +1824,9 @@
   async function pollGallery() {
     if (!galleryModelId) return;
     try {
-      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery');
+      var galleryUrl = '/api/admin/loras/' + galleryModelId + '/gallery';
+      if (galleryVersionId) galleryUrl += '?version_id=' + galleryVersionId;
+      var resp = await apiFetch(galleryUrl);
       if (!resp.ok) return;
       var data = await resp.json();
 
@@ -1964,7 +1965,7 @@
 
   function makeThumb(img) {
     var ext = img.ext || '.jpeg';
-    var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+    var src = '/api/admin/loras/gallery/media/' + img.id + ext;
     var thumb = document.createElement('div');
     thumb.className = 'gallery-thumb';
     thumb.dataset.key = img.key;
@@ -1980,7 +1981,7 @@
 
     if (ext === '.mp4') {
       var thumbUrl = img.has_thumb
-        ? '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.thumb.jpg'
+        ? '/api/admin/loras/gallery/thumb/' + img.id
         : '';
       thumb.dataset.videoSrc = src;
       thumb.dataset.thumbSrc = thumbUrl;
@@ -2103,7 +2104,7 @@
     var img = galleryImages[idx];
     if (!img) return;
     var ext = img.ext || '.jpeg';
-    var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+    var src = '/api/admin/loras/gallery/media/' + img.id + ext;
 
     document.getElementById('detailOverlay').style.display = 'flex';
     var container = document.querySelector('.detail-image');

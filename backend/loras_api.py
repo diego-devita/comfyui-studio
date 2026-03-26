@@ -21,6 +21,11 @@ router = APIRouter()
 
 IMAGES_DIR = CATALOGS_DIR / ".images"
 
+# Gallery store: flat sharded media + SQLite index
+# Imported here so download workers can use it.
+# The actual DB init happens at startup via events.py.
+import gallery_db as _gdb
+
 _gallery_state: dict = {}
 
 
@@ -430,16 +435,46 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
 _GALLERY_MAX_IMAGES = 1000
 
 
-def _gallery_download_one(iid: str, url: str, meta: dict, dest_dir: Path,
-                          fetch_gen_data: bool, stop: threading.Event) -> str:
-    """Download a single gallery item. Returns 'ok', 'skipped', or 'failed'."""
+def _gallery_download_one(iid: str, url: str, meta: dict,
+                          model_id: int, version_id: int | None,
+                          fetch_gen_data: bool, stop: threading.Event,
+                          search_mode: str = "fixed") -> str:
+    """Download a single gallery image/video to the flat store.
+
+    This is the per-item worker function called by the ThreadPoolExecutor.
+    Each call is independent and thread-safe:
+    1. Check if already downloaded (DB lookup, faster than filesystem)
+    2. Download with retry (5 attempts, 200ms stop-checks)
+    3. Extract thumbnail for videos (ffmpeg)
+    4. Fetch generation data from CivitAI tRPC
+    5. Save metadata JSON to sharded meta/ directory
+    6. Insert into SQLite gallery_images + link to version
+
+    Returns 'ok', 'skipped', or 'failed'.
+    """
     ext = ".mp4" if ".mp4" in url else ".jpeg"
-    dest = dest_dir / f"{iid}{ext}"
-    if dest.exists() and dest.stat().st_size > 0:
-        if ext == ".mp4":
-            _extract_thumbnail(dest)
+
+    # Skip if already in the database — faster than checking filesystem
+    if _gdb.image_exists(iid):
+        # Still link to this version (image may exist from another version's download)
+        if version_id:
+            _gdb.link_version(iid, version_id)
         return "skipped"
-    # Retry up to 5 times with 2s delay (check stop every 200ms)
+
+    # Compute sharded file paths
+    rel_file = _gdb.media_path(iid, ext)
+    rel_thumb = _gdb.thumb_path(iid) if ext == ".mp4" else None
+    rel_meta = _gdb.meta_path(iid)
+    dest = _gdb.abs_path(rel_file)
+
+    # Also skip if file exists on disk but not in DB (migration edge case)
+    if dest.exists() and dest.stat().st_size > 0:
+        return "skipped"
+
+    # Retry up to 5 times with 2s delay between attempts.
+    # Check stop event every 200ms to allow fast cancellation
+    # instead of blocking for the full 2s sleep.
+    dest.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(5):
         if stop.is_set():
             return "failed"
@@ -451,28 +486,94 @@ def _gallery_download_one(iid: str, url: str, meta: dict, dest_dir: Path,
             time.sleep(0.2)
     else:
         return "failed"
+
+    # Extract thumbnail from first video frame for gallery display.
+    # Videos in the gallery are shown as static <img> thumbnails to avoid
+    # loading heavy <video> elements in the DOM.
+    has_thumb = False
     if ext == ".mp4":
         _extract_thumbnail(dest)
-    # Fetch generation data from CivitAI tRPC
+        has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
+
+    # Fetch generation data (resources, tools, techniques) from CivitAI tRPC.
+    # This gives us the list of LoRAs/checkpoints used, which the REST API
+    # doesn't include in the meta field.
     if fetch_gen_data and meta.get("civitai_id"):
         gen = _fetch_generation_data(meta["civitai_id"])
         if gen:
             meta["generation_data"] = gen
+
+    # Save full metadata JSON to the sharded meta/ directory.
+    # This includes raw_item, generation_data, and everything else.
+    # The DB only stores light fields; heavy data lives in JSON on disk.
+    meta_dest = _gdb.abs_path(rel_meta)
+    meta_dest.parent.mkdir(parents=True, exist_ok=True)
     if meta:
-        dest.with_suffix(".json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False))
+        meta_dest.write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+
+    # Extract stats for DB storage
+    stats = meta.get("stats") or {}
+    raw_meta = meta.get("raw_meta") or {}
+    prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
+
+    # Insert into gallery database
+    _gdb.insert_image({
+        "civitai_id": iid,
+        "file_uuid": _url_to_id(url),
+        "type": meta.get("type", "video" if ext == ".mp4" else "image"),
+        "ext": ext,
+        "file_path": rel_file,
+        "thumb_path": rel_thumb if has_thumb else None,
+        "meta_path": rel_meta if meta else None,
+        "model_id": model_id,
+        "post_id": meta.get("postId"),
+        "post_title": meta.get("postTitle", ""),
+        "username": meta.get("username", ""),
+        "base_model": meta.get("baseModel", ""),
+        "width": meta.get("width"),
+        "height": meta.get("height"),
+        "duration": meta.get("duration"),
+        "audio": meta.get("audio"),
+        "file_size": dest.stat().st_size if dest.exists() else 0,
+        "created_at": meta.get("createdAt"),
+        "reactions": stats.get("heartCount", 0) + stats.get("likeCount", 0),
+        "comments": stats.get("commentCount", 0),
+        "collected": stats.get("collectedCount", 0) if "collectedCount" in stats else 0,
+        "has_meta": bool(meta),
+        "has_gen_data": bool(meta.get("generation_data")),
+        "source": meta.get("_source", "community"),
+        "search_mode": search_mode,
+        "prompt": prompt,
+    })
+
+    # Link this image to the specific version it was found under.
+    # The same image can be linked to multiple versions.
+    if version_id:
+        _gdb.link_version(iid, version_id)
+
     return "ok"
 
 
-def _gallery_download_batch(items: list[tuple], dest_dir: Path,
+def _gallery_download_batch(items: list[tuple],
+                            model_id: int, version_id: int | None,
                             state: dict, stop: threading.Event,
                             seen: set, fetch_gen_data: bool = False,
-                            workers: int = 6) -> bool:
+                            workers: int = 6,
+                            search_mode: str = "fixed") -> bool:
     """Download a batch of (id, url, meta) items with parallel workers.
-    Deduplicates by URL-derived UUID. Returns False if stopped."""
+
+    Orchestrates the download of multiple gallery items concurrently.
+    Deduplicates by URL-derived UUID within the current download session
+    (the 'seen' set). Cross-session dedup happens in _gallery_download_one
+    via the SQLite database.
+
+    Returns False if stopped (so the caller can break out of the pagination loop).
+    """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # Filter duplicates first
+    # Filter duplicates within this session using URL UUIDs.
+    # This prevents downloading the same image twice if it appears
+    # in both card and community results, or across paginated pages.
     todo = []
     for iid, url, meta in items:
         url_key = _url_to_id(url) or iid
@@ -486,8 +587,9 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_gallery_download_one, iid, url, meta, dest_dir,
-                        fetch_gen_data, stop): iid
+            pool.submit(_gallery_download_one, iid, url, meta,
+                        model_id, version_id, fetch_gen_data, stop,
+                        search_mode): iid
             for iid, url, meta in todo
         }
         for fut in as_completed(futures):
@@ -505,11 +607,6 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
 def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     """Download model card images + community images for a CivitAI model."""
     state = _gallery_state[model_id]
-    base_dir = IMAGES_DIR / str(model_id) / "gallery"
-    card_dir = base_dir / "card"
-    community_dir = base_dir / "community"
-    card_dir.mkdir(parents=True, exist_ok=True)
-    community_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
     max_community = state.get("max_images", 200)
     num_workers = api_params.get("workers", 6)
@@ -537,15 +634,18 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 continue
             meta = {"civitai_id": img.get("id"), "url": url,
                     "type": img.get("type", "image"),
-                    "width": img.get("width"), "height": img.get("height")}
+                    "width": img.get("width"), "height": img.get("height"),
+                    "_source": "card"}
             if img.get("id"):
                 meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}"
             card_imgs.append((str(iid), url, meta))
 
+    version_id = api_params.get("version_id")
     state["total"] = len(card_imgs) + max_community
     seen: set[str] = set()
 
-    if not _gallery_download_batch(card_imgs, card_dir, state, stop, seen, workers=num_workers):
+    if not _gallery_download_batch(card_imgs, model_id, version_id, state, stop, seen,
+                                   workers=num_workers, search_mode=mode):
         state["status"] = "stopped"
         return
 
@@ -677,12 +777,14 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 "stats": img.get("stats"),
                 "raw_meta": img.get("meta"),
                 "raw_item": img,
+                "_source": "community",
             }
             batch.append((iid, full_url, meta))
             community_downloaded += 1
 
-        if not _gallery_download_batch(batch, community_dir, state, stop, seen,
-                                              fetch_gen_data=True, workers=num_workers):
+        if not _gallery_download_batch(batch, model_id, version_id, state, stop, seen,
+                                              fetch_gen_data=True, workers=num_workers,
+                                              search_mode=mode):
             state["status"] = "stopped"
             return
 
@@ -701,43 +803,57 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
 
 
 @router.get("/api/admin/loras/{model_id}/gallery")
-async def gallery_status(model_id: int):
-    """Get gallery download status and list of images."""
+async def gallery_status(model_id: int, version_id: int | None = None):
+    """Get gallery download status and image listing from SQLite.
+
+    This replaces the old filesystem-scanning approach. The DB query is
+    instant regardless of how many images exist — no more reading hundreds
+    of JSON files on every poll request.
+
+    The version_id query param is optional. If provided, only images linked
+    to that version are returned. Otherwise, all images for the model.
+    """
     state = _gallery_state.get(model_id, {})
 
-    def _list_images(dirpath: Path) -> tuple[list, int]:
-        if not dirpath.is_dir():
-            return [], 0
-        result = []
-        total_bytes = 0
-        for f in sorted(dirpath.iterdir()):
-            if f.suffix not in (".jpeg", ".mp4"):
-                continue
-            sz = f.stat().st_size
-            if sz == 0:
-                continue
-            total_bytes += sz
-            # Read metadata but strip heavy fields for listing
-            meta = {}
-            mf = f.with_suffix(".json")
-            if mf.exists():
-                try:
-                    meta = json.loads(mf.read_text())
-                except Exception:
-                    pass
-            light_meta = {k: v for k, v in meta.items()
-                          if k not in ("raw_item", "generation_data", "raw_meta")}
-            has_thumb = f.with_suffix(".thumb.jpg").exists()
-            result.append({"id": f.stem, "ext": f.suffix, "meta": light_meta,
-                           "createdAt": meta.get("createdAt", ""),
-                           "has_thumb": has_thumb})
-        result.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-        return result, total_bytes
+    # Query images from SQLite, split by source (card vs community)
+    if version_id:
+        card_list = _gdb.list_images_by_version(version_id, source="card")
+        comm_list = _gdb.list_images_by_version(version_id, source="community")
+    else:
+        card_list = _gdb.list_images_by_model(model_id, source="card")
+        comm_list = _gdb.list_images_by_model(model_id, source="community")
 
-    base = IMAGES_DIR / str(model_id)
-    card_list, card_bytes = _list_images(base / "gallery" / "card")
-    comm_list, comm_bytes = _list_images(base / "gallery" / "community")
-    prev_list, _ = _list_images(base / "previews")
+    # Convert DB rows to the format the frontend expects.
+    # Each item needs: id, ext, meta (light), createdAt, has_thumb
+    def _format(row: dict) -> dict:
+        return {
+            "id": row["civitai_id"],
+            "ext": row["ext"],
+            "has_thumb": bool(row.get("thumb_path")),
+            "createdAt": row.get("created_at", ""),
+            "meta": {
+                "civitai_id": row.get("civitai_id"),
+                "civitai_page": f"https://civitai.com/images/{row['civitai_id']}?token={CIVITAI_API_KEY}" if row.get("civitai_id", "").isdigit() else None,
+                "url": None,  # not needed for listing — loaded on detail view
+                "type": row.get("type", "image"),
+                "width": row.get("width"),
+                "height": row.get("height"),
+                "username": row.get("username", ""),
+                "postId": row.get("post_id"),
+                "postTitle": row.get("post_title", ""),
+                "duration": row.get("duration"),
+                "audio": bool(row.get("audio")),
+                "baseModel": row.get("base_model", ""),
+                "createdAt": row.get("created_at", ""),
+            },
+        }
+
+    formatted_card = [_format(r) for r in card_list]
+    formatted_comm = [_format(r) for r in comm_list]
+
+    # Get aggregate sizes from DB
+    stats = _gdb.count_and_size(model_id=model_id, version_id=version_id)
+
     return JSONResponse({
         "status": state.get("status", "idle"),
         "downloaded": state.get("downloaded", 0),
@@ -745,23 +861,28 @@ async def gallery_status(model_id: int):
         "total": state.get("total"),
         "pages_fetched": state.get("pages_fetched", 0),
         "counted": state.get("counted", 0),
-        "previews": prev_list,
-        "gallery_card": card_list, "gallery_card_bytes": card_bytes,
-        "gallery_community": comm_list, "gallery_community_bytes": comm_bytes,
+        "gallery_card": formatted_card,
+        "gallery_card_bytes": stats.get("card_bytes", 0),
+        "gallery_community": formatted_comm,
+        "gallery_community_bytes": stats.get("community_bytes", 0),
     })
 
 
-@router.get("/api/admin/loras/{model_id}/gallery/{img_type}/{item_id}/meta")
-async def gallery_item_meta(model_id: int, img_type: str, item_id: str):
-    """Get full metadata (including generation_data) for a single gallery item."""
-    type_dirs = {"card": "gallery/card", "community": "gallery/community"}
-    if img_type not in type_dirs:
-        raise HTTPException(400, "Invalid type")
-    if ".." in item_id or "/" in item_id:
-        raise HTTPException(400, "Invalid id")
-    mf = IMAGES_DIR / str(model_id) / type_dirs[img_type] / f"{item_id}.json"
-    if not mf.exists():
+@router.get("/api/admin/loras/gallery/{item_id}/meta")
+async def gallery_item_meta(item_id: str):
+    """Get full metadata (including generation_data) for a single gallery item.
+
+    Looks up the item in SQLite to find its meta_path, then reads the full
+    JSON from disk. This is the on-demand detail endpoint — called when the
+    user clicks 'Details' on a gallery item. The heavy fields (raw_item,
+    generation_data) are only in the JSON file, not in the DB.
+    """
+    row = _gdb.get_image(item_id)
+    if not row or not row.get("meta_path"):
         raise HTTPException(404, "Metadata not found")
+    mf = _gdb.abs_path(row["meta_path"])
+    if not mf.exists():
+        raise HTTPException(404, "Metadata file missing")
     try:
         return JSONResponse(json.loads(mf.read_text()))
     except Exception:
@@ -770,34 +891,74 @@ async def gallery_item_meta(model_id: int, img_type: str, item_id: str):
 
 @router.delete("/api/admin/loras/{model_id}/gallery")
 async def gallery_delete(model_id: int):
-    """Delete all gallery images for a model."""
-    import shutil
-    gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
-    count = 0
-    if gallery_dir.is_dir():
-        count = sum(1 for f in gallery_dir.rglob("*") if f.suffix in (".jpeg", ".mp4"))
-        shutil.rmtree(gallery_dir)
+    """Delete all gallery images for a model.
+
+    Removes DB records first (returns list of file paths), then deletes
+    the actual files from the flat store. DB deletion cascades to
+    image_versions automatically via ON DELETE CASCADE.
+    """
+    count, paths = _gdb.delete_by_model(model_id)
+    # Delete actual files from disk
+    for rel_path in paths:
+        full = _gdb.abs_path(rel_path)
+        if full.exists():
+            full.unlink()
     if model_id in _gallery_state:
         del _gallery_state[model_id]
     return JSONResponse({"deleted": count})
 
 
 
-@router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")
-async def serve_image(model_id: str, img_type: str, filename: str):
-    """Serve a preview or gallery image with path traversal protection."""
-    _type_dirs = {
-        "previews": "previews",
-        "gallery-card": "gallery/card",
-        "gallery-community": "gallery/community",
-    }
-    if img_type not in _type_dirs:
-        raise HTTPException(400, "Invalid image type")
-    for part in (model_id, filename):
-        if ".." in part or "/" in part or "\\" in part:
-            raise HTTPException(400, "Invalid path")
-    path = IMAGES_DIR / model_id / _type_dirs[img_type] / filename
-    if not path.exists():
+@router.get("/api/admin/loras/gallery/media/{item_id}")
+async def serve_gallery_media(item_id: str):
+    """Serve a gallery media file (image or video) from the flat store.
+
+    Looks up the item in SQLite to find its file_path, then serves it.
+    The item_id can include an extension (e.g. '123456.mp4') which we strip,
+    or it can be just the ID (e.g. '123456').
+    """
+    # Strip extension if present (frontend may append .mp4 or .jpeg)
+    clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
+    if ".." in clean_id or "/" in clean_id:
+        raise HTTPException(400, "Invalid id")
+    row = _gdb.get_image(clean_id)
+    if not row:
         raise HTTPException(404, "Image not found")
+    path = _gdb.abs_path(row["file_path"])
+    if not path.exists():
+        raise HTTPException(404, "File missing from disk")
+    media = "video/mp4" if row["ext"] == ".mp4" else "image/jpeg"
+    return FileResponse(path, media_type=media)
+
+
+@router.get("/api/admin/loras/gallery/thumb/{item_id}")
+async def serve_gallery_thumb(item_id: str):
+    """Serve a video thumbnail from the flat store.
+
+    Returns the .thumb.jpg extracted by ffmpeg during download.
+    If no thumbnail exists, returns 404 (frontend shows a grey placeholder).
+    """
+    clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
+    if ".." in clean_id or "/" in clean_id:
+        raise HTTPException(400, "Invalid id")
+    row = _gdb.get_image(clean_id)
+    if not row or not row.get("thumb_path"):
+        raise HTTPException(404, "Thumbnail not found")
+    path = _gdb.abs_path(row["thumb_path"])
+    if not path.exists():
+        raise HTTPException(404, "Thumbnail file missing")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+# Legacy route: serves preview images (model card thumbnails in catalog list).
+# These are NOT part of the gallery store — they stay in the old per-model directory.
+@router.get("/api/admin/loras/images/{model_id}/previews/{filename}")
+async def serve_preview(model_id: str, filename: str):
+    """Serve a preview image (used by the LoRA catalog cards, not gallery)."""
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid path")
+    path = IMAGES_DIR / model_id / "previews" / filename
+    if not path.exists():
+        raise HTTPException(404, "Preview not found")
     media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"
     return FileResponse(path, media_type=media)
