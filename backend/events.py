@@ -170,11 +170,16 @@ async def _start_event_consumer():
     _events.init_from_db()
     _db.trim_events(1000)
 
-    # Remove legacy events.jsonl if it exists
-    legacy_jsonl = STUDIO_DIR / "events.jsonl"
-    if legacy_jsonl.exists():
-        legacy_jsonl.unlink()
-
+    # Remove legacy files/dirs (events.jsonl, jobs/, jobs_old/)
+    import shutil as _shutil
+    for legacy in ["events.jsonl"]:
+        p = STUDIO_DIR / legacy
+        if p.exists():
+            p.unlink()
+    for legacy_dir in ["jobs", "jobs_old"]:
+        p = STUDIO_DIR / legacy_dir
+        if p.is_dir():
+            _shutil.rmtree(p)
 
     # Initialize gallery image store (SQLite)
     import gallery_db as _gdb
