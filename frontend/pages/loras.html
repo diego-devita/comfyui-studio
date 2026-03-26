@@ -315,6 +315,7 @@
       <label>Period <select id="galleryPeriod">
         <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
       </select></label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFilterVersion" checked> Version filter</label>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
@@ -1650,12 +1651,12 @@
     var sort = document.getElementById('gallerySort').value;
     var period = document.getElementById('galleryPeriod').value;
     var cap = document.getElementById('galleryCap').value;
-    return {
-      card: 'https://civitai.com/api/v1/models/' + mid,
-      community: 'https://civitai.com/api/v1/images?modelId=' + mid +
-        '&modelVersionId=' + vid + '&limit=' + cap + '&nsfw=' + nsfw +
-        '&sort=' + encodeURIComponent(sort) + '&period=' + period
-    };
+    var useVersion = document.getElementById('galleryFilterVersion').checked;
+    var communityUrl = 'https://civitai.com/api/v1/images?modelId=' + mid +
+      '&limit=' + cap + '&nsfw=' + nsfw +
+      '&sort=' + encodeURIComponent(sort) + '&period=' + period;
+    if (useVersion && vid) communityUrl += '&modelVersionId=' + vid;
+    return { card: 'https://civitai.com/api/v1/models/' + mid, community: communityUrl };
   }
 
   function copyUrlFlash(btn, url) {
@@ -1743,7 +1744,7 @@
           nsfw: document.getElementById('galleryNsfw').value,
           sort: document.getElementById('gallerySort').value,
           period: document.getElementById('galleryPeriod').value,
-          version_id: galleryVersionId
+          version_id: document.getElementById('galleryFilterVersion').checked ? galleryVersionId : null
         }
       });
       if (!resp.ok) {
@@ -2014,7 +2015,7 @@
       }
     } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
   });
-  ['galleryNsfw', 'gallerySort', 'galleryPeriod', 'galleryCap'].forEach(function(id) {
+  ['galleryNsfw', 'gallerySort', 'galleryPeriod', 'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
   document.getElementById('gallerySearch').addEventListener('input', function() {
