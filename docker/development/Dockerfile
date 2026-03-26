@@ -48,6 +48,9 @@ RUN pip install --no-cache-dir \
 # ComfyUI stub server
 COPY docker/development/comfyui_stub.py /app/comfyui_stub.py
 
+# Seed catalogs (copied to data dir on first boot by start.sh)
+COPY catalogs/models.json catalogs/loras.json catalogs/llm.json /repo-catalogs/
+
 # Entrypoint
 COPY docker/development/start.sh /start.sh
 RUN chmod +x /start.sh
@@ -57,6 +60,7 @@ ENV API_KEY=changeme
 ENV COMFYUI_PORT=8188
 ENV STUDIO_PORT=8000
 ENV DEV_MODE=true
+ENV DEV_DOWNLOAD_DELAY=5
 
 EXPOSE 8000 8188
 
