@@ -42,7 +42,8 @@ RUN pip install --no-cache-dir \
     aiofiles \
     requests \
     pyyaml \
-    aiohttp
+    aiohttp \
+    Pillow
 
 # ComfyUI stub server
 COPY docker/development/comfyui_stub.py /app/comfyui_stub.py
@@ -55,6 +56,7 @@ ENV STUDIO_DIR=/workspace/studio
 ENV API_KEY=changeme
 ENV COMFYUI_PORT=8188
 ENV STUDIO_PORT=8000
+ENV DEV_MODE=true
 
 EXPOSE 8000 8188
 
