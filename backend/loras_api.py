@@ -49,7 +49,7 @@ class GalleryActionRequest(BaseModel):
     # REST filters
     nsfw: str = "X"
     # Shared
-    sort: str = "Most Reactions"
+    sort: str = "Newest"
     period: str = "AllTime"
     version_id: int | None = None
     # tRPC filters
@@ -574,13 +574,12 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         # Fetch page
         try:
             if mode in ("fixed", "trpc"):
-                # Build tRPC input
+                # Build tRPC input — base matches CivitAI site call
                 inp = {
                     "modelVersionId": api_params.get("version_id") or model_id,
-                    "prioritizedUserIds": [creator_id] if creator_id else [],
                     "period": "AllTime",
                     "sort": "Most Reactions",
-                    "limit": 20,
+                    "limit": 200,
                     "pending": True,
                     "include": [],
                     "withMeta": False,
@@ -590,11 +589,10 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                     "cursor": cursor,
                     "authed": True,
                 }
-                # In tRPC mode, apply user filters; in fixed mode, use exact captured values
+                # In tRPC mode, apply user filters
                 if mode == "trpc":
-                    inp["sort"] = api_params.get("sort", "Most Reactions")
+                    inp["sort"] = api_params.get("sort", "Newest")
                     inp["period"] = api_params.get("period", "AllTime")
-                    inp["limit"] = 200
                     if api_params.get("types"):
                         inp["types"] = api_params["types"]
                     if api_params.get("with_meta"):
