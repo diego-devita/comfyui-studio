@@ -710,7 +710,10 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
 
                 trpc_input = json.dumps({"json": inp, "meta": {"values": {"cursor": ["undefined"]}}})
                 print(f"[gallery] tRPC input: {trpc_input[:300]}", flush=True)
-                r = httpx.get(f"https://civitai.com/api/trpc/image.getInfinite?input={trpc_input}",
+                # Use params= so httpx URL-encodes the input properly.
+                # Passing raw JSON in f-string URL breaks on special chars.
+                r = httpx.get("https://civitai.com/api/trpc/image.getInfinite",
+                              params={"input": trpc_input},
                               headers=headers, timeout=30)
                 print(f"[gallery] tRPC status: {r.status_code}, body size: {len(r.content)}", flush=True)
                 if r.status_code != 200:
@@ -797,9 +800,16 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         if not cursor:
             break
 
-    # Adjust total to actual count
+    # Mark as done, then clear state after a short delay so the frontend
+    # can show the "Completed" message before it disappears.
     state["total"] = len(seen)
     state["status"] = "done"
+    # Clean up state after 10s so reopening gallery doesn't show stale progress
+    def _cleanup():
+        time.sleep(10)
+        if _gallery_state.get(model_id, {}).get("status") == "done":
+            _gallery_state.pop(model_id, None)
+    threading.Thread(target=_cleanup, daemon=True).start()
     _events.emit("lora.gallery.done",
                  f"Gallery done for {model_id}: {state['downloaded']} new, {state['skipped']} skipped",
                  severity="success", data={"model_id": model_id})
