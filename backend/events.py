@@ -160,17 +160,7 @@ async def _start_event_consumer():
             _events.emit("system.migration", f"Copied {src_name} from .repo/ to working dir",
                          severity="info")
 
-    # Migrate JSON job files to SQLite (one-time, on first run with DB)
-    from config import JOBS_DIR
     import db as _db
-    if JOBS_DIR.exists() and list(JOBS_DIR.glob("*.json")):
-        count = _db.migrate_json_jobs(JOBS_DIR)
-        if count > 0:
-            _events.emit("system.migration", f"Migrated {count} jobs from JSON to SQLite",
-                         severity="info")
-            # Rename old jobs dir so we don't migrate again
-            import shutil
-            shutil.move(str(JOBS_DIR), str(JOBS_DIR.parent / "jobs_old"))
 
     # Initialize gallery image store (SQLite)
     import gallery_db as _gdb

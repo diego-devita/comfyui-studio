@@ -197,25 +197,6 @@ def count_jobs_by_workflow() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ── Migration ────────────────────────────────────────────────
-
-
-def migrate_json_jobs(jobs_dir: Path) -> int:
-    """Import existing JSON job files into the database. Returns count imported."""
-    if not jobs_dir.exists():
-        return 0
-    count = 0
-    for f in jobs_dir.glob("*.json"):
-        try:
-            job = json.loads(f.read_text())
-            if job.get("prompt_id"):
-                save_job(job)
-                count += 1
-        except Exception:
-            pass
-    return count
-
-
 # ── Helpers ──────────────────────────────────────────────────
 
 

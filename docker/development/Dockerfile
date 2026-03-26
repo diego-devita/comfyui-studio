@@ -4,8 +4,23 @@
 # no ComfyUI, no custom nodes. Just Python + backend deps +
 # a ComfyUI stub server for fake responses.
 #
-# Build:  docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
-# Run:    docker run -p 8000:8000 -v $(pwd):/workspace/studio -e API_KEY=test comfyui-studio-dev
+# Source code is mounted read-only from the host repo.
+# Runtime data (catalogs, db, assets, gallery) lives in a
+# separate volume so it doesn't pollute the git repo.
+#
+# Build:
+#   docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
+#
+# Run:
+#   docker run -d --name studio-dev \
+#     -p 8000:8000 -p 8188:8188 \
+#     -v $(pwd)/backend:/workspace/studio/backend \
+#     -v $(pwd)/frontend:/workspace/studio/frontend \
+#     -v $(pwd)/workflows:/workspace/studio/workflows \
+#     -v $(pwd)/version.json:/workspace/studio/version.json \
+#     -v ~/.studio-dev:/workspace/studio/data \
+#     -e API_KEY=test \
+#     comfyui-studio-dev
 # ============================================================
 
 FROM python:3.12-slim
@@ -14,6 +29,7 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Backend Python dependencies (same as production, minus PyTorch/ML)

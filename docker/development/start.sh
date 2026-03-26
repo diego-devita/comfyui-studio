@@ -6,18 +6,42 @@ echo "=== ComfyUI Studio — Development Mode ==="
 STUDIO_DIR="${STUDIO_DIR:-/workspace/studio}"
 STUDIO_PORT="${STUDIO_PORT:-8000}"
 COMFYUI_PORT="${COMFYUI_PORT:-8188}"
+DATA_DIR="${STUDIO_DIR}/data"
+# Repo catalogs mounted read-only at /repo-catalogs for seeding
+REPO_CATALOGS="/repo-catalogs"
 
-# Create directories the backend expects
-mkdir -p "${STUDIO_DIR}/assets/input" \
-         "${STUDIO_DIR}/assets/output" \
-         "${STUDIO_DIR}/db" \
-         "${STUDIO_DIR}/jobs" \
-         "${STUDIO_DIR}/llm/models"
+# Create data directories (persisted in ~/.studio-dev on host)
+mkdir -p "${DATA_DIR}/catalogs" \
+         "${DATA_DIR}/assets/input" \
+         "${DATA_DIR}/assets/output" \
+         "${DATA_DIR}/db" \
+         "${DATA_DIR}/llm/models"
+
+# Seed catalogs from repo if not already present in data dir.
+# Repo catalogs are mounted read-only at /repo-catalogs.
+if [ -d "${REPO_CATALOGS}" ]; then
+    for f in models.json loras.json llm.json; do
+        if [ ! -f "${DATA_DIR}/catalogs/${f}" ] && [ -f "${REPO_CATALOGS}/${f}" ]; then
+            cp "${REPO_CATALOGS}/${f}" "${DATA_DIR}/catalogs/${f}"
+            echo "      Seeded ${f} into data dir"
+        fi
+    done
+fi
+
+# Symlink runtime dirs into the locations the backend expects.
+# Writes go to data/ (persistent volume) instead of the repo.
+for name in catalogs assets db llm; do
+    target="${STUDIO_DIR}/${name}"
+    source="${DATA_DIR}/${name}"
+    if [ -e "${target}" ] || [ -L "${target}" ]; then
+        rm -rf "${target}"
+    fi
+    ln -sfn "${source}" "${target}"
+done
 
 # Start ComfyUI stub server (background)
 echo "[1/2] Starting ComfyUI stub on port ${COMFYUI_PORT}..."
 python3 /app/comfyui_stub.py --port "${COMFYUI_PORT}" &
-STUB_PID=$!
 
 # Wait for stub to be ready
 for i in $(seq 1 10); do
