@@ -538,6 +538,10 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     community_downloaded = 0
     cursor = None
     state["pages_fetched"] = 0
+    import logging
+    _log = logging.getLogger("gallery")
+
+    _log.info(f"Gallery {model_id}: max_community={max_community}, seen={len(seen)}")
 
     while community_downloaded < max_community:
         if stop.is_set():
@@ -562,6 +566,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         state["pages_fetched"] = state.get("pages_fetched", 0) + 1
 
         page_items = data.get("items", [])
+        _log.info(f"Gallery {model_id}: page {state['pages_fetched']}, items={len(page_items)}, community_downloaded={community_downloaded}, cursor={cursor}")
         if not page_items:
             break
 
@@ -598,7 +603,9 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             state["status"] = "stopped"
             return
 
+        _log.info(f"Gallery {model_id}: batch done, community_downloaded={community_downloaded}, seen={len(seen)}, state dl={state['downloaded']} skip={state['skipped']}")
         cursor = (data.get("metadata") or {}).get("nextCursor")
+        _log.info(f"Gallery {model_id}: nextCursor={'yes' if cursor else 'NO'}")
         if not cursor:
             break
 
