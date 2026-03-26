@@ -992,6 +992,96 @@ async def toggle_star(item_id: str):
     return JSONResponse({"starred": new_state})
 
 
+# ── CivitAI Tags ────────────────────────────────────────────────────────────
+# Endpoints for syncing and querying the local CivitAI tag dictionary.
+# Tags are resolved from CivitAI's tRPC batch API and cached in SQLite.
+
+
+@router.post("/api/admin/civitai/tags/sync")
+async def sync_civitai_tags():
+    """Sync CivitAI tags: collect all tag IDs from downloaded gallery images,
+    resolve unknown ones via CivitAI tRPC batch API, store in local DB.
+
+    Each call is incremental — only resolves tags not already cached.
+    Safe to call repeatedly.
+    """
+    if not CIVITAI_API_KEY:
+        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+
+    # Collect all unique tagIds from gallery images' raw metadata
+    all_tag_ids = set()
+    conn = _gdb._get_conn()
+    rows = conn.execute("SELECT meta_path FROM gallery_images WHERE meta_path IS NOT NULL").fetchall()
+    for row in rows:
+        meta_file = _gdb.abs_path(row["meta_path"])
+        if not meta_file.exists():
+            continue
+        try:
+            meta = json.loads(meta_file.read_text())
+            raw_item = meta.get("raw_item") or {}
+            tag_ids = raw_item.get("tagIds") or []
+            all_tag_ids.update(tag_ids)
+        except Exception:
+            pass
+
+    # Find which ones we don't have yet
+    unknown = _gdb.get_unknown_tag_ids(list(all_tag_ids))
+    if not unknown:
+        return JSONResponse({
+            "synced": 0, "total_known": _gdb.tag_count(),
+            "message": "All tags already cached"
+        })
+
+    # Resolve via tRPC batch API.
+    # tRPC batch: repeat procedure name N times, input keyed by index.
+    # Process in chunks of 50 to avoid URL length limits.
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+               "Content-Type": "application/json"}
+    resolved = []
+    chunk_size = 50
+    for i in range(0, len(unknown), chunk_size):
+        chunk = unknown[i:i + chunk_size]
+        # Build batch input: {"0": {"json": {"id": N}}, "1": {"json": {"id": M}}, ...}
+        batch_input = {str(j): {"json": {"id": tid}} for j, tid in enumerate(chunk)}
+        procedure = ",".join(["tag.getById"] * len(chunk))
+        async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+            try:
+                r = await client.get(
+                    f"https://civitai.com/api/trpc/{procedure}",
+                    params={"batch": "1", "input": json.dumps(batch_input)})
+                if r.status_code == 200:
+                    results = r.json()
+                    # Response is an array of {result: {data: {json: {id, name, type}}}}
+                    if isinstance(results, list):
+                        for item in results:
+                            tag = item.get("result", {}).get("data", {}).get("json", {})
+                            if tag.get("id"):
+                                resolved.append(tag)
+            except Exception:
+                pass
+
+    # Store resolved tags
+    if resolved:
+        _gdb.upsert_tags(resolved)
+
+    return JSONResponse({
+        "synced": len(resolved),
+        "total_known": _gdb.tag_count(),
+        "unknown_remaining": len(unknown) - len(resolved)
+    })
+
+
+@router.get("/api/admin/civitai/tags")
+async def list_civitai_tags():
+    """Return all cached CivitAI tags from local database.
+
+    Returns list of {id, name, type, synced_at}, sorted by name.
+    Call POST /api/admin/civitai/tags/sync first to populate.
+    """
+    tags = _gdb.get_all_tags()
+    return JSONResponse({"tags": tags, "count": len(tags)})
+
+
 @router.get("/api/admin/loras/gallery/media/{item_id}")
 async def serve_gallery_media(item_id: str):
     """Serve a gallery media file (image or video) from the flat store.

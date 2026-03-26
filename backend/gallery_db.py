@@ -161,6 +161,16 @@ def init_gallery_db():
         CREATE INDEX IF NOT EXISTS idx_gi_created_at  ON gallery_images(created_at);
         CREATE INDEX IF NOT EXISTS idx_gi_file_uuid   ON gallery_images(file_uuid);
         CREATE INDEX IF NOT EXISTS idx_iv_version_id  ON image_versions(version_id);
+
+        -- CivitAI tag dictionary: maps numeric tag IDs to human-readable names.
+        -- Populated on-demand via POST /api/admin/civitai/tags/sync.
+        -- type values: Moderation, UserGenerated, Label, Category
+        CREATE TABLE IF NOT EXISTS civitai_tags (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT NOT NULL DEFAULT '',
+            type          TEXT DEFAULT '',
+            synced_at     TEXT
+        );
     """)
     conn.commit()
 
@@ -503,6 +513,81 @@ def delete_by_version(version_id: int) -> int:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+# ── CivitAI Tags ─────────────────────────────────────────────────────────────
+# These functions manage a local cache of CivitAI's tag dictionary.
+# Tags are synced on-demand — the user triggers a sync, and we resolve
+# tag IDs to names via the tRPC batch API, storing results locally.
+
+def upsert_tags(tags: list[dict]):
+    """Insert or update multiple CivitAI tags.
+
+    Each tag dict should have: id (int), name (str), type (str).
+    Uses UPSERT so it's safe to call repeatedly — existing tags get
+    their name/type updated if CivitAI changed them.
+    """
+    conn = _get_conn()
+    now = _now_italian()
+    for tag in tags:
+        conn.execute("""
+            INSERT INTO civitai_tags (id, name, type, synced_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                type = excluded.type,
+                synced_at = excluded.synced_at
+        """, (tag["id"], tag.get("name", ""), tag.get("type", ""), now))
+    conn.commit()
+
+
+def get_all_tags() -> list[dict]:
+    """Return all cached CivitAI tags, sorted by name.
+
+    Returns list of {id, name, type, synced_at}.
+    """
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, name, type, synced_at FROM civitai_tags ORDER BY name"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_tags_by_ids(tag_ids: list[int]) -> list[dict]:
+    """Look up specific tags by their IDs. Returns only known tags."""
+    if not tag_ids:
+        return []
+    conn = _get_conn()
+    placeholders = ",".join("?" * len(tag_ids))
+    rows = conn.execute(
+        f"SELECT id, name, type FROM civitai_tags WHERE id IN ({placeholders})",
+        tag_ids
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_unknown_tag_ids(tag_ids: list[int]) -> list[int]:
+    """Return tag IDs that are NOT yet in our local cache.
+
+    Used during sync to know which tags need resolving from CivitAI.
+    """
+    if not tag_ids:
+        return []
+    conn = _get_conn()
+    placeholders = ",".join("?" * len(tag_ids))
+    rows = conn.execute(
+        f"SELECT id FROM civitai_tags WHERE id IN ({placeholders})",
+        tag_ids
+    ).fetchall()
+    known = {r["id"] for r in rows}
+    return [tid for tid in tag_ids if tid not in known]
+
+
+def tag_count() -> int:
+    """Return total number of cached tags."""
+    conn = _get_conn()
+    row = conn.execute("SELECT COUNT(*) as c FROM civitai_tags").fetchone()
+    return row["c"] if row else 0
+
 
 def _now_italian() -> str:
     """Current timestamp in Italian timezone, ISO format."""
