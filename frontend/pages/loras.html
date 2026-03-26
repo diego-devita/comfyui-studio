@@ -1681,10 +1681,7 @@
       } else {
         btn.textContent = 'Download'; btn.disabled = false; delBtn.disabled = false;
         galleryDownloading = false; progressFill.classList.remove('indeterminate');
-        if (status === 'done' || status === 'stopped') {
-          progress.style.display = ''; progressFill.style.width = '100%';
-          progressText.textContent = (status === 'done' ? 'Complete' : 'Stopped') + ' — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped';
-        }
+        progress.style.display = 'none';
         if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
       }
 
