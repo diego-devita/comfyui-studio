@@ -274,7 +274,7 @@
     <button class="civitai-close" id="lookupClose">&times;</button>
     <h2 style="margin:0 0 16px">Add LoRA from CivitAI</h2>
     <div class="lookup-url-row">
-      <input type="text" id="lookupUrl" placeholder="Paste CivitAI URL... (e.g. https://civitai.com/models/12345)">
+      <input type="text" id="lookupUrl" placeholder="URL, model ID, or comma-separated IDs">
       <button class="btn" id="lookupBtn">Lookup</button>
     </div>
     <div id="lookupSpinner" style="display:none"><span class="spinner"></span> Looking up model...</div>
@@ -1274,12 +1274,20 @@
     document.getElementById('lookupOverlay').style.display = 'none';
   }
 
-  async function doLookup() {
-    var url = document.getElementById('lookupUrl').value.trim();
-    if (!url) return;
-    document.getElementById('lookupSpinner').style.display = '';
-    document.getElementById('lookupError').style.display = 'none';
-    document.getElementById('lookupCard').innerHTML = '';
+  function parseInput(raw) {
+    // URL → pass as-is
+    if (raw.match(/https?:\/\//)) return { type: 'url', urls: [raw] };
+    // Split by comma, space, newline → extract numeric IDs
+    var ids = raw.split(/[\s,]+/).map(function(s) { return s.trim(); }).filter(function(s) { return /^\d+$/.test(s); });
+    if (ids.length === 0) return null;
+    if (ids.length === 1) return { type: 'url', urls: ['https://civitai.com/models/' + ids[0]] };
+    return { type: 'batch', ids: ids };
+  }
+
+  async function doSingleLookup(url, card, spinner, errorEl) {
+    spinner.style.display = '';
+    errorEl.style.display = 'none';
+    card.innerHTML = '';
     try {
       var resp = await apiFetch('/api/admin/loras/lookup-civitai', {
         method: 'POST', body: { url: url }
@@ -1289,15 +1297,127 @@
         throw new Error(err.detail || 'Lookup failed (HTTP ' + resp.status + ')');
       }
       lookupData = await resp.json();
-      document.getElementById('lookupSpinner').style.display = 'none';
+      spinner.style.display = 'none';
       renderLookupResult(lookupData);
     } catch (e) {
-      document.getElementById('lookupSpinner').style.display = 'none';
-      if (e.message !== 'auth') {
-        var errEl = document.getElementById('lookupError');
-        errEl.textContent = e.message;
-        errEl.style.display = '';
+      spinner.style.display = 'none';
+      if (e.message !== 'auth') { errorEl.textContent = e.message; errorEl.style.display = ''; }
+    }
+  }
+
+  async function doBatchLookup(ids) {
+    var spinner = document.getElementById('lookupSpinner');
+    var errorEl = document.getElementById('lookupError');
+    var card = document.getElementById('lookupCard');
+    spinner.style.display = '';
+    errorEl.style.display = 'none';
+    card.innerHTML = '';
+
+    var results = [];
+    for (var i = 0; i < ids.length; i++) {
+      spinner.innerHTML = '<span class="spinner"></span> Looking up ' + (i+1) + '/' + ids.length + '...';
+      try {
+        var resp = await apiFetch('/api/admin/loras/lookup-civitai', {
+          method: 'POST', body: { url: 'https://civitai.com/models/' + ids[i] }
+        });
+        if (resp.ok) results.push(await resp.json());
+      } catch(e) {}
+    }
+    spinner.style.display = 'none';
+    spinner.innerHTML = '<span class="spinner"></span> Looking up model...';
+    if (results.length === 0) { errorEl.textContent = 'No models found'; errorEl.style.display = ''; return; }
+    renderBatchResults(results);
+  }
+
+  function renderBatchResults(results) {
+    var card = document.getElementById('lookupCard');
+    card.innerHTML = '<div class="batch-results"></div>';
+    var container = card.querySelector('.batch-results');
+
+    results.forEach(function(d) {
+      var rating = d.stats.rating || 0;
+      var stars = '';
+      for (var i = 1; i <= 5; i++) stars += i <= Math.round(rating) ? '\u2605' : '\u2606';
+
+      var row = document.createElement('div');
+      row.className = 'batch-row';
+      row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px';
+
+      // Preview thumb
+      var thumbUrl = '';
+      for (var vi = 0; vi < d.versions.length && !thumbUrl; vi++) {
+        var imgs = d.versions[vi].images || [];
+        if (imgs.length) thumbUrl = imgs[0].url;
       }
+      var thumbHtml = thumbUrl ? '<img src="' + escHtml(thumbUrl) + '" style="width:60px;height:60px;object-fit:cover;border-radius:4px;flex-shrink:0">' : '<div style="width:60px;height:60px;background:var(--bg);border-radius:4px;flex-shrink:0"></div>';
+
+      var versCount = d.versions.length;
+      var baseModels = d.versions.map(function(v) { return v.base_model; }).filter(Boolean);
+      var baseStr = [...new Set(baseModels)].join(', ');
+
+      row.innerHTML = thumbHtml +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(d.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted)">' +
+            escHtml(d.author) + ' · ' + stars + ' · ' + (d.stats.download_count || 0).toLocaleString() + ' dl · ' + versCount + ' ver' +
+            (baseStr ? ' · ' + escHtml(baseStr) : '') +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn--sm batch-view-btn" style="flex-shrink:0">View</button>' +
+        '<button class="btn btn--sm batch-add-btn" style="flex-shrink:0">Add</button>';
+
+      row.querySelector('.batch-view-btn').addEventListener('click', function() {
+        lookupData = d;
+        renderLookupResult(d);
+      });
+      row.querySelector('.batch-add-btn').addEventListener('click', async function() {
+        var btn = this;
+        // Auto-select all versions and add
+        btn.disabled = true; btn.innerHTML = '<span class="spinner sm"></span>';
+        try {
+          var resp = await apiFetch('/api/admin/loras/add-civitai', {
+            method: 'POST',
+            body: {
+              model_id: d.model_id, model_name: d.name, author: d.author,
+              description: d.description, tags: d.tags,
+              rating: d.stats.rating, downloads: d.stats.download_count,
+              versions: d.versions, preview_images: d.preview_images
+            }
+          });
+          if (resp.ok) {
+            var result = await resp.json();
+            btn.textContent = result.added.length ? 'Added ' + result.added.length : 'Skipped';
+            btn.style.color = 'var(--accent)';
+            showToast('Added ' + result.added.length + ' version(s) of ' + d.name);
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+          }
+        } catch(e) {
+          btn.textContent = 'Error'; btn.disabled = false;
+        }
+      });
+
+      container.appendChild(row);
+    });
+  }
+
+  async function doLookup() {
+    var raw = document.getElementById('lookupUrl').value.trim();
+    if (!raw) return;
+    var parsed = parseInput(raw);
+    if (!parsed) {
+      var errorEl = document.getElementById('lookupError');
+      errorEl.textContent = 'Enter a CivitAI URL, model ID, or comma-separated IDs';
+      errorEl.style.display = '';
+      return;
+    }
+    if (parsed.type === 'batch') {
+      doBatchLookup(parsed.ids);
+    } else {
+      doSingleLookup(parsed.urls[0],
+        document.getElementById('lookupCard'),
+        document.getElementById('lookupSpinner'),
+        document.getElementById('lookupError'));
     }
   }
 
