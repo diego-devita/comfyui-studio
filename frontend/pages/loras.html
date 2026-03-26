@@ -307,10 +307,10 @@
     </div>
     <div class="gallery-filters">
       <label>Mode <select id="galleryMode">
-        <option value="trpc" selected>tRPC</option><option value="rest">REST API</option>
+        <option value="fixed" selected>Fixed</option><option value="trpc">tRPC</option><option value="rest">REST API</option>
       </select></label>
       <!-- REST filters -->
-      <span id="filtersRest" style="display:none;contents">
+      <span id="filtersRest" style="display:none">
         <label>NSFW <select id="galleryNsfw">
           <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
         </select></label>
@@ -321,16 +321,23 @@
           <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
         </select></label>
       </span>
-      <!-- tRPC filters (matches CivitAI site) -->
-      <span id="filtersTrpc" style="display:contents">
+      <!-- tRPC filters -->
+      <span id="filtersTrpc" style="display:none">
         <label>Sort <select id="gallerySortTrpc">
-          <option value="Most Reactions" selected>Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Newest">Newest</option>
+          <option value="Most Reactions" selected>Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option><option value="Newest">Newest</option><option value="Oldest">Oldest</option>
         </select></label>
         <label>Period <select id="galleryPeriodTrpc">
           <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
         </select></label>
+        <label>Type <select id="galleryType">
+          <option value="" selected>All</option><option value="image">Image</option><option value="video">Video</option>
+        </select></label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
+        <label>Remix <select id="galleryRemix">
+          <option value="" selected>All</option><option value="false">Originals</option><option value="true">Remixes</option>
+        </select></label>
       </span>
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFilterVersion" checked> Version filter</label>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
@@ -1664,16 +1671,25 @@
     var mode = document.getElementById('galleryMode').value;
     var mid = galleryModelId, vid = galleryVersionId;
     var cap = document.getElementById('galleryCap').value;
-    var useVersion = document.getElementById('galleryFilterVersion').checked;
+    if (mode === 'fixed') {
+      return { mode: 'fixed', modelId: mid, limit: cap, version_id: vid };
+    }
     if (mode === 'rest') {
       return { mode: 'rest', modelId: mid, limit: cap, nsfw: document.getElementById('galleryNsfw').value,
         sort: document.getElementById('gallerySortRest').value, period: document.getElementById('galleryPeriodRest').value,
-        version_id: useVersion ? vid : null };
+        version_id: vid };
     }
-    return { mode: 'trpc', modelId: mid, limit: cap,
+    // tRPC
+    var f = { mode: 'trpc', modelId: mid, limit: cap, version_id: vid,
       sort: document.getElementById('gallerySortTrpc').value,
-      period: document.getElementById('galleryPeriodTrpc').value,
-      version_id: useVersion ? vid : null };
+      period: document.getElementById('galleryPeriodTrpc').value };
+    var typeVal = document.getElementById('galleryType').value;
+    if (typeVal) f.types = [typeVal];
+    if (document.getElementById('galleryWithMeta').checked) f.with_meta = true;
+    if (document.getElementById('galleryFromPlatform').checked) f.from_platform = true;
+    var remixVal = document.getElementById('galleryRemix').value;
+    if (remixVal !== '') f.is_remix = remixVal === 'true';
+    return f;
   }
 
   function getGalleryUrls() {
@@ -1685,12 +1701,17 @@
         '&limit=' + f.limit + '&nsfw=' + f.nsfw +
         '&sort=' + encodeURIComponent(f.sort) + '&period=' + f.period;
       if (f.version_id) communityUrl += '&modelVersionId=' + f.version_id;
+    } else if (f.mode === 'fixed') {
+      communityUrl = '(exact captured query — no customization)';
     } else {
-      var inp = {modelVersionId: f.version_id || undefined, period: f.period,
-        sort: f.sort, limit: parseInt(f.limit), pending: true, cursor: null};
-      if (!f.version_id) inp.modelId = f.modelId;
+      var inp = {modelVersionId: f.version_id, period: f.period, sort: f.sort,
+        limit: parseInt(f.limit), pending: true, authed: true, cursor: null};
+      if (f.types) inp.types = f.types;
+      if (f.with_meta) inp.withMeta = true;
+      if (f.from_platform) inp.fromPlatform = true;
+      if (f.is_remix !== undefined) inp.isRemix = f.is_remix;
       communityUrl = 'https://civitai.com/api/trpc/image.getInfinite?input=' +
-        encodeURIComponent(JSON.stringify({json: inp, meta: {values: {cursor: ['undefined']}}}));
+        encodeURIComponent(JSON.stringify({json: inp}));
     }
     return { card: cardUrl, community: communityUrl };
   }
@@ -1775,9 +1796,11 @@
 
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-        method: 'POST', body: Object.assign({
-          action: 'start:' + document.getElementById('galleryCap').value
-        }, getGalleryFilters())
+        method: 'POST', body: (function() {
+          var f = getGalleryFilters();
+          f.action = 'start:' + document.getElementById('galleryCap').value;
+          return f;
+        })()
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
@@ -2055,7 +2078,7 @@
   }
   document.getElementById('galleryMode').addEventListener('change', toggleFilterMode);
   ['galleryNsfw', 'gallerySortRest', 'galleryPeriodRest', 'gallerySortTrpc', 'galleryPeriodTrpc',
-   'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
+   'galleryType', 'galleryWithMeta', 'galleryFromPlatform', 'galleryRemix', 'galleryCap'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
   document.getElementById('gallerySearch').addEventListener('input', function() {

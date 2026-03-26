@@ -45,11 +45,18 @@ class AddCivitaiRequest(BaseModel):
 
 class GalleryActionRequest(BaseModel):
     action: str
-    mode: str = "trpc"
+    mode: str = "fixed"  # fixed | trpc | rest
+    # REST filters
     nsfw: str = "X"
+    # Shared
     sort: str = "Most Reactions"
     period: str = "AllTime"
     version_id: int | None = None
+    # tRPC filters
+    types: list[str] | None = None  # ["image"], ["video"], or None=all
+    with_meta: bool = False
+    from_platform: bool = False
+    is_remix: bool | None = None  # None=all, False=originals, True=remixes
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -406,7 +413,9 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     stop = threading.Event()
     api_params = {
         "mode": body.mode, "nsfw": body.nsfw, "sort": body.sort, "period": body.period,
-        "version_id": body.version_id,
+        "version_id": body.version_id, "types": body.types,
+        "with_meta": body.with_meta, "from_platform": body.from_platform,
+        "is_remix": body.is_remix,
     }
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
@@ -537,12 +546,25 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         state["status"] = "stopped"
         return
 
+    # ── Resolve creator ID for tRPC prioritizedUserIds ──
+    creator_id = None
+    creator_username = (model_data.get("creator") or {}).get("username")
+    if creator_username:
+        try:
+            inp = json.dumps({"json": {"username": creator_username}})
+            cr = httpx.get(f"https://civitai.com/api/trpc/user.getCreator?input={inp}",
+                           headers=headers, timeout=10)
+            if cr.status_code == 200:
+                creator_id = cr.json().get("result", {}).get("data", {}).get("json", {}).get("id")
+        except Exception:
+            pass
+
     # ── Phase 2: community images (capped by max_community) ──
     community_downloaded = 0
     cursor = None
     state["pages_fetched"] = 0
-    use_trpc = api_params.get("mode") == "trpc"
-    print(f"[gallery] {model_id}: mode={'trpc' if use_trpc else 'rest'}, max={max_community}, seen={len(seen)}", flush=True)
+    mode = api_params.get("mode", "fixed")
+    print(f"[gallery] {model_id}: mode={mode}, max={max_community}, seen={len(seen)}, creator={creator_id}", flush=True)
 
     while community_downloaded < max_community:
         if stop.is_set():
@@ -551,13 +573,14 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
 
         # Fetch page
         try:
-            if use_trpc:
+            if mode in ("fixed", "trpc"):
+                # Build tRPC input
                 inp = {
                     "modelVersionId": api_params.get("version_id") or model_id,
-                    "prioritizedUserIds": [],
-                    "period": api_params.get("period", "AllTime"),
-                    "sort": api_params.get("sort", "Most Reactions"),
-                    "limit": 200,
+                    "prioritizedUserIds": [creator_id] if creator_id else [],
+                    "period": "AllTime",
+                    "sort": "Most Reactions",
+                    "limit": 20,
                     "pending": True,
                     "include": [],
                     "withMeta": False,
@@ -565,7 +588,22 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                     "disablePoi": True,
                     "disableMinor": True,
                     "cursor": cursor,
+                    "authed": True,
                 }
+                # In tRPC mode, apply user filters; in fixed mode, use exact captured values
+                if mode == "trpc":
+                    inp["sort"] = api_params.get("sort", "Most Reactions")
+                    inp["period"] = api_params.get("period", "AllTime")
+                    inp["limit"] = 200
+                    if api_params.get("types"):
+                        inp["types"] = api_params["types"]
+                    if api_params.get("with_meta"):
+                        inp["withMeta"] = True
+                    if api_params.get("from_platform"):
+                        inp["fromPlatform"] = True
+                    if api_params.get("is_remix") is not None:
+                        inp["isRemix"] = api_params["is_remix"]
+
                 trpc_input = json.dumps({"json": inp, "meta": {"values": {"cursor": ["undefined"]}}})
                 r = httpx.get(f"https://civitai.com/api/trpc/image.getInfinite?input={trpc_input}",
                               headers=headers, timeout=30)
@@ -575,6 +613,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 page_items = rdata.get("items", [])
                 next_cursor = rdata.get("nextCursor")
             else:
+                # REST mode
                 params: dict = {"modelId": model_id, "limit": 200,
                                 "nsfw": api_params.get("nsfw", "X"),
                                 "sort": api_params.get("sort", "Newest"),
