@@ -302,6 +302,10 @@
         <option value="10">10</option><option value="50">50</option><option value="100">100</option>
         <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
       </select>
+      <select id="galleryWorkers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px" title="Workers">
+        <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
+        <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
+      </select>
       <button class="btn btn--sm" id="galleryDlBtn">Download</button>
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
     </div>
@@ -1799,6 +1803,7 @@
         method: 'POST', body: (function() {
           var f = getGalleryFilters();
           f.action = 'start:' + document.getElementById('galleryCap').value;
+          f.workers = parseInt(document.getElementById('galleryWorkers').value);
           return f;
         })()
       });

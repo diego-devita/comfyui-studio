@@ -57,6 +57,7 @@ class GalleryActionRequest(BaseModel):
     with_meta: bool = False
     from_platform: bool = False
     is_remix: bool | None = None  # None=all, False=originals, True=remixes
+    workers: int = 6
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -415,7 +416,7 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
         "mode": body.mode, "nsfw": body.nsfw, "sort": body.sort, "period": body.period,
         "version_id": body.version_id, "types": body.types,
         "with_meta": body.with_meta, "from_platform": body.from_platform,
-        "is_remix": body.is_remix,
+        "is_remix": body.is_remix, "workers": max(1, min(body.workers, 20)),
     }
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
@@ -438,13 +439,16 @@ def _gallery_download_one(iid: str, url: str, meta: dict, dest_dir: Path,
         if ext == ".mp4":
             _extract_thumbnail(dest)
         return "skipped"
-    # Retry up to 5 times with 2s delay
+    # Retry up to 5 times with 2s delay (check stop every 200ms)
     for attempt in range(5):
         if stop.is_set():
             return "failed"
         if _download_image(url, dest):
             break
-        time.sleep(2)
+        for _ in range(10):
+            if stop.is_set():
+                return "failed"
+            time.sleep(0.2)
     else:
         return "failed"
     if ext == ".mp4":
@@ -460,12 +464,10 @@ def _gallery_download_one(iid: str, url: str, meta: dict, dest_dir: Path,
     return "ok"
 
 
-_GALLERY_WORKERS = 6
-
-
 def _gallery_download_batch(items: list[tuple], dest_dir: Path,
                             state: dict, stop: threading.Event,
-                            seen: set, fetch_gen_data: bool = False) -> bool:
+                            seen: set, fetch_gen_data: bool = False,
+                            workers: int = 6) -> bool:
     """Download a batch of (id, url, meta) items with parallel workers.
     Deduplicates by URL-derived UUID. Returns False if stopped."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -482,7 +484,7 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
     if not todo:
         return True
 
-    with ThreadPoolExecutor(max_workers=_GALLERY_WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(_gallery_download_one, iid, url, meta, dest_dir,
                         fetch_gen_data, stop): iid
@@ -510,6 +512,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     community_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
     max_community = state.get("max_images", 200)
+    num_workers = api_params.get("workers", 6)
 
     # ── Phase 1: model card images (always all of them) ──
     try:
@@ -542,7 +545,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     state["total"] = len(card_imgs) + max_community
     seen: set[str] = set()
 
-    if not _gallery_download_batch(card_imgs, card_dir, state, stop, seen):
+    if not _gallery_download_batch(card_imgs, card_dir, state, stop, seen, workers=num_workers):
         state["status"] = "stopped"
         return
 
@@ -643,7 +646,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 break
             # tRPC returns short url (UUID only), REST returns full URL
             raw_url = img.get("url", "")
-            if use_trpc and raw_url and not raw_url.startswith("http"):
+            if mode in ("fixed", "trpc") and raw_url and not raw_url.startswith("http"):
                 ext_hint = ".mp4" if img.get("type") == "video" else ".jpeg"
                 full_url = f"{_CDN}{raw_url}/original=true/{raw_url}{ext_hint}"
             else:
@@ -662,7 +665,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 "url": full_url,
                 "type": img.get("type", "image"),
                 "width": img.get("width"), "height": img.get("height"),
-                "username": (img.get("user") or {}).get("username") if use_trpc else img.get("username"),
+                "username": (img.get("user") or {}).get("username") if mode in ("fixed", "trpc") else img.get("username"),
                 "postId": img.get("postId"),
                 "postTitle": img.get("postTitle", ""),
                 "duration": (img.get("metadata") or {}).get("duration"),
@@ -676,7 +679,8 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             batch.append((iid, full_url, meta))
             community_downloaded += 1
 
-        if not _gallery_download_batch(batch, community_dir, state, stop, seen, fetch_gen_data=True):
+        if not _gallery_download_batch(batch, community_dir, state, stop, seen,
+                                              fetch_gen_data=True, workers=num_workers):
             state["status"] = "stopped"
             return
 
