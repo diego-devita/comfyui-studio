@@ -1495,6 +1495,8 @@
   var galleryImageIds = new Set();
   var galleryDownloading = false;
   var galleryPlayingVideo = null;
+  var galleryDlStartTime = 0;
+  var galleryLastDone = 0;
 
   var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
   var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
@@ -1589,6 +1591,8 @@
     progress.style.display = '';
     progressFill.classList.add('indeterminate');
     document.getElementById('galleryProgressText').textContent = 'Starting download...';
+    galleryDlStartTime = Date.now();
+    galleryLastDone = 0;
 
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
@@ -1637,7 +1641,19 @@
           progressFill.classList.remove('indeterminate');
           progressFill.style.width = Math.min(total > 0 ? Math.round(done / total * 100) : 0, 100) + '%';
         }
-        progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' / ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
+        var dlText = 'Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' / ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
+        var elapsed = (Date.now() - galleryDlStartTime) / 1000;
+        if (done > 0 && elapsed > 3) {
+          var rate = (done / elapsed * 60).toFixed(1);
+          dlText += ' — ' + rate + '/min';
+          if (total > done) {
+            var remaining = Math.round((total - done) / (done / elapsed));
+            var mins = Math.floor(remaining / 60);
+            var secs = remaining % 60;
+            dlText += ', ~' + (mins > 0 ? mins + 'm ' : '') + secs + 's left';
+          }
+        }
+        progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>' + dlText;
       } else if (status === 'stopping') {
         btn.textContent = 'Stopping...'; btn.disabled = true;
       } else {
