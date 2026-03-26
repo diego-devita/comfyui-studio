@@ -1752,7 +1752,11 @@
         : '';
       thumb.dataset.videoSrc = src;
       thumb.dataset.thumbSrc = thumbUrl;
-      thumb.innerHTML = '<img class="thumb-img" src="' + (thumbUrl || '') + '" loading="lazy"><div class="play-overlay">' + PLAY_SVG + '</div>';
+      if (thumbUrl) {
+        thumb.innerHTML = '<img class="thumb-img" src="' + thumbUrl + '" loading="lazy"><div class="play-overlay">' + PLAY_SVG + '</div>';
+      } else {
+        thumb.innerHTML = '<div class="thumb-img" style="background:var(--bg)"></div><div class="play-overlay">' + PLAY_SVG + '</div>';
+      }
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
     } else {
