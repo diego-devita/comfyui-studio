@@ -142,6 +142,11 @@
   .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
   .gallery-thumb:hover .expand-btn { opacity: 1; }
   .gallery-thumb .thumb-img { width: 150px; height: 150px; object-fit: cover; display: block; border-radius: 4px; background: var(--bg); }
+  .gallery-thumb .thumb-idx {
+    position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.7); font-size: 10px; padding: 1px 5px;
+    border-radius: 3px; pointer-events: none; line-height: 1.4;
+  }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
   #detailsMetaContent::-webkit-scrollbar { display: none; }
   .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
@@ -1800,6 +1805,11 @@
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
     }
+    var idx = galleryImages.indexOf(img) + 1;
+    var badge = document.createElement('span');
+    badge.className = 'thumb-idx';
+    badge.textContent = idx;
+    thumb.appendChild(badge);
     return thumb;
   }
 
