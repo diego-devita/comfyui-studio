@@ -1654,7 +1654,13 @@
       function mapImg(img, type, source, prefix) {
         var m = img.meta || {};
         m._item_id = img.id;
-        return { id: img.id, type: type, ext: img.ext || '.jpeg', meta: m, source: source, key: prefix + img.id };
+        return {
+          id: img.id, type: type, ext: img.ext || '.jpeg', meta: m,
+          source: source, key: prefix + img.id,
+          civitai_id: m.civitai_id || img.id,
+          createdAt: img.createdAt || m.createdAt || '',
+          username: m.username || ''
+        };
       }
       var card = (data.gallery_card || []).map(function(img) { return mapImg(img, 'gallery-card', 'card', 'card-'); });
       var community = (data.gallery_community || []).filter(function(img) {
