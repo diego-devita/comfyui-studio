@@ -1,27 +1,37 @@
 """ComfyUI Studio — Gallery image store backed by SQLite.
 
-This module manages a flat, content-addressed media store for CivitAI gallery
-images and videos. It replaces the old per-model directory structure with:
+This module manages gallery images and videos from CivitAI with two storage
+areas under a single SQLite index:
 
   catalogs/.images/
-  ├── gallery.db         ← SQLite index (this module)
-  ├── media/NNN/NNN/     ← sharded media files + thumbnails
-  └── meta/NNN/NNN/      ← JSON metadata (full API response, generation data)
+  ├── gallery.db                 ← SQLite index (this module)
+  ├── models/{model_id}/         ← original/card images, grouped by model
+  │   ├── {id}.mp4               ← media file
+  │   ├── {id}.thumb.jpg         ← ffmpeg thumbnail (video only)
+  │   └── {id}.json              ← full metadata
+  └── media/NNN/NNN/             ← community images, flat sharded
+      ├── {id}.mp4
+      ├── {id}.thumb.jpg
+      └── {id}.json
 
 Design decisions:
-  - Separate DB file (not in db/studio.db) because gallery data is ephemeral
-    and rebuildable from CivitAI. Keeping it separate means gallery wipes
-    don't risk critical data like jobs.
-  - Sharding by first 3 + next 3 digits of civitai_id keeps directories
-    under ~1000 files each, even with tens of thousands of images.
-  - civitai_id is TEXT not INTEGER because card images may only have a UUID
-    (CivitAI REST API returns id=null for model version images).
-  - file_uuid provides cross-endpoint dedup: the same image may appear under
-    different IDs in REST vs tRPC, but the CDN URL UUID is always the same.
-  - image_versions join table supports the reality that one community image
-    can belong to multiple model versions (user used both HIGH and LOW LoRA).
-  - Thread safety via WAL mode + busy_timeout, matching the proven pattern
-    in db.py. Each thread gets its own connection via threading.local().
+  - Two storage areas because original images belong to a model (few, stable)
+    while community images are numerous and cross-version. Originals are
+    grouped by model_id for easy browsing; community is sharded for scale.
+  - All files (media + thumb + meta) live in the same directory for each item.
+    This avoids a separate meta/ tree and keeps related files together.
+  - Single DB table with `source` field ('original' vs 'community') to
+    distinguish the two types. Both are queried the same way.
+  - Sharding community images by first 3 + next 3 digits of civitai_id keeps
+    directories under ~1000 files each, even with tens of thousands.
+  - civitai_id is TEXT to support both numeric IDs and UUID fallbacks
+    (CivitAI REST API returns id=null for some model version images).
+  - file_uuid provides cross-endpoint dedup: same image may have different
+    IDs in REST vs tRPC, but CDN URL UUID is always the same.
+  - image_versions join table: one community image can appear in multiple
+    model versions' galleries without duplicating files on disk.
+  - Thread safety: WAL mode + busy_timeout, each thread gets its own
+    connection via threading.local(). Proven pattern from db.py.
 """
 
 import json
@@ -33,8 +43,6 @@ from pathlib import Path
 from config import CATALOGS_DIR
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-# Gallery DB and media live under the catalogs .images directory.
-# This keeps everything together and separate from the main studio DB.
 
 IMAGES_DIR = CATALOGS_DIR / ".images"
 GALLERY_DB_PATH = IMAGES_DIR / "gallery.db"
@@ -73,7 +81,8 @@ def init_gallery_db():
     conn = _get_conn()
     conn.executescript("""
         -- Main image table: one row per unique media file on disk.
-        -- civitai_id is the primary key (numeric ID as text, or UUID fallback).
+        -- source='original' → file in models/{model_id}/
+        -- source='community' → file in media/NNN/NNN/
         CREATE TABLE IF NOT EXISTS gallery_images (
             civitai_id    TEXT PRIMARY KEY,
             file_uuid     TEXT,
@@ -83,7 +92,7 @@ def init_gallery_db():
             thumb_path    TEXT,
             meta_path     TEXT,
 
-            -- CivitAI coordinates: where this image came from
+            -- CivitAI coordinates
             model_id      INTEGER NOT NULL,
             post_id       INTEGER,
             post_title    TEXT DEFAULT '',
@@ -101,7 +110,7 @@ def init_gallery_db():
             created_at    TEXT,
             downloaded_at TEXT,
 
-            -- Stats snapshot (captured at download time)
+            -- Stats snapshot (at download time)
             reactions     INTEGER DEFAULT 0,
             comments      INTEGER DEFAULT 0,
             collected     INTEGER DEFAULT 0,
@@ -118,7 +127,7 @@ def init_gallery_db():
 
         -- Join table: maps images to model versions.
         -- One image can belong to multiple versions (e.g. user used both
-        -- HIGH and LOW LoRA). This avoids duplicating files on disk.
+        -- HIGH and LOW LoRA). Avoids duplicating files on disk.
         CREATE TABLE IF NOT EXISTS image_versions (
             civitai_id    TEXT NOT NULL,
             version_id    INTEGER NOT NULL,
@@ -127,8 +136,6 @@ def init_gallery_db():
                 ON DELETE CASCADE
         );
 
-        -- Indexes for the queries we actually run:
-        -- list by model, list by version, sort by date, dedup by uuid
         CREATE INDEX IF NOT EXISTS idx_gi_model_id   ON gallery_images(model_id);
         CREATE INDEX IF NOT EXISTS idx_gi_source      ON gallery_images(source);
         CREATE INDEX IF NOT EXISTS idx_gi_created_at  ON gallery_images(created_at);
@@ -139,42 +146,59 @@ def init_gallery_db():
 
 
 # ── Path helpers ─────────────────────────────────────────────────────────────
-# These compute the sharded directory structure for a given civitai_id.
-# The sharding ensures no single directory accumulates too many files,
-# which would degrade filesystem performance on ext4.
-#
-# Numeric IDs:  117242376 → media/117/242/117242376.mp4
-# UUID fallback: 745fa4bb-... → media/745/fa4/745fa4bb-....mp4
 
 def _shard_prefix(civitai_id: str) -> tuple[str, str]:
     """Split an ID into two 3-character shard components.
 
-    For numeric IDs (most common), this splits by digit position.
-    For UUIDs, it splits by hex character position.
-    Either way, it creates a balanced directory tree.
+    For numeric IDs: 117242376 → ('117', '242')
+    For UUIDs: 745fa4bb-... → ('745', 'fa4')
+    Creates a balanced directory tree — max ~1000 files per leaf.
     """
-    s = str(civitai_id).replace("-", "")  # strip UUID dashes for consistent sharding
+    s = str(civitai_id).replace("-", "")
     d1 = s[:3] if len(s) >= 3 else s.ljust(3, "0")
     d2 = s[3:6] if len(s) >= 6 else (s[3:] if len(s) > 3 else "000").ljust(3, "0")
     return d1, d2
 
 
-def media_path(civitai_id: str, ext: str) -> str:
-    """Compute relative path for a media file: media/NNN/NNN/{id}{ext}"""
+def original_path(model_id: int, civitai_id: str, ext: str) -> str:
+    """Path for an original/card image: models/{model_id}/{id}{ext}
+
+    Originals are grouped by model_id (not sharded) because there are
+    few per model and they logically belong to the model, not globally.
+    """
+    return f"models/{model_id}/{civitai_id}{ext}"
+
+
+def community_path(civitai_id: str, ext: str) -> str:
+    """Path for a community image: media/NNN/NNN/{id}{ext}
+
+    Community images are sharded because there can be thousands.
+    """
     d1, d2 = _shard_prefix(civitai_id)
     return f"media/{d1}/{d2}/{civitai_id}{ext}"
 
 
-def thumb_path(civitai_id: str) -> str:
-    """Compute relative path for a video thumbnail."""
+def file_path_for(source: str, model_id: int, civitai_id: str, ext: str) -> str:
+    """Compute the relative file path based on source type."""
+    if source == "original":
+        return original_path(model_id, civitai_id, ext)
+    return community_path(civitai_id, ext)
+
+
+def thumb_path_for(source: str, model_id: int, civitai_id: str) -> str:
+    """Compute thumbnail path — same directory as the media file."""
+    if source == "original":
+        return f"models/{model_id}/{civitai_id}.thumb.jpg"
     d1, d2 = _shard_prefix(civitai_id)
     return f"media/{d1}/{d2}/{civitai_id}.thumb.jpg"
 
 
-def meta_path(civitai_id: str) -> str:
-    """Compute relative path for the JSON metadata file."""
+def meta_path_for(source: str, model_id: int, civitai_id: str) -> str:
+    """Compute metadata JSON path — same directory as the media file."""
+    if source == "original":
+        return f"models/{model_id}/{civitai_id}.json"
     d1, d2 = _shard_prefix(civitai_id)
-    return f"meta/{d1}/{d2}/{civitai_id}.json"
+    return f"media/{d1}/{d2}/{civitai_id}.json"
 
 
 def abs_path(relative: str) -> Path:
@@ -200,8 +224,8 @@ def image_exists(civitai_id: str) -> bool:
 def uuid_exists(file_uuid: str) -> bool:
     """Check if an image with this CDN UUID already exists.
 
-    Used for cross-endpoint dedup: the same image may have different
-    civitai_ids in REST vs tRPC responses, but the CDN URL UUID is unique.
+    Cross-endpoint dedup: same image may have different civitai_ids in
+    REST vs tRPC, but CDN URL UUID is unique.
     """
     if not file_uuid:
         return False
@@ -215,9 +239,9 @@ def uuid_exists(file_uuid: str) -> bool:
 def insert_image(data: dict):
     """Insert or update an image record.
 
-    Uses UPSERT (ON CONFLICT) so it's safe to call multiple times for the
-    same image. On conflict, updates metadata fields but preserves the
-    original file paths and download timestamp.
+    Uses UPSERT so it's safe to call multiple times for the same image.
+    On conflict, updates metadata fields but preserves original file paths
+    and download timestamp.
     """
     conn = _get_conn()
     conn.execute("""
@@ -277,9 +301,8 @@ def insert_image(data: dict):
 def link_version(civitai_id: str, version_id: int):
     """Associate an image with a model version.
 
-    Called after insert_image to record that this image was found via
-    a specific version's gallery. The same image can be linked to
-    multiple versions without duplicating files.
+    The same image can be linked to multiple versions without
+    duplicating files on disk.
     """
     conn = _get_conn()
     conn.execute(
@@ -303,17 +326,10 @@ def list_images_by_version(version_id: int, source: str | None = None,
                            order_desc: bool = True) -> list[dict]:
     """List all images associated with a specific model version.
 
-    This is the primary query for the gallery UI: when you open a LoRA's
-    gallery, it shows images linked to that version via image_versions.
-
-    Args:
-        version_id: CivitAI model version ID
-        source: Optional filter — 'card' or 'community' or None for all
-        order_by: Column to sort by (created_at, reactions, etc.)
-        order_desc: Sort descending (newest/most popular first)
+    Primary query for the gallery UI: shows images linked to a version
+    via the image_versions join table.
     """
     conn = _get_conn()
-    # Whitelist allowed order_by columns to prevent SQL injection
     allowed_order = {"created_at", "reactions", "comments", "collected", "downloaded_at"}
     if order_by not in allowed_order:
         order_by = "created_at"
@@ -338,8 +354,8 @@ def list_images_by_model(model_id: int, source: str | None = None,
                          order_desc: bool = True) -> list[dict]:
     """List all images for a model (across all versions).
 
-    Used when the user wants to see the full gallery for a model,
-    not filtered by a specific version.
+    Used for original/card images which belong to the model, not a version.
+    Also useful for seeing the full gallery across all versions.
     """
     conn = _get_conn()
     allowed_order = {"created_at", "reactions", "comments", "collected", "downloaded_at"}
@@ -362,23 +378,27 @@ def list_images_by_model(model_id: int, source: str | None = None,
 
 def count_and_size(model_id: int | None = None,
                    version_id: int | None = None) -> dict:
-    """Get counts and total file size for a model or version.
+    """Get counts and total file size by source type.
 
-    Returns dict with: card_count, community_count, card_bytes, community_bytes.
-    Used by the gallery status endpoint.
+    Returns: original_count, community_count, original_bytes, community_bytes.
     """
     conn = _get_conn()
     if version_id:
+        # For community images linked to this version + originals for the model
         sql = """
             SELECT g.source,
                    COUNT(*) as count,
                    COALESCE(SUM(g.file_size), 0) as bytes
             FROM gallery_images g
-            JOIN image_versions iv ON g.civitai_id = iv.civitai_id
-            WHERE iv.version_id = ?
+            LEFT JOIN image_versions iv ON g.civitai_id = iv.civitai_id
+            WHERE (iv.version_id = ? OR (g.source = 'original' AND g.model_id = (
+                SELECT model_id FROM gallery_images g2
+                JOIN image_versions iv2 ON g2.civitai_id = iv2.civitai_id
+                WHERE iv2.version_id = ? LIMIT 1
+            )))
             GROUP BY g.source
         """
-        rows = conn.execute(sql, (version_id,)).fetchall()
+        rows = conn.execute(sql, (version_id, version_id)).fetchall()
     elif model_id:
         sql = """
             SELECT source,
@@ -392,8 +412,8 @@ def count_and_size(model_id: int | None = None,
     else:
         return {}
 
-    result = {"card_count": 0, "community_count": 0,
-              "card_bytes": 0, "community_bytes": 0}
+    result = {"original_count": 0, "community_count": 0,
+              "original_bytes": 0, "community_bytes": 0}
     for row in rows:
         src = row["source"]
         result[f"{src}_count"] = row["count"]
@@ -401,13 +421,11 @@ def count_and_size(model_id: int | None = None,
     return result
 
 
-def delete_by_model(model_id: int) -> int:
+def delete_by_model(model_id: int) -> tuple[int, list[str]]:
     """Delete all gallery images for a model.
 
-    Removes DB records (cascade deletes image_versions) and returns
-    the list of file paths to delete from disk. Caller is responsible
-    for actually deleting the files — this keeps DB ops and filesystem
-    ops separate for reliability.
+    Returns (count, paths) — caller deletes files from disk.
+    Cascade deletes image_versions automatically.
     """
     conn = _get_conn()
     rows = conn.execute(
@@ -427,8 +445,7 @@ def delete_by_model(model_id: int) -> int:
 
 
 def delete_by_version(version_id: int) -> int:
-    """Remove version associations. Images that have no remaining version
-    links are orphans and can be cleaned up separately."""
+    """Remove version associations only (not the images themselves)."""
     conn = _get_conn()
     count = conn.execute(
         "DELETE FROM image_versions WHERE version_id = ?", (version_id,)
@@ -438,24 +455,23 @@ def delete_by_version(version_id: int) -> int:
 
 
 # ── Migration ────────────────────────────────────────────────────────────────
-# Migrates from old per-model directory structure to flat sharded store.
-# Idempotent — safe to run multiple times. Files are moved, not copied,
-# to avoid doubling disk usage during migration.
 
 def migrate_from_directories(images_dir: Path) -> int:
     """Migrate old directory-based gallery to flat store + SQLite.
 
     Old structure: {model_id}/gallery/{card|community}/{id}.{ext}
-    New structure: media/NNN/NNN/{id}.{ext}
+    New structure:
+      - card → models/{model_id}/{id}.{ext} (source='original')
+      - community → media/NNN/NNN/{id}.{ext} (source='community')
 
+    Idempotent — safe to run multiple times. Files are moved, not copied.
     Returns count of migrated images.
     """
     import shutil
 
     count = 0
-    # Find all model directories that have a gallery subdirectory
     for model_dir in images_dir.iterdir():
-        if not model_dir.is_dir() or model_dir.name in ("media", "meta"):
+        if not model_dir.is_dir() or model_dir.name in ("media", "models"):
             continue
         try:
             model_id = int(model_dir.name)
@@ -466,13 +482,15 @@ def migrate_from_directories(images_dir: Path) -> int:
         if not gallery_dir.is_dir():
             continue
 
-        for source in ("card", "community"):
-            source_dir = gallery_dir / source
+        for old_source in ("card", "community"):
+            source_dir = gallery_dir / old_source
             if not source_dir.is_dir():
                 continue
 
+            # Map old source names to new
+            new_source = "original" if old_source == "card" else "community"
+
             for f in source_dir.iterdir():
-                # Only process media files, not metadata or thumbnails
                 if f.suffix not in (".jpeg", ".mp4"):
                     continue
                 if f.stat().st_size == 0:
@@ -481,17 +499,13 @@ def migrate_from_directories(images_dir: Path) -> int:
                 civitai_id = f.stem
                 ext = f.suffix
 
-                # Skip if already in DB
                 if image_exists(civitai_id):
-                    # Just ensure the version link exists
-                    # We don't know the version_id from the old structure,
-                    # so we skip version linking during migration
                     continue
 
-                # Compute new paths
-                new_file = media_path(civitai_id, ext)
-                new_thumb = thumb_path(civitai_id)
-                new_meta = meta_path(civitai_id)
+                # Compute new paths based on source type
+                new_file = file_path_for(new_source, model_id, civitai_id, ext)
+                new_thumb = thumb_path_for(new_source, model_id, civitai_id)
+                new_meta = meta_path_for(new_source, model_id, civitai_id)
 
                 # Move media file
                 dest = abs_path(new_file)
@@ -500,12 +514,13 @@ def migrate_from_directories(images_dir: Path) -> int:
 
                 # Move thumbnail if exists
                 old_thumb = f.with_suffix(".thumb.jpg")
+                has_thumb = False
                 if old_thumb.exists():
                     thumb_dest = abs_path(new_thumb)
-                    thumb_dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(old_thumb), str(thumb_dest))
+                    has_thumb = True
 
-                # Move metadata JSON if exists
+                # Move and read metadata JSON
                 old_meta = f.with_suffix(".json")
                 meta_data = {}
                 if old_meta.exists():
@@ -514,24 +529,20 @@ def migrate_from_directories(images_dir: Path) -> int:
                     except Exception:
                         pass
                     meta_dest = abs_path(new_meta)
-                    meta_dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(old_meta), str(meta_dest))
 
-                # Extract stats from metadata
+                # Extract fields for DB
                 stats = meta_data.get("stats") or {}
-                prompt = ""
                 raw_meta = meta_data.get("raw_meta") or {}
-                if isinstance(raw_meta, dict):
-                    prompt = raw_meta.get("prompt", "")
+                prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
 
-                # Insert into DB
                 insert_image({
                     "civitai_id": civitai_id,
-                    "file_uuid": meta_data.get("url", "").split("/")[-2] if "/" in meta_data.get("url", "") else None,
+                    "file_uuid": _extract_uuid(meta_data.get("url", "")),
                     "type": meta_data.get("type", "video" if ext == ".mp4" else "image"),
                     "ext": ext,
                     "file_path": new_file,
-                    "thumb_path": new_thumb if old_thumb.exists() or abs_path(new_thumb).exists() else None,
+                    "thumb_path": new_thumb if has_thumb else None,
                     "meta_path": new_meta if meta_data else None,
                     "model_id": model_id,
                     "post_id": meta_data.get("postId"),
@@ -546,16 +557,15 @@ def migrate_from_directories(images_dir: Path) -> int:
                     "created_at": meta_data.get("createdAt"),
                     "has_meta": bool(meta_data),
                     "has_gen_data": bool(meta_data.get("generation_data")),
-                    "source": source,
+                    "source": new_source,
                     "prompt": prompt,
                 })
                 count += 1
 
-        # Clean up empty directories after migration
+        # Clean up empty old directories
         try:
             if gallery_dir.exists():
                 shutil.rmtree(gallery_dir)
-            # Remove model dir if empty (only had gallery)
             remaining = list(model_dir.iterdir())
             if not remaining:
                 model_dir.rmdir()
@@ -568,9 +578,12 @@ def migrate_from_directories(images_dir: Path) -> int:
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _now_italian() -> str:
-    """Current timestamp in Italian timezone, ISO format.
-
-    Matches the convention used throughout the project: all user-facing
-    timestamps are in Europe/Rome timezone.
-    """
+    """Current timestamp in Italian timezone, ISO format."""
     return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _extract_uuid(url: str) -> str | None:
+    """Extract UUID from a CivitAI CDN URL."""
+    import re
+    m = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', url)
+    return m.group(1) if m else None

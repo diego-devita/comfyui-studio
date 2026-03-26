@@ -461,10 +461,13 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
             _gdb.link_version(iid, version_id)
         return "skipped"
 
-    # Compute sharded file paths
-    rel_file = _gdb.media_path(iid, ext)
-    rel_thumb = _gdb.thumb_path(iid) if ext == ".mp4" else None
-    rel_meta = _gdb.meta_path(iid)
+    # Compute file paths based on source type:
+    # 'original' → models/{model_id}/{id}.ext (grouped by model)
+    # 'community' → media/NNN/NNN/{id}.ext (sharded flat store)
+    source = meta.get("_source", "community")
+    rel_file = _gdb.file_path_for(source, model_id, iid, ext)
+    rel_thumb = _gdb.thumb_path_for(source, model_id, iid) if ext == ".mp4" else None
+    rel_meta = _gdb.meta_path_for(source, model_id, iid)
     dest = _gdb.abs_path(rel_file)
 
     # Also skip if file exists on disk but not in DB (migration edge case)
@@ -817,10 +820,11 @@ async def gallery_status(model_id: int, version_id: int | None = None):
 
     # Query images from SQLite, split by source (card vs community)
     if version_id:
-        card_list = _gdb.list_images_by_version(version_id, source="card")
+        # Original images belong to model, not version — always query by model_id
+        card_list = _gdb.list_images_by_model(model_id, source="original")
         comm_list = _gdb.list_images_by_version(version_id, source="community")
     else:
-        card_list = _gdb.list_images_by_model(model_id, source="card")
+        card_list = _gdb.list_images_by_model(model_id, source="original")
         comm_list = _gdb.list_images_by_model(model_id, source="community")
 
     # Convert DB rows to the format the frontend expects.
@@ -862,7 +866,7 @@ async def gallery_status(model_id: int, version_id: int | None = None):
         "pages_fetched": state.get("pages_fetched", 0),
         "counted": state.get("counted", 0),
         "gallery_card": formatted_card,
-        "gallery_card_bytes": stats.get("card_bytes", 0),
+        "gallery_card_bytes": stats.get("original_bytes", 0),
         "gallery_community": formatted_comm,
         "gallery_community_bytes": stats.get("community_bytes", 0),
     })
