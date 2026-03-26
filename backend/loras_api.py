@@ -406,8 +406,7 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     stop = threading.Event()
     api_params = {
         "mode": body.mode, "nsfw": body.nsfw, "sort": body.sort, "period": body.period,
-        "version_id": body.version_id, "browsingLevel": body.browsingLevel,
-        "types": body.types, "withMeta": body.withMeta,
+        "version_id": body.version_id,
     }
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
