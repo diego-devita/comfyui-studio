@@ -141,6 +141,7 @@
   }
   .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
   .gallery-thumb:hover .expand-btn { opacity: 1; }
+  .video-placeholder { width: 150px; height: 150px; background: var(--bg); border-radius: 4px; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
   #detailsMetaContent::-webkit-scrollbar { display: none; }
   .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
@@ -1694,18 +1695,34 @@
     }
   }
 
-  // IntersectionObserver for lazy video loading
+  // IntersectionObserver — swap placeholder/video based on visibility
   var videoObserver = new IntersectionObserver(function(entries) {
     entries.forEach(function(entry) {
-      var video = entry.target.querySelector('video');
-      if (!video) return;
+      var thumb = entry.target;
+      var src = thumb.dataset.videoSrc;
+      if (!src) return;
       if (entry.isIntersecting) {
-        if (video.preload === 'none') video.preload = 'metadata';
+        // Only create video if not already there
+        if (!thumb.querySelector('video')) {
+          var v = document.createElement('video');
+          v.src = src; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
+          var placeholder = thumb.querySelector('.video-placeholder');
+          if (placeholder) placeholder.replaceWith(v);
+        }
       } else {
-        if (!video.paused) { video.pause(); entry.target.classList.remove('playing'); }
+        // Remove video, put placeholder back
+        var video = thumb.querySelector('video');
+        if (video) {
+          if (!video.paused) video.pause();
+          thumb.classList.remove('playing');
+          if (thumb === galleryPlayingVideo) galleryPlayingVideo = null;
+          var ph = document.createElement('div');
+          ph.className = 'video-placeholder';
+          video.replaceWith(ph);
+        }
       }
     });
-  }, { rootMargin: '200px' });
+  }, { rootMargin: '100px' });
 
   function makeThumb(img) {
     var ext = img.ext || '.jpeg';
@@ -1724,7 +1741,8 @@
     });
 
     if (ext === '.mp4') {
-      thumb.innerHTML = '<video src="' + src + '" muted loop playsinline preload="none"></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+      thumb.dataset.videoSrc = src;
+      thumb.innerHTML = '<div class="video-placeholder"></div><div class="play-overlay">' + PLAY_SVG + '</div>';
       videoObserver.observe(thumb);
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
