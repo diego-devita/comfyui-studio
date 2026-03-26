@@ -1681,7 +1681,16 @@
       } else {
         btn.textContent = 'Download'; btn.disabled = false; delBtn.disabled = false;
         galleryDownloading = false; progressFill.classList.remove('indeterminate');
-        progress.style.display = 'none';
+        if (status === 'done' || status === 'stopped') {
+          var elapsed = Math.round((Date.now() - galleryDlStartTime) / 1000);
+          var timeStr = elapsed >= 60 ? Math.floor(elapsed/60) + 'min ' + (elapsed%60) + 's' : elapsed + 's';
+          progress.style.display = '';
+          progressFill.style.width = '100%';
+          progressText.textContent = (status === 'done' ? 'Completed' : 'Stopped') + ' in ' + timeStr;
+          setTimeout(function() { progress.style.display = 'none'; }, 5000);
+        } else {
+          progress.style.display = 'none';
+        }
         if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
       }
 
