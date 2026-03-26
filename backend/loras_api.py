@@ -436,10 +436,17 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     for v in model_data.get("modelVersions", []):
         for img in v.get("images", []):
             url = img.get("url", "")
-            if url:
-                iid = img.get("id") or _url_to_id(url)
-                if iid:
-                    card_imgs.append((str(iid), url, {}))
+            if not url:
+                continue
+            iid = img.get("id") or _url_to_id(url)
+            if not iid:
+                continue
+            meta = {"civitai_id": img.get("id"), "url": url,
+                    "type": img.get("type", "image"),
+                    "width": img.get("width"), "height": img.get("height")}
+            if img.get("id"):
+                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}"
+            card_imgs.append((str(iid), url, meta))
 
     state["total"] = len(card_imgs) + max_community
     seen: set[str] = set()
@@ -492,7 +499,17 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             iid = str(img.get("id") or url_key)
             if not iid:
                 continue
-            meta = _extract_image_meta(img.get("meta"))
+            meta = {
+                "civitai_id": img.get("id"),
+                "civitai_page": f"https://civitai.com/images/{img['id']}" if img.get("id") else None,
+                "url": url,
+                "type": img.get("type", "image"),
+                "width": img.get("width"), "height": img.get("height"),
+                "username": img.get("username"),
+                "createdAt": img.get("createdAt"),
+                "stats": img.get("stats"),
+                "raw_meta": img.get("meta"),
+            }
             batch.append((iid, url, meta))
             community_downloaded += 1
 

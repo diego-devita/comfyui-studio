@@ -1139,24 +1139,49 @@
     if (!meta || Object.keys(meta).length === 0)
       return '<p style="color:var(--muted)">No generation data available</p>';
     var h = '';
-    if (meta.prompt) h += '<h4>Positive Prompt</h4><p>' + escHtml(meta.prompt) + '</p>';
-    if (meta.negativePrompt) h += '<h4>Negative Prompt</h4><p>' + escHtml(meta.negativePrompt) + '</p>';
-    if (meta.model) h += '<div class="meta-row"><span>Checkpoint</span><span>' + escHtml(meta.model) + '</span></div>';
-    if (meta.loras && meta.loras.length) {
+    // CivitAI links
+    if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI Page</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">' + escHtml(meta.civitai_page) + '</a></span></div>';
+    if (meta.url) h += '<div class="meta-row"><span>Direct URL</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open</a></span></div>';
+    if (meta.username) h += '<div class="meta-row"><span>Author</span><span>' + escHtml(meta.username) + '</span></div>';
+    if (meta.width && meta.height) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.width + 'x' + meta.height + '</span></div>';
+    if (meta.type) h += '<div class="meta-row"><span>Type</span><span>' + escHtml(meta.type) + '</span></div>';
+    // Generation params from raw_meta
+    var rm = meta.raw_meta || meta;
+    if (rm.prompt) h += '<h4>Positive Prompt</h4><p>' + escHtml(rm.prompt) + '</p>';
+    if (rm.negativePrompt) h += '<h4>Negative Prompt</h4><p>' + escHtml(rm.negativePrompt) + '</p>';
+    if (rm.Model || rm.model) h += '<div class="meta-row"><span>Checkpoint</span><span>' + escHtml(rm.Model || rm.model) + '</span></div>';
+    var loras = rm.loras || (rm.resources || []).filter(function(r) { return (r.type || '').toLowerCase() === 'lora'; });
+    if (loras.length) {
       h += '<h4>LoRAs Used</h4><div class="meta-loras">';
-      meta.loras.forEach(function(l) {
-        h += '<span>' + escHtml(l.name) + (l.weight != null ? ' (' + l.weight + ')' : '') + '</span>';
-      });
+      loras.forEach(function(l) { h += '<span>' + escHtml(l.name || '') + (l.weight != null ? ' (' + l.weight + ')' : '') + '</span>'; });
       h += '</div>';
     }
-    if (meta.seed != null) h += '<div class="meta-row"><span>Seed</span><span>' + meta.seed + '</span></div>';
-    if (meta.steps != null) h += '<div class="meta-row"><span>Steps</span><span>' + meta.steps + '</span></div>';
-    if (meta.cfgScale != null) h += '<div class="meta-row"><span>CFG</span><span>' + meta.cfgScale + '</span></div>';
-    if (meta.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(meta.sampler) + '</span></div>';
-    if (meta.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + meta.clipSkip + '</span></div>';
-    if (meta.size) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.size + '</span></div>';
+    if (rm.seed != null) h += '<div class="meta-row"><span>Seed</span><span>' + rm.seed + '</span></div>';
+    if (rm.steps != null) h += '<div class="meta-row"><span>Steps</span><span>' + rm.steps + '</span></div>';
+    if (rm.cfgScale != null) h += '<div class="meta-row"><span>CFG</span><span>' + rm.cfgScale + '</span></div>';
+    if (rm.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(rm.sampler) + '</span></div>';
+    if (rm.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + rm.clipSkip + '</span></div>';
+    if (rm.Size || rm.size) h += '<div class="meta-row"><span>Size</span><span>' + (rm.Size || rm.size) + '</span></div>';
+    // Raw metadata copy button
+    var rawData = meta.raw_meta || meta;
+    if (rawData && Object.keys(rawData).length > 0) {
+      var rawJson = JSON.stringify(rawData, null, 2);
+      h += '<div class="meta-row" style="margin-top:8px"><span>Raw Metadata</span><span>' +
+        '<button class="copy-meta-btn" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:11px" ' +
+        'data-raw="' + escHtml(rawJson) + '">Copy JSON</button></span></div>';
+    }
     return h;
   }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.copy-meta-btn');
+    if (!btn) return;
+    navigator.clipboard.writeText(btn.dataset.raw);
+    var orig = btn.textContent;
+    btn.textContent = 'Copied';
+    btn.style.color = 'var(--accent)';
+    setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 3000);
+  });
 
   // ── Lookup Dialog ──
   var lookupData = null;
