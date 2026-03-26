@@ -84,6 +84,12 @@ def _category_for_base_model(bm: str) -> tuple[str, str]:
     return ("other_loras", "Other LoRAs")
 
 
+def _url_to_id(url: str) -> str:
+    """Extract UUID from CivitAI CDN URL as fallback when id is null."""
+    m = re.search(r'/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/', url)
+    return m.group(1) if m else ""
+
+
 def _parse_civitai_url(url: str) -> tuple[int, int | None]:
     m = re.search(r'civitai\.com/models/(\d+)', url)
     if not m:
@@ -183,11 +189,12 @@ async def lookup_civitai(body: LookupRequest):
             for f in v.get("files", [])
         ]
         v_images = [
-            {"id": img.get("id"), "url": img.get("url", ""),
+            {"id": img.get("id") or _url_to_id(img.get("url", "")),
+             "url": img.get("url", ""),
              "width": img.get("width"), "height": img.get("height"),
              "type": img.get("type", "image"),
              "nsfw": _nsfw_level(img.get("nsfwLevel"))}
-            for img in v.get("images", [])
+            for img in v.get("images", []) if img.get("url")
         ]
         versions.append({
             "version_id": v.get("id"),
@@ -264,7 +271,8 @@ async def add_civitai(body: AddCivitaiRequest):
         size_gb = round(f.get("size_kb", 0) / 1_000_000, 3)
         name = _clean_civitai_name(body.model_name, ver.get("name", ""), base_model, fp)
 
-        img_ids = [str(img["id"]) + ".jpeg" for img in ver.get("images", []) if img.get("id")]
+        img_ids = [str(img.get("id") or _url_to_id(img.get("url", ""))) + ".jpeg"
+                   for img in ver.get("images", []) if img.get("url")]
 
         entry = {
             "name": name,
@@ -295,9 +303,11 @@ async def add_civitai(body: AddCivitaiRequest):
         _enqueue_download(entry)
 
         for img in ver.get("images", []):
-            if img.get("id") and img.get("url"):
-                meta = meta_lookup.get(img["id"], {})
-                images_to_dl.append((body.model_id, img["id"], img["url"], meta))
+            url = img.get("url", "")
+            if url:
+                iid = img.get("id") or _url_to_id(url)
+                meta = meta_lookup.get(img.get("id"), meta_lookup.get(iid, {}))
+                images_to_dl.append((body.model_id, iid, url, meta))
 
     if added:
         loras_data["version"] = loras_data.get("version", 0) + 1
@@ -338,7 +348,7 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
             st["status"] = "stopping"
         return JSONResponse({"status": "stopping"})
 
-    if body.action != "start":
+    if not body.action.startswith("start"):
         raise HTTPException(400, "action must be 'start' or 'stop'")
     if not CIVITAI_API_KEY:
         raise HTTPException(403, "CIVITAI_API_KEY not configured")
@@ -367,15 +377,35 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
 _GALLERY_MAX_IMAGES = 1000
 
 
+def _gallery_download_batch(items: list[tuple], gallery_dir: Path,
+                            state: dict, stop: threading.Event,
+                            seen: set) -> bool:
+    """Download a batch of (id, url) items. Returns False if stopped."""
+    for iid, url in items:
+        if stop.is_set():
+            return False
+        if iid in seen:
+            continue
+        seen.add(iid)
+        ext = ".mp4" if ".mp4" in url else ".jpeg"
+        dest = gallery_dir / f"{iid}{ext}"
+        if dest.exists():
+            state["skipped"] += 1
+            continue
+        if _download_image(url, dest):
+            state["downloaded"] += 1
+    return True
+
+
 def _gallery_thread(model_id: int, stop: threading.Event):
-    """Download model card images (from all versions) for a CivitAI model."""
+    """Download model card images + community images for a CivitAI model."""
     state = _gallery_state[model_id]
     gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
     gallery_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
-    max_images = state.get("max_images", 200)
+    max_community = state.get("max_images", 200)
 
-    # Fetch model info to get version images
+    # ── Phase 1: model card images (always all of them) ──
     try:
         r = httpx.get(f"https://civitai.com/api/v1/models/{model_id}",
                       timeout=30, headers=headers)
@@ -387,30 +417,71 @@ def _gallery_thread(model_id: int, stop: threading.Event):
         state["status"] = "done"
         return
 
-    # Collect all version images (model card images)
-    all_imgs = []
+    card_imgs = []
     for v in model_data.get("modelVersions", []):
         for img in v.get("images", []):
-            iid, url = img.get("id"), img.get("url", "")
-            if iid and url:
-                all_imgs.append((iid, url))
-    all_imgs = all_imgs[:max_images]
-    state["total"] = len(all_imgs)
+            url = img.get("url", "")
+            if url:
+                iid = img.get("id") or _url_to_id(url)
+                if iid:
+                    card_imgs.append((str(iid), url))
 
-    # Download
-    for iid, url in all_imgs:
+    state["total"] = len(card_imgs) + max_community
+    seen: set[str] = set()
+
+    if not _gallery_download_batch(card_imgs, gallery_dir, state, stop, seen):
+        state["status"] = "stopped"
+        return
+
+    # ── Phase 2: community images (capped by max_community) ──
+    community_downloaded = 0
+    cursor = None
+    state["pages_fetched"] = 0
+
+    while community_downloaded < max_community:
         if stop.is_set():
             state["status"] = "stopped"
             return
-        # Detect extension from URL
-        ext = ".mp4" if ".mp4" in url else ".jpeg"
-        dest = gallery_dir / f"{iid}{ext}"
-        if dest.exists():
-            state["skipped"] += 1
-            continue
-        if _download_image(url, dest):
-            state["downloaded"] += 1
+        params: dict = {"modelId": model_id, "limit": 200}
+        if cursor:
+            params["cursor"] = cursor
+        try:
+            r = httpx.get("https://civitai.com/api/v1/images",
+                          params=params, timeout=30, headers=headers)
+            if r.status_code != 200:
+                break
+            data = r.json()
+        except Exception:
+            break
+        state["pages_fetched"] = state.get("pages_fetched", 0) + 1
 
+        page_items = data.get("items", [])
+        if not page_items:
+            break
+
+        batch = []
+        for img in page_items:
+            if community_downloaded >= max_community:
+                break
+            url = img.get("url", "")
+            if not url:
+                continue
+            iid = str(img.get("id") or _url_to_id(url))
+            if not iid or iid in seen:
+                continue
+            batch.append((iid, url))
+            community_downloaded += 1
+
+        if not _gallery_download_batch(batch, gallery_dir, state, stop, seen):
+            state["status"] = "stopped"
+            return
+
+        cursor = (data.get("metadata") or {}).get("nextCursor")
+        if not cursor:
+            break
+
+    # Adjust total to actual count
+    state["total"] = len(seen)
     state["status"] = "done"
     _events.emit("lora.gallery.done",
                  f"Gallery done for {model_id}: {state['downloaded']} new, {state['skipped']} skipped",

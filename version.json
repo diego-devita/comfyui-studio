@@ -1,10 +1,10 @@
 {
   "min_runtime": 0,
-  "app_version": "12.4.2",
-  "date": "2026-03-26 01:25",
+  "app_version": "12.4.3",
+  "date": "2026-03-26 01:48",
   "components": {
     "runtime": {"version": 3, "date": "2026-03-24 15:47"},
-    "backend": {"version": "12.4.2", "date": "2026-03-26 01:25", "dir": "backend/"},
+    "backend": {"version": "12.4.3", "date": "2026-03-26 01:48", "dir": "backend/"},
     "frontend": {"version": "12.1.2", "date": "2026-03-26 01:25", "dir": "frontend/"},
     "models": {"version": 24, "date": "2026-03-24 21:40", "file": "catalogs/models.json"},
     "loras": {"version": 3, "date": "2026-03-24 17:00", "file": "catalogs/loras.json"},
