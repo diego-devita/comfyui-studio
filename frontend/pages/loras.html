@@ -317,58 +317,78 @@
 <div class="civitai-overlay" id="galleryOverlay" style="display:none">
   <div class="civitai-dialog" style="max-width:1200px">
     <button class="civitai-close" id="galleryClose">&times;</button>
+
+    <!-- Title row + Delete All -->
     <div class="gallery-header">
       <h3 id="galleryTitle"></h3>
       <span class="gallery-count" id="galleryCount"></span>
-      <select id="galleryCap" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
-        <option value="10">10</option><option value="50">50</option><option value="100">100</option>
-        <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
-      </select>
-      <select id="galleryWorkers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px" title="Workers">
-        <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
-        <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
-      </select>
-      <button class="btn btn--sm" id="galleryDlBtn">Download</button>
+      <span style="flex:1"></span>
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
     </div>
-    <div class="gallery-filters">
-      <label>Mode <select id="galleryMode">
-        <option value="fixed" selected>Fixed</option><option value="trpc">tRPC</option><option value="rest">REST API</option>
-      </select></label>
-      <!-- REST filters -->
-      <span id="filtersRest" style="display:none">
-        <label>NSFW <select id="galleryNsfw">
-          <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
-        </select></label>
-        <label>Sort <select id="gallerySortRest">
-          <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
-        </select></label>
-        <label>Period <select id="galleryPeriodRest">
-          <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
-        </select></label>
-      </span>
-      <!-- tRPC filters -->
-      <span id="filtersTrpc" style="display:none">
-        <label>Sort <select id="gallerySortTrpc">
-          <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option><option value="Oldest">Oldest</option>
-        </select></label>
-        <label>Period <select id="galleryPeriodTrpc">
-          <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
-        </select></label>
-        <label>Type <select id="galleryType">
-          <option value="" selected>All</option><option value="image">Image</option><option value="video">Video</option>
-        </select></label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
-        <label>Remix <select id="galleryRemix">
-          <option value="" selected>All</option><option value="false">Originals</option><option value="true">Remixes</option>
-        </select></label>
-      </span>
+    <hr style="border:none;border-top:1px solid var(--border);margin:8px 0 12px">
+
+    <!-- Two panels side by side: CivitAI filters | Download controls -->
+    <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <!-- CivitAI Filters panel -->
+      <div style="flex:1;min-width:280px;border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div class="gallery-filters" style="margin-bottom:0">
+          <label>Mode <select id="galleryMode">
+            <!-- Fixed mode hidden from UI but code preserved -->
+            <!--<option value="fixed">Fixed</option>-->
+            <option value="trpc" selected>tRPC</option><option value="rest">REST API</option>
+          </select></label>
+          <!-- REST filters -->
+          <span id="filtersRest" style="display:none">
+            <label>NSFW <select id="galleryNsfw">
+              <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
+            </select></label>
+            <label>Sort <select id="gallerySortRest">
+              <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
+            </select></label>
+            <label>Period <select id="galleryPeriodRest">
+              <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+            </select></label>
+          </span>
+          <!-- tRPC filters -->
+          <span id="filtersTrpc" style="display:contents">
+            <label>Sort <select id="gallerySortTrpc">
+              <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option><option value="Oldest">Oldest</option>
+            </select></label>
+            <label>Period <select id="galleryPeriodTrpc">
+              <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+            </select></label>
+            <label>Type <select id="galleryType">
+              <option value="" selected>All</option><option value="image">Image</option><option value="video">Video</option>
+            </select></label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
+            <label>Remix <select id="galleryRemix">
+              <option value="" selected>All</option><option value="false">Originals</option><option value="true">Remixes</option>
+            </select></label>
+          </span>
+        </div>
+      </div>
+
+      <!-- Download controls panel -->
+      <div style="min-width:200px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="galleryCap" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <option value="10">10</option><option value="50">50</option><option value="100">100</option>
+          <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
+        </select>
+        <select id="galleryWorkers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px" title="Workers">
+          <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
+          <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
+        </select>
+        <button class="btn btn--sm" id="galleryDlBtn">Download</button>
+      </div>
     </div>
+
+    <!-- Local filters row (search + starred) -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <input type="text" id="gallerySearch" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox" id="galleryStarredOnly"> Starred only</label>
     </div>
+
     <div class="gallery-urls" id="galleryUrls"></div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
