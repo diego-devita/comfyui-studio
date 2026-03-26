@@ -170,6 +170,12 @@ async def _start_event_consumer():
     _events.init_from_db()
     _db.trim_events(1000)
 
+    # Remove legacy events.jsonl if it exists
+    legacy_jsonl = STUDIO_DIR / "events.jsonl"
+    if legacy_jsonl.exists():
+        legacy_jsonl.unlink()
+
+
     # Initialize gallery image store (SQLite)
     import gallery_db as _gdb
     _gdb.init_gallery_db()
