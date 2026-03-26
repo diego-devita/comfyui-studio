@@ -552,11 +552,21 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         # Fetch page
         try:
             if use_trpc:
-                inp = {"modelVersionId": api_params.get("version_id") or model_id,
-                       "period": "AllTime", "sort": "Most Reactions",
-                       "limit": 200, "pending": True, "cursor": cursor}
+                inp = {
+                    "modelVersionId": api_params.get("version_id") or model_id,
+                    "prioritizedUserIds": [],
+                    "period": api_params.get("period", "AllTime"),
+                    "sort": api_params.get("sort", "Most Reactions"),
+                    "limit": 200,
+                    "pending": True,
+                    "include": [],
+                    "withMeta": False,
+                    "excludedTagIds": [],
+                    "disablePoi": True,
+                    "disableMinor": True,
+                    "cursor": cursor,
+                }
                 trpc_input = json.dumps({"json": inp, "meta": {"values": {"cursor": ["undefined"]}}})
-                print(f"[gallery] tRPC input: {trpc_input}", flush=True)
                 r = httpx.get(f"https://civitai.com/api/trpc/image.getInfinite?input={trpc_input}",
                               headers=headers, timeout=30)
                 if r.status_code != 200:
