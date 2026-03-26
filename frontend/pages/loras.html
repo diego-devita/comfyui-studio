@@ -1155,10 +1155,11 @@
     if (!meta || Object.keys(meta).length === 0)
       return '<p style="color:var(--muted)">No generation data available</p>';
     var h = '';
-    // ID and date first
-    if (meta.civitai_id) h += '<div class="meta-row"><span>ID</span><span>' + meta.civitai_id + '</span></div>';
+    // ID and date first — use _item_id (file stem) as fallback
+    var displayId = meta.civitai_id || meta._item_id || '';
+    if (displayId) h += '<div class="meta-row"><span>ID</span><span>' + escHtml(String(displayId)) + '</span></div>';
     if (meta.createdAt) h += '<div class="meta-row"><span>Created</span><span>' + escHtml(meta.createdAt) + '</span></div>';
-    // CivitAI links
+    // CivitAI links — always show URL if available
     if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
     if (meta.url) h += '<div class="meta-row"><span>Asset</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
     if (meta.username) h += '<div class="meta-row"><span>Author</span><span>' + escHtml(meta.username) + '</span></div>';
@@ -1649,15 +1650,15 @@
       }
 
       // Build deduplicated lists
-      var card = (data.gallery_card || []).map(function(img) {
-        return { id: img.id, type: 'gallery-card', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'card', key: 'card-' + img.id };
-      });
+      function mapImg(img, type, source, prefix) {
+        var m = img.meta || {};
+        m._item_id = img.id;
+        return { id: img.id, type: type, ext: img.ext || '.jpeg', meta: m, source: source, key: prefix + img.id };
+      }
+      var card = (data.gallery_card || []).map(function(img) { return mapImg(img, 'gallery-card', 'card', 'card-'); });
       var community = (data.gallery_community || []).filter(function(img) {
-        // skip community images already in card (same file stem)
         return !card.some(function(c) { return c.id === img.id; });
-      }).map(function(img) {
-        return { id: img.id, type: 'gallery-community', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'community', key: 'comm-' + img.id };
-      });
+      }).map(function(img) { return mapImg(img, 'gallery-community', 'community', 'comm-'); });
       var all = card.concat(community);
 
       // Incremental append — only add new items
@@ -1693,10 +1694,22 @@
     }
   }
 
+  // IntersectionObserver for lazy video loading
+  var videoObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      var video = entry.target.querySelector('video');
+      if (!video) return;
+      if (entry.isIntersecting) {
+        if (video.preload === 'none') video.preload = 'metadata';
+      } else {
+        if (!video.paused) { video.pause(); entry.target.classList.remove('playing'); }
+      }
+    });
+  }, { rootMargin: '200px' });
+
   function makeThumb(img) {
     var ext = img.ext || '.jpeg';
     var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
-    var idx = galleryImages.indexOf(img);
     var thumb = document.createElement('div');
     thumb.className = 'gallery-thumb';
     thumb.dataset.key = img.key;
@@ -1711,7 +1724,8 @@
     });
 
     if (ext === '.mp4') {
-      thumb.innerHTML = '<video src="' + src + '" muted loop playsinline preload="metadata"></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+      thumb.innerHTML = '<video src="' + src + '" muted loop playsinline preload="none"></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+      videoObserver.observe(thumb);
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
     } else {
