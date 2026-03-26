@@ -380,13 +380,15 @@ _GALLERY_MAX_IMAGES = 1000
 def _gallery_download_batch(items: list[tuple], gallery_dir: Path,
                             state: dict, stop: threading.Event,
                             seen: set) -> bool:
-    """Download a batch of (id, url) items. Returns False if stopped."""
+    """Download a batch of (id, url) items. Returns False if stopped.
+    Deduplicates by URL-derived UUID (consistent across endpoints)."""
     for iid, url in items:
         if stop.is_set():
             return False
-        if iid in seen:
+        url_key = _url_to_id(url) or iid
+        if url_key in seen:
             continue
-        seen.add(iid)
+        seen.add(url_key)
         ext = ".mp4" if ".mp4" in url else ".jpeg"
         dest = gallery_dir / f"{iid}{ext}"
         if dest.exists():
@@ -442,7 +444,8 @@ def _gallery_thread(model_id: int, stop: threading.Event):
         if stop.is_set():
             state["status"] = "stopped"
             return
-        params: dict = {"modelId": model_id, "limit": 200}
+        params: dict = {"modelId": model_id, "limit": 200,
+                        "nsfw": "X", "sort": "Newest", "period": "AllTime"}
         if cursor:
             params["cursor"] = cursor
         try:
@@ -466,8 +469,11 @@ def _gallery_thread(model_id: int, stop: threading.Event):
             url = img.get("url", "")
             if not url:
                 continue
-            iid = str(img.get("id") or _url_to_id(url))
-            if not iid or iid in seen:
+            url_key = _url_to_id(url)
+            if url_key and url_key in seen:
+                continue
+            iid = str(img.get("id") or url_key)
+            if not iid:
                 continue
             batch.append((iid, url))
             community_downloaded += 1
