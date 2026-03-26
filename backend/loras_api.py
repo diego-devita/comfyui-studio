@@ -45,6 +45,9 @@ class AddCivitaiRequest(BaseModel):
 
 class GalleryActionRequest(BaseModel):
     action: str
+    nsfw: str = "X"
+    sort: str = "Newest"
+    period: str = "AllTime"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -366,23 +369,25 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
+    api_params = {"nsfw": body.nsfw, "sort": body.sort, "period": body.period}
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
         "total": 0, "_stop": stop, "max_images": max_images,
     }
-    threading.Thread(target=_gallery_thread, args=(model_id, stop), daemon=True).start()
+    threading.Thread(target=_gallery_thread, args=(model_id, stop, api_params),
+                     daemon=True).start()
     return JSONResponse({"status": "downloading"})
 
 
 _GALLERY_MAX_IMAGES = 1000
 
 
-def _gallery_download_batch(items: list[tuple], gallery_dir: Path,
+def _gallery_download_batch(items: list[tuple], dest_dir: Path,
                             state: dict, stop: threading.Event,
                             seen: set) -> bool:
-    """Download a batch of (id, url) items. Returns False if stopped.
+    """Download a batch of (id, url, meta) items. Returns False if stopped.
     Deduplicates by URL-derived UUID (consistent across endpoints)."""
-    for iid, url in items:
+    for iid, url, meta in items:
         if stop.is_set():
             return False
         url_key = _url_to_id(url) or iid
@@ -390,20 +395,26 @@ def _gallery_download_batch(items: list[tuple], gallery_dir: Path,
             continue
         seen.add(url_key)
         ext = ".mp4" if ".mp4" in url else ".jpeg"
-        dest = gallery_dir / f"{iid}{ext}"
+        dest = dest_dir / f"{iid}{ext}"
         if dest.exists():
             state["skipped"] += 1
             continue
         if _download_image(url, dest):
             state["downloaded"] += 1
+            if meta:
+                dest.with_suffix(".json").write_text(
+                    json.dumps(meta, indent=2, ensure_ascii=False))
     return True
 
 
-def _gallery_thread(model_id: int, stop: threading.Event):
+def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     """Download model card images + community images for a CivitAI model."""
     state = _gallery_state[model_id]
-    gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
-    gallery_dir.mkdir(parents=True, exist_ok=True)
+    base_dir = IMAGES_DIR / str(model_id) / "gallery"
+    card_dir = base_dir / "card"
+    community_dir = base_dir / "community"
+    card_dir.mkdir(parents=True, exist_ok=True)
+    community_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
     max_community = state.get("max_images", 200)
 
@@ -426,12 +437,12 @@ def _gallery_thread(model_id: int, stop: threading.Event):
             if url:
                 iid = img.get("id") or _url_to_id(url)
                 if iid:
-                    card_imgs.append((str(iid), url))
+                    card_imgs.append((str(iid), url, {}))
 
     state["total"] = len(card_imgs) + max_community
     seen: set[str] = set()
 
-    if not _gallery_download_batch(card_imgs, gallery_dir, state, stop, seen):
+    if not _gallery_download_batch(card_imgs, card_dir, state, stop, seen):
         state["status"] = "stopped"
         return
 
@@ -445,7 +456,9 @@ def _gallery_thread(model_id: int, stop: threading.Event):
             state["status"] = "stopped"
             return
         params: dict = {"modelId": model_id, "limit": 200,
-                        "nsfw": "X", "sort": "Newest", "period": "AllTime"}
+                        "nsfw": api_params.get("nsfw", "X"),
+                        "sort": api_params.get("sort", "Newest"),
+                        "period": api_params.get("period", "AllTime")}
         if cursor:
             params["cursor"] = cursor
         try:
@@ -475,10 +488,11 @@ def _gallery_thread(model_id: int, stop: threading.Event):
             iid = str(img.get("id") or url_key)
             if not iid:
                 continue
-            batch.append((iid, url))
+            meta = _extract_image_meta(img.get("meta"))
+            batch.append((iid, url, meta))
             community_downloaded += 1
 
-        if not _gallery_download_batch(batch, gallery_dir, state, stop, seen):
+        if not _gallery_download_batch(batch, community_dir, state, stop, seen):
             state["status"] = "stopped"
             return
 
@@ -516,6 +530,7 @@ async def gallery_status(model_id: int):
             result.append({"id": f.stem, "ext": f.suffix, "meta": meta})
         return result
 
+    base = IMAGES_DIR / str(model_id)
     return JSONResponse({
         "status": state.get("status", "idle"),
         "downloaded": state.get("downloaded", 0),
@@ -523,8 +538,9 @@ async def gallery_status(model_id: int):
         "total": state.get("total"),
         "pages_fetched": state.get("pages_fetched", 0),
         "counted": state.get("counted", 0),
-        "previews": _list_images(IMAGES_DIR / str(model_id) / "previews"),
-        "gallery": _list_images(IMAGES_DIR / str(model_id) / "gallery"),
+        "previews": _list_images(base / "previews"),
+        "gallery_card": _list_images(base / "gallery" / "card"),
+        "gallery_community": _list_images(base / "gallery" / "community"),
     })
 
 
@@ -535,7 +551,7 @@ async def gallery_delete(model_id: int):
     gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
     count = 0
     if gallery_dir.is_dir():
-        count = sum(1 for f in gallery_dir.iterdir() if f.suffix in (".jpeg", ".mp4"))
+        count = sum(1 for f in gallery_dir.rglob("*") if f.suffix in (".jpeg", ".mp4"))
         shutil.rmtree(gallery_dir)
     if model_id in _gallery_state:
         del _gallery_state[model_id]
@@ -545,12 +561,17 @@ async def gallery_delete(model_id: int):
 @router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")
 async def serve_image(model_id: str, img_type: str, filename: str):
     """Serve a preview or gallery image with path traversal protection."""
-    if img_type not in ("previews", "gallery"):
+    _type_dirs = {
+        "previews": "previews",
+        "gallery-card": "gallery/card",
+        "gallery-community": "gallery/community",
+    }
+    if img_type not in _type_dirs:
         raise HTTPException(400, "Invalid image type")
-    for part in (model_id, img_type, filename):
+    for part in (model_id, filename):
         if ".." in part or "/" in part or "\\" in part:
             raise HTTPException(400, "Invalid path")
-    path = IMAGES_DIR / model_id / img_type / filename
+    path = IMAGES_DIR / model_id / _type_dirs[img_type] / filename
     if not path.exists():
         raise HTTPException(404, "Image not found")
     media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"

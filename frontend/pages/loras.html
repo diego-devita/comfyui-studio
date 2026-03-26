@@ -112,16 +112,22 @@
   .gallery-progress .progress-text { font-size: 12px; color: var(--muted); }
   .gallery-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
   .gallery-controls input[type=range] { width: 120px; }
+  #galleryGrid {
+    max-height: calc(100vh - 320px); overflow-y: auto;
+  }
   .gallery-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 150px), 1fr));
-    gap: 4px; max-height: calc(100vh - 280px); overflow-y: auto;
+    gap: 4px;
   }
-  .gallery-grid img {
+  .gallery-grid img, .gallery-grid video {
     width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
     transition: opacity 0.15s;
   }
-  .gallery-grid img:hover { opacity: 0.85; }
+  .gallery-grid img:hover, .gallery-grid video:hover { opacity: 0.85; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+  .gallery-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 12px 0 6px; }
+  .gallery-section-label:first-child { margin-top: 0; }
+  .gallery-filters select { padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 12px; }
 
   /* ── Detail view ── */
   .detail-overlay {
@@ -276,6 +282,17 @@
       </select>
       <button class="btn btn--sm" id="galleryDlBtn">Download</button>
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
+    </div>
+    <div class="gallery-filters" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+      <label>NSFW <select id="galleryNsfw">
+        <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
+      </select></label>
+      <label>Sort <select id="gallerySort">
+        <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
+      </select></label>
+      <label>Period <select id="galleryPeriod">
+        <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+      </select></label>
     </div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
@@ -1429,7 +1446,12 @@
     galleryDownloading = true;
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-        method: 'POST', body: { action: 'start:' + document.getElementById('galleryCap').value }
+        method: 'POST', body: {
+          action: 'start:' + document.getElementById('galleryCap').value,
+          nsfw: document.getElementById('galleryNsfw').value,
+          sort: document.getElementById('gallerySort').value,
+          period: document.getElementById('galleryPeriod').value
+        }
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
@@ -1491,19 +1513,24 @@
         }
       }
 
-      // Build image list (previews + gallery)
-      var all = (data.previews || []).map(function(img) {
-        return { id: img.id, type: 'previews', ext: img.ext || '.jpeg', meta: img.meta || {} };
-      }).concat((data.gallery || []).map(function(img) {
-        return { id: img.id, type: 'gallery', ext: img.ext || '.jpeg', meta: img.meta || {} };
-      }));
+      // Build image list: previews, card, community (tagged with source for rendering)
+      var card = (data.gallery_card || []).map(function(img) {
+        return { id: img.id, type: 'gallery-card', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'card' };
+      });
+      var community = (data.gallery_community || []).map(function(img) {
+        return { id: img.id, type: 'gallery-community', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'community' };
+      });
+      var previews = (data.previews || []).map(function(img) {
+        return { id: img.id, type: 'previews', ext: img.ext || '.jpeg', meta: img.meta || {}, source: 'previews' };
+      });
+      var all = previews.concat(card).concat(community);
 
       if (all.length !== galleryImages.length) {
         galleryImages = all;
         renderGalleryGrid();
       }
 
-      document.getElementById('galleryCount').textContent = all.length + ' images';
+      document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community';
     } catch(e) {
       if (e.message !== 'auth') console.error('Gallery poll error:', e);
     }
@@ -1513,23 +1540,45 @@
     var grid = document.getElementById('galleryGrid');
     grid.innerHTML = '';
     if (galleryImages.length === 0) {
-      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download Images" to fetch community images from CivitAI (max 1000).</div>';
+      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download" to fetch from CivitAI.</div>';
       return;
     }
-    galleryImages.forEach(function(img, idx) {
-      var ext = img.ext || '.jpeg';
-      var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
-      var el;
-      if (ext === '.mp4') {
-        el = document.createElement('video');
-        el.src = src; el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-      } else {
-        el = document.createElement('img');
-        el.src = src; el.loading = 'lazy';
-      }
-      el.addEventListener('click', function() { openDetail(idx); });
-      grid.appendChild(el);
-    });
+
+    function appendSection(label, items, startIdx) {
+      if (items.length === 0) return;
+      var lbl = document.createElement('div');
+      lbl.className = 'gallery-section-label';
+      lbl.textContent = label + ' (' + items.length + ')';
+      grid.appendChild(lbl);
+      var section = document.createElement('div');
+      section.className = 'gallery-grid';
+      section.style.setProperty('--thumb-size', document.getElementById('galleryThumbSize').value + 'px');
+      items.forEach(function(img, i) {
+        var ext = img.ext || '.jpeg';
+        var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+        var el;
+        if (ext === '.mp4') {
+          el = document.createElement('video');
+          el.src = src; el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
+        } else {
+          el = document.createElement('img');
+          el.src = src; el.loading = 'lazy';
+        }
+        var idx = startIdx + i;
+        el.addEventListener('click', function() { openDetail(idx); });
+        section.appendChild(el);
+      });
+      grid.appendChild(section);
+    }
+
+    var previews = galleryImages.filter(function(i) { return i.source === 'previews'; });
+    var card = galleryImages.filter(function(i) { return i.source === 'card'; });
+    var community = galleryImages.filter(function(i) { return i.source === 'community'; });
+
+    var offset = 0;
+    if (previews.length) { appendSection('Previews', previews, offset); offset += previews.length; }
+    if (card.length) { appendSection('Model Card', card, offset); offset += card.length; }
+    if (community.length) { appendSection('Community', community, offset); }
   }
 
   // Gallery button handlers
@@ -1552,7 +1601,10 @@
     } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
   });
   document.getElementById('galleryThumbSize').addEventListener('input', function() {
-    document.getElementById('galleryGrid').style.setProperty('--thumb-size', this.value + 'px');
+    var val = this.value + 'px';
+    document.querySelectorAll('#galleryGrid .gallery-grid').forEach(function(g) {
+      g.style.setProperty('--thumb-size', val);
+    });
   });
 
   // ── Detail View ──
