@@ -445,7 +445,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                     "type": img.get("type", "image"),
                     "width": img.get("width"), "height": img.get("height")}
             if img.get("id"):
-                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}"
+                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}"
             card_imgs.append((str(iid), url, meta))
 
     state["total"] = len(card_imgs) + max_community
@@ -501,7 +501,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 continue
             meta = {
                 "civitai_id": img.get("id"),
-                "civitai_page": f"https://civitai.com/images/{img['id']}" if img.get("id") else None,
+                "civitai_page": f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}" if img.get("id") else None,
                 "url": url,
                 "type": img.get("type", "image"),
                 "width": img.get("width"), "height": img.get("height"),
@@ -579,6 +579,23 @@ async def gallery_delete(model_id: int):
     if model_id in _gallery_state:
         del _gallery_state[model_id]
     return JSONResponse({"deleted": count})
+
+
+@router.get("/api/admin/loras/images/fetch-meta/{image_id}")
+async def fetch_image_meta(image_id: int):
+    """Fetch full metadata for a CivitAI image by its numeric ID."""
+    if not CIVITAI_API_KEY:
+        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"}
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        try:
+            r = await client.get(f"https://civitai.com/api/v1/images/{image_id}")
+        except httpx.RequestError:
+            raise HTTPException(502, "Could not reach CivitAI")
+        if r.status_code == 404:
+            raise HTTPException(404, "Image not found on CivitAI")
+        r.raise_for_status()
+        return JSONResponse(r.json())
 
 
 @router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")

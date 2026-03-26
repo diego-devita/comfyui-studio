@@ -328,6 +328,20 @@
   </div>
 </div>
 
+<!-- Extract Metadata Dialog -->
+<div id="extractMetaOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1200;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;max-width:800px;width:90%;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;font-size:14px" id="extractMetaTitle">CivitAI Metadata</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn--sm" id="extractMetaCopy">Copy JSON</button>
+        <button style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer" id="extractMetaClose">&times;</button>
+      </div>
+    </div>
+    <pre id="extractMetaContent" style="padding:16px 18px;margin:0;overflow:auto;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;flex:1"></pre>
+  </div>
+</div>
+
 <script src="/static/js/shared.js"></script>
 <script>
 (function() {
@@ -1140,8 +1154,8 @@
       return '<p style="color:var(--muted)">No generation data available</p>';
     var h = '';
     // CivitAI links
-    if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI Page</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">' + escHtml(meta.civitai_page) + '</a></span></div>';
-    if (meta.url) h += '<div class="meta-row"><span>Direct URL</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open</a></span></div>';
+    if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
+    if (meta.url) h += '<div class="meta-row"><span>Asset</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
     if (meta.username) h += '<div class="meta-row"><span>Author</span><span>' + escHtml(meta.username) + '</span></div>';
     if (meta.baseModel) h += '<div class="meta-row"><span>Base Model</span><span>' + escHtml(meta.baseModel) + '</span></div>';
     if (meta.width && meta.height) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.width + 'x' + meta.height + '</span></div>';
@@ -1163,24 +1177,67 @@
     if (rm.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(rm.sampler) + '</span></div>';
     if (rm.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + rm.clipSkip + '</span></div>';
     if (rm.Size || rm.size) h += '<div class="meta-row"><span>Size</span><span>' + (rm.Size || rm.size) + '</span></div>';
-    // Raw metadata copy button — stores index, reads from galleryImages on click
+    // Raw metadata copy button
     if (meta.raw_item || meta.raw_meta) {
       h += '<div class="meta-row" style="margin-top:8px"><span>Raw Metadata</span><span>' +
         '<button class="copy-meta-btn" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:11px">Copy JSON</button></span></div>';
+    }
+    // Extract Metadata button (needs civitai_id)
+    if (meta.civitai_id) {
+      h += '<div style="margin-top:12px;text-align:center">' +
+        '<button class="btn btn--sm extract-meta-btn" data-civitai-id="' + meta.civitai_id + '">Extract Metadata</button></div>';
     }
     return h;
   }
 
   var _lastRenderedMeta = null;
+  var _extractMetaJson = '';
+
   document.addEventListener('click', function(e) {
-    var btn = e.target.closest('.copy-meta-btn');
-    if (!btn) return;
-    var raw = _lastRenderedMeta ? (_lastRenderedMeta.raw_item || _lastRenderedMeta.raw_meta || _lastRenderedMeta) : {};
-    navigator.clipboard.writeText(JSON.stringify(raw, null, 2));
-    var orig = btn.textContent;
-    btn.textContent = 'Copied';
-    btn.style.color = 'var(--accent)';
-    setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 3000);
+    // Copy raw metadata
+    var copyBtn = e.target.closest('.copy-meta-btn');
+    if (copyBtn) {
+      var raw = _lastRenderedMeta ? (_lastRenderedMeta.raw_item || _lastRenderedMeta.raw_meta || _lastRenderedMeta) : {};
+      navigator.clipboard.writeText(JSON.stringify(raw, null, 2));
+      var orig = copyBtn.textContent;
+      copyBtn.textContent = 'Copied'; copyBtn.style.color = 'var(--accent)';
+      setTimeout(function() { copyBtn.textContent = orig; copyBtn.style.color = ''; }, 3000);
+      return;
+    }
+    // Extract Metadata from CivitAI
+    var extractBtn = e.target.closest('.extract-meta-btn');
+    if (extractBtn) {
+      var civitaiId = extractBtn.dataset.civitaiId;
+      if (!civitaiId) return;
+      extractBtn.disabled = true; extractBtn.textContent = 'Fetching...';
+      apiFetch('/api/admin/loras/images/fetch-meta/' + civitaiId).then(function(resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      }).then(function(data) {
+        _extractMetaJson = JSON.stringify(data, null, 2);
+        document.getElementById('extractMetaTitle').textContent = 'CivitAI Metadata — Image #' + civitaiId;
+        document.getElementById('extractMetaContent').textContent = _extractMetaJson;
+        document.getElementById('extractMetaOverlay').style.display = 'flex';
+      }).catch(function(err) {
+        if (err.message !== 'auth') showToast('Error: ' + err.message, 5000, 'error');
+      }).finally(function() {
+        extractBtn.disabled = false; extractBtn.textContent = 'Extract Metadata';
+      });
+      return;
+    }
+  });
+
+  // Extract Metadata dialog handlers
+  document.getElementById('extractMetaClose').addEventListener('click', function() {
+    document.getElementById('extractMetaOverlay').style.display = 'none';
+  });
+  document.getElementById('extractMetaOverlay').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+  document.getElementById('extractMetaCopy').addEventListener('click', function() {
+    navigator.clipboard.writeText(_extractMetaJson);
+    var btn = this; var orig = btn.textContent;
+    btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = orig; }, 3000);
   });
 
   // ── Lookup Dialog ──
