@@ -45,10 +45,19 @@ class AddCivitaiRequest(BaseModel):
 
 class GalleryActionRequest(BaseModel):
     action: str
+    mode: str = "trpc"
+    # REST filters
     nsfw: str = "X"
+    # Shared filters
     sort: str = "Newest"
     period: str = "AllTime"
     version_id: int | None = None
+    # tRPC filters
+    browsingLevel: int = 31
+    types: list[str] | None = None
+    withMeta: bool = False
+    modelId: int | None = None
+    limit: str | int = "200"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -403,8 +412,11 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
-    api_params = {"nsfw": body.nsfw, "sort": body.sort, "period": body.period,
-                   "version_id": body.version_id}
+    api_params = {
+        "mode": body.mode, "nsfw": body.nsfw, "sort": body.sort, "period": body.period,
+        "version_id": body.version_id, "browsingLevel": body.browsingLevel,
+        "types": body.types, "withMeta": body.withMeta,
+    }
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
         "total": 0, "_stop": stop, "max_images": max_images,
@@ -538,43 +550,77 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     community_downloaded = 0
     cursor = None
     state["pages_fetched"] = 0
-    print(f"[gallery] {model_id}: max_community={max_community}, seen={len(seen)}", flush=True)
+    use_trpc = api_params.get("mode") == "trpc"
+    print(f"[gallery] {model_id}: mode={'trpc' if use_trpc else 'rest'}, max={max_community}, seen={len(seen)}", flush=True)
 
     while community_downloaded < max_community:
         if stop.is_set():
             state["status"] = "stopped"
             return
-        params: dict = {"modelId": model_id, "limit": 200,
-                        "nsfw": api_params.get("nsfw", "X"),
-                        "sort": api_params.get("sort", "Newest"),
-                        "period": api_params.get("period", "AllTime")}
-        if api_params.get("version_id"):
-            params["modelVersionId"] = api_params["version_id"]
-        if cursor:
-            params["cursor"] = cursor
+
+        # Fetch page
         try:
-            r = httpx.get("https://civitai.com/api/v1/images",
-                          params=params, timeout=30, headers=headers)
-            if r.status_code != 200:
-                break
-            data = r.json()
+            if use_trpc:
+                inp: dict = {"modelId": model_id, "limit": 200, "authed": True,
+                             "browsingLevel": api_params.get("browsingLevel", 31),
+                             "sort": api_params.get("sort", "Newest"),
+                             "period": api_params.get("period", "AllTime")}
+                if api_params.get("version_id"):
+                    inp["modelVersionId"] = api_params["version_id"]
+                if api_params.get("types"):
+                    inp["types"] = api_params["types"]
+                if api_params.get("withMeta"):
+                    inp["withMeta"] = True
+                if cursor:
+                    inp["cursor"] = cursor
+                r = httpx.get("https://civitai.com/api/trpc/image.getInfinite",
+                              params={"input": json.dumps({"json": inp})},
+                              headers=headers, timeout=30)
+                if r.status_code != 200:
+                    break
+                rdata = r.json().get("result", {}).get("data", {}).get("json", {})
+                page_items = rdata.get("items", [])
+                next_cursor = rdata.get("nextCursor")
+            else:
+                params: dict = {"modelId": model_id, "limit": 200,
+                                "nsfw": api_params.get("nsfw", "X"),
+                                "sort": api_params.get("sort", "Newest"),
+                                "period": api_params.get("period", "AllTime")}
+                if api_params.get("version_id"):
+                    params["modelVersionId"] = api_params["version_id"]
+                if cursor:
+                    params["cursor"] = cursor
+                r = httpx.get("https://civitai.com/api/v1/images",
+                              params=params, timeout=30, headers=headers)
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                page_items = data.get("items", [])
+                next_cursor = (data.get("metadata") or {}).get("nextCursor")
         except Exception:
             break
         state["pages_fetched"] = state.get("pages_fetched", 0) + 1
 
-        page_items = data.get("items", [])
-        print(f"[gallery] {model_id}: page {state['pages_fetched']}, items={len(page_items)}, cd={community_downloaded}, cursor={'yes' if cursor else 'no'}", flush=True)
+        print(f"[gallery] {model_id}: page {state['pages_fetched']}, items={len(page_items)}, cd={community_downloaded}", flush=True)
         if not page_items:
             break
 
+        # Build batch from page items
+        _CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
         batch = []
         for img in page_items:
             if community_downloaded >= max_community:
                 break
-            url = img.get("url", "")
-            if not url:
+            # tRPC returns short url (UUID only), REST returns full URL
+            raw_url = img.get("url", "")
+            if use_trpc and raw_url and not raw_url.startswith("http"):
+                ext_hint = ".mp4" if img.get("type") == "video" else ".jpeg"
+                full_url = f"{_CDN}{raw_url}/original=true/{raw_url}{ext_hint}"
+            else:
+                full_url = raw_url
+            if not full_url:
                 continue
-            url_key = _url_to_id(url)
+            url_key = _url_to_id(full_url) or raw_url
             if url_key and url_key in seen:
                 continue
             iid = str(img.get("id") or url_key)
@@ -583,25 +629,25 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             meta = {
                 "civitai_id": img.get("id"),
                 "civitai_page": f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}" if img.get("id") else None,
-                "url": url,
+                "url": full_url,
                 "type": img.get("type", "image"),
                 "width": img.get("width"), "height": img.get("height"),
-                "username": img.get("username"),
+                "username": (img.get("user") or {}).get("username") if use_trpc else img.get("username"),
                 "baseModel": img.get("baseModel"),
                 "createdAt": img.get("createdAt"),
                 "stats": img.get("stats"),
                 "raw_meta": img.get("meta"),
                 "raw_item": img,
             }
-            batch.append((iid, url, meta))
+            batch.append((iid, full_url, meta))
             community_downloaded += 1
 
         if not _gallery_download_batch(batch, community_dir, state, stop, seen, fetch_gen_data=True):
             state["status"] = "stopped"
             return
 
-        print(f"[gallery] {model_id}: batch done, cd={community_downloaded}, seen={len(seen)}, dl={state['downloaded']} skip={state['skipped']}", flush=True)
-        cursor = (data.get("metadata") or {}).get("nextCursor")
+        print(f"[gallery] {model_id}: batch done, cd={community_downloaded}, dl={state['downloaded']} skip={state['skipped']}", flush=True)
+        cursor = next_cursor
         print(f"[gallery] {model_id}: nextCursor={'yes' if cursor else 'NO'}", flush=True)
         if not cursor:
             break

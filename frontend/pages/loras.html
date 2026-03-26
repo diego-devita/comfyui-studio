@@ -306,15 +306,37 @@
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
     </div>
     <div class="gallery-filters">
-      <label>NSFW <select id="galleryNsfw">
-        <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
+      <label>Mode <select id="galleryMode">
+        <option value="trpc" selected>tRPC</option><option value="rest">REST API</option>
       </select></label>
-      <label>Sort <select id="gallerySort">
-        <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
-      </select></label>
-      <label>Period <select id="galleryPeriod">
-        <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
-      </select></label>
+      <!-- REST filters -->
+      <span id="filtersRest" style="display:none;contents">
+        <label>NSFW <select id="galleryNsfw">
+          <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
+        </select></label>
+        <label>Sort <select id="gallerySortRest">
+          <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
+        </select></label>
+        <label>Period <select id="galleryPeriodRest">
+          <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+        </select></label>
+      </span>
+      <!-- tRPC filters -->
+      <span id="filtersTrpc" style="display:contents">
+        <label>Sort <select id="gallerySortTrpc">
+          <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option>
+        </select></label>
+        <label>Period <select id="galleryPeriodTrpc">
+          <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+        </select></label>
+        <label>Type <select id="galleryMediaType">
+          <option value="all" selected>All</option><option value="image">Image</option><option value="video">Video</option>
+        </select></label>
+        <label>Level <select id="galleryBrowsingLevel">
+          <option value="31" selected>All</option><option value="16">XXX</option><option value="8">X</option><option value="4">Mature</option><option value="2">PG-13</option><option value="1">PG</option>
+        </select></label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Has meta</label>
+      </span>
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFilterVersion" checked> Version filter</label>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -1645,18 +1667,43 @@
   var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
   var COPY_SVG = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 
-  function getGalleryUrls() {
+  function getGalleryFilters() {
+    var mode = document.getElementById('galleryMode').value;
     var mid = galleryModelId, vid = galleryVersionId;
-    var nsfw = document.getElementById('galleryNsfw').value;
-    var sort = document.getElementById('gallerySort').value;
-    var period = document.getElementById('galleryPeriod').value;
     var cap = document.getElementById('galleryCap').value;
     var useVersion = document.getElementById('galleryFilterVersion').checked;
-    var communityUrl = 'https://civitai.com/api/v1/images?modelId=' + mid +
-      '&limit=' + cap + '&nsfw=' + nsfw +
-      '&sort=' + encodeURIComponent(sort) + '&period=' + period;
-    if (useVersion && vid) communityUrl += '&modelVersionId=' + vid;
-    return { card: 'https://civitai.com/api/v1/models/' + mid, community: communityUrl };
+    if (mode === 'rest') {
+      return { mode: 'rest', modelId: mid, limit: cap, nsfw: document.getElementById('galleryNsfw').value,
+        sort: document.getElementById('gallerySortRest').value, period: document.getElementById('galleryPeriodRest').value,
+        version_id: useVersion ? vid : null };
+    }
+    var f = { mode: 'trpc', modelId: mid, limit: cap,
+      sort: document.getElementById('gallerySortTrpc').value, period: document.getElementById('galleryPeriodTrpc').value,
+      browsingLevel: parseInt(document.getElementById('galleryBrowsingLevel').value),
+      version_id: useVersion ? vid : null };
+    var mt = document.getElementById('galleryMediaType').value;
+    if (mt !== 'all') f.types = [mt];
+    if (document.getElementById('galleryWithMeta').checked) f.withMeta = true;
+    return f;
+  }
+
+  function getGalleryUrls() {
+    var f = getGalleryFilters();
+    var cardUrl = 'https://civitai.com/api/v1/models/' + f.modelId;
+    var communityUrl;
+    if (f.mode === 'rest') {
+      communityUrl = 'https://civitai.com/api/v1/images?modelId=' + f.modelId +
+        '&limit=' + f.limit + '&nsfw=' + f.nsfw +
+        '&sort=' + encodeURIComponent(f.sort) + '&period=' + f.period;
+      if (f.version_id) communityUrl += '&modelVersionId=' + f.version_id;
+    } else {
+      var inp = {modelId: f.modelId, limit: parseInt(f.limit), authed: true, browsingLevel: f.browsingLevel, sort: f.sort, period: f.period};
+      if (f.version_id) inp.modelVersionId = f.version_id;
+      if (f.types) inp.types = f.types;
+      if (f.withMeta) inp.withMeta = true;
+      communityUrl = 'https://civitai.com/api/trpc/image.getInfinite?input=' + encodeURIComponent(JSON.stringify({json: inp}));
+    }
+    return { card: cardUrl, community: communityUrl };
   }
 
   function copyUrlFlash(btn, url) {
@@ -1739,13 +1786,9 @@
 
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-        method: 'POST', body: {
-          action: 'start:' + document.getElementById('galleryCap').value,
-          nsfw: document.getElementById('galleryNsfw').value,
-          sort: document.getElementById('gallerySort').value,
-          period: document.getElementById('galleryPeriod').value,
-          version_id: document.getElementById('galleryFilterVersion').checked ? galleryVersionId : null
-        }
+        method: 'POST', body: Object.assign({
+          action: 'start:' + document.getElementById('galleryCap').value
+        }, getGalleryFilters())
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
@@ -2015,7 +2058,15 @@
       }
     } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
   });
-  ['galleryNsfw', 'gallerySort', 'galleryPeriod', 'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
+  function toggleFilterMode() {
+    var mode = document.getElementById('galleryMode').value;
+    document.getElementById('filtersRest').style.display = mode === 'rest' ? 'contents' : 'none';
+    document.getElementById('filtersTrpc').style.display = mode === 'trpc' ? 'contents' : 'none';
+    updateGalleryUrls();
+  }
+  document.getElementById('galleryMode').addEventListener('change', toggleFilterMode);
+  ['galleryNsfw', 'gallerySortRest', 'galleryPeriodRest', 'gallerySortTrpc', 'galleryPeriodTrpc',
+   'galleryMediaType', 'galleryBrowsingLevel', 'galleryWithMeta', 'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
   document.getElementById('gallerySearch').addEventListener('input', function() {
