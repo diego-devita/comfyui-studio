@@ -606,8 +606,10 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                         inp["isRemix"] = api_params["is_remix"]
 
                 trpc_input = json.dumps({"json": inp, "meta": {"values": {"cursor": ["undefined"]}}})
+                print(f"[gallery] tRPC input: {trpc_input[:300]}", flush=True)
                 r = httpx.get(f"https://civitai.com/api/trpc/image.getInfinite?input={trpc_input}",
                               headers=headers, timeout=30)
+                print(f"[gallery] tRPC status: {r.status_code}, body size: {len(r.content)}", flush=True)
                 if r.status_code != 200:
                     break
                 rdata = r.json().get("result", {}).get("data", {}).get("json", {})
