@@ -415,24 +415,24 @@ header { min-height: 110px; }
 .activity-panel {
   background: var(--bg);
   border-bottom: 1px solid transparent;
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease, border-color 0.3s ease;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s ease, border-color 0.35s ease;
 }
 .activity-panel.open {
-  max-height: 250px;
+  grid-template-rows: 1fr;
   border-bottom-color: var(--border);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.1) transparent;
 }
 .activity-panel-inner {
-  padding: 16px 40px;
+  overflow: hidden;
+  min-height: 0;
+  padding: 0 40px;
 }
 .activity-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-top: 16px;
   margin-bottom: 12px;
 }
 .activity-panel-title {
@@ -454,6 +454,11 @@ header { min-height: 110px; }
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+  padding-bottom: 16px;
 }
 .activity-item {
   display: flex;
