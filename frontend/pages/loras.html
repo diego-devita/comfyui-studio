@@ -142,6 +142,8 @@
   .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
   .gallery-thumb:hover .expand-btn { opacity: 1; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
+  #detailsMetaContent::-webkit-scrollbar { display: none; }
+  .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
 
   /* ── Detail view ── */
   .detail-overlay {
@@ -328,17 +330,17 @@
   </div>
 </div>
 
-<!-- Extract Metadata Dialog -->
-<div id="extractMetaOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1200;display:none;align-items:center;justify-content:center">
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;max-width:800px;width:90%;max-height:80vh;display:flex;flex-direction:column">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
-      <span style="font-weight:600;font-size:14px" id="extractMetaTitle">CivitAI Metadata</span>
+<!-- Details Dialog -->
+<div id="detailsMetaOverlay" class="json-viewer-overlay" style="display:none">
+  <div class="json-viewer-box" style="max-width:800px">
+    <div class="json-viewer-header">
+      <span class="json-viewer-title" id="detailsMetaTitle">Generation Data</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn--sm" id="extractMetaCopy">Copy JSON</button>
-        <button style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer" id="extractMetaClose">&times;</button>
+        <button class="btn btn--sm" id="detailsMetaCopy">Copy JSON</button>
+        <button onclick="document.getElementById('detailsMetaOverlay').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">&times;</button>
       </div>
     </div>
-    <pre id="extractMetaContent" style="padding:16px 18px;margin:0;overflow:auto;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;flex:1"></pre>
+    <pre id="detailsMetaContent" class="json-viewer-pre" style="max-height:70vh;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none"></pre>
   </div>
 </div>
 
@@ -1153,6 +1155,9 @@
     if (!meta || Object.keys(meta).length === 0)
       return '<p style="color:var(--muted)">No generation data available</p>';
     var h = '';
+    // ID and date first
+    if (meta.civitai_id) h += '<div class="meta-row"><span>ID</span><span>' + meta.civitai_id + '</span></div>';
+    if (meta.createdAt) h += '<div class="meta-row"><span>Created</span><span>' + escHtml(meta.createdAt) + '</span></div>';
     // CivitAI links
     if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
     if (meta.url) h += '<div class="meta-row"><span>Asset</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
@@ -1182,10 +1187,10 @@
       h += '<div class="meta-row" style="margin-top:8px"><span>Raw Metadata</span><span>' +
         '<button class="copy-meta-btn" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:11px">Copy JSON</button></span></div>';
     }
-    // Extract Metadata button (fetches from CivitAI tRPC)
-    if (meta.civitai_id) {
+    // Details button (shows saved generation_data)
+    if (meta.generation_data) {
       h += '<div style="margin-top:12px;text-align:center">' +
-        '<button class="btn btn--sm extract-meta-btn" data-civitai-id="' + meta.civitai_id + '">Extract Metadata</button></div>';
+        '<button class="btn btn--sm details-meta-btn">Details</button></div>';
     }
     return h;
   }
@@ -1204,37 +1209,25 @@
       setTimeout(function() { copyBtn.textContent = orig; copyBtn.style.color = ''; }, 3000);
       return;
     }
-    // Extract Metadata from CivitAI tRPC
-    var extractBtn = e.target.closest('.extract-meta-btn');
-    if (extractBtn) {
-      var civitaiId = extractBtn.dataset.civitaiId;
-      if (!civitaiId) return;
-      extractBtn.disabled = true; extractBtn.textContent = 'Fetching...';
-      apiFetch('/api/admin/loras/fetch-civitai-meta/' + civitaiId).then(function(resp) {
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        return resp.json();
-      }).then(function(data) {
-        _extractMetaJson = JSON.stringify(data, null, 2);
-        document.getElementById('extractMetaTitle').textContent = 'Generation Data — Image #' + civitaiId;
-        document.getElementById('extractMetaContent').textContent = _extractMetaJson;
-        document.getElementById('extractMetaOverlay').style.display = 'flex';
-      }).catch(function(err) {
-        if (err.message !== 'auth') showToast('Error: ' + err.message, 5000, 'error');
-      }).finally(function() {
-        extractBtn.disabled = false; extractBtn.textContent = 'Extract Metadata';
-      });
+    // Details button — show saved generation_data
+    var detailsBtn = e.target.closest('.details-meta-btn');
+    if (detailsBtn) {
+      var gen = _lastRenderedMeta ? _lastRenderedMeta.generation_data : null;
+      if (!gen) return;
+      _extractMetaJson = JSON.stringify(gen, null, 2);
+      var cid = _lastRenderedMeta.civitai_id || '';
+      document.getElementById('detailsMetaTitle').textContent = 'Generation Data' + (cid ? ' — Image #' + cid : '');
+      document.getElementById('detailsMetaContent').textContent = _extractMetaJson;
+      document.getElementById('detailsMetaOverlay').style.display = 'block';
       return;
     }
   });
 
-  // Extract Metadata dialog handlers
-  document.getElementById('extractMetaClose').addEventListener('click', function() {
-    document.getElementById('extractMetaOverlay').style.display = 'none';
-  });
-  document.getElementById('extractMetaOverlay').addEventListener('click', function(e) {
+  // Details dialog handlers
+  document.getElementById('detailsMetaOverlay').addEventListener('click', function(e) {
     if (e.target === this) this.style.display = 'none';
   });
-  document.getElementById('extractMetaCopy').addEventListener('click', function() {
+  document.getElementById('detailsMetaCopy').addEventListener('click', function() {
     navigator.clipboard.writeText(_extractMetaJson);
     var btn = this; var orig = btn.textContent;
     btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = orig; }, 3000);
@@ -1848,6 +1841,7 @@
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+      if (document.getElementById('detailsMetaOverlay').style.display !== 'none') { document.getElementById('detailsMetaOverlay').style.display = 'none'; return; }
       if (document.getElementById('imgModal').style.display !== 'none') { closeImgModal(); return; }
       if (document.getElementById('detailOverlay').style.display !== 'none') { closeDetail(); return; }
       if (document.getElementById('galleryOverlay').style.display !== 'none') { closeGallery(); return; }

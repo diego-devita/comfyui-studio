@@ -137,6 +137,23 @@ def _extract_image_meta(meta: dict | None) -> dict:
     return r
 
 
+def _fetch_generation_data(image_id: int) -> dict | None:
+    """Fetch generation data from CivitAI tRPC endpoint."""
+    if not image_id or not CIVITAI_API_KEY:
+        return None
+    try:
+        params = json.dumps({"json": {"id": image_id, "authed": True}})
+        r = httpx.get(f"https://civitai.com/api/trpc/image.getGenerationData?input={params}",
+                      headers={"Authorization": f"Bearer {CIVITAI_API_KEY}",
+                               "Content-Type": "application/json"},
+                      timeout=15)
+        if r.status_code == 200:
+            return r.json().get("result", {}).get("data", {}).get("json", {})
+    except Exception:
+        pass
+    return None
+
+
 def _download_image(url: str, dest: Path, timeout: int = 30) -> bool:
     try:
         with httpx.stream("GET", url, timeout=timeout, follow_redirects=True) as resp:
@@ -386,9 +403,9 @@ _GALLERY_MAX_IMAGES = 1000
 
 def _gallery_download_batch(items: list[tuple], dest_dir: Path,
                             state: dict, stop: threading.Event,
-                            seen: set) -> bool:
+                            seen: set, fetch_gen_data: bool = False) -> bool:
     """Download a batch of (id, url, meta) items. Returns False if stopped.
-    Deduplicates by URL-derived UUID (consistent across endpoints)."""
+    Deduplicates by URL-derived UUID. Retries failed downloads up to 5 times."""
     for iid, url, meta in items:
         if stop.is_set():
             return False
@@ -398,14 +415,29 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
         seen.add(url_key)
         ext = ".mp4" if ".mp4" in url else ".jpeg"
         dest = dest_dir / f"{iid}{ext}"
-        if dest.exists():
+        if dest.exists() and dest.stat().st_size > 0:
             state["skipped"] += 1
             continue
-        if _download_image(url, dest):
-            state["downloaded"] += 1
-            if meta:
-                dest.with_suffix(".json").write_text(
-                    json.dumps(meta, indent=2, ensure_ascii=False))
+        # Retry up to 5 times with 2s delay
+        ok = False
+        for attempt in range(5):
+            if stop.is_set():
+                return False
+            if _download_image(url, dest):
+                ok = True
+                break
+            time.sleep(2)
+        if not ok:
+            continue
+        state["downloaded"] += 1
+        # Fetch generation data from CivitAI tRPC
+        if fetch_gen_data and meta.get("civitai_id"):
+            gen = _fetch_generation_data(meta["civitai_id"])
+            if gen:
+                meta["generation_data"] = gen
+        if meta:
+            dest.with_suffix(".json").write_text(
+                json.dumps(meta, indent=2, ensure_ascii=False))
     return True
 
 
@@ -515,7 +547,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
             batch.append((iid, url, meta))
             community_downloaded += 1
 
-        if not _gallery_download_batch(batch, community_dir, state, stop, seen):
+        if not _gallery_download_batch(batch, community_dir, state, stop, seen, fetch_gen_data=True):
             state["status"] = "stopped"
             return
 
@@ -541,7 +573,7 @@ async def gallery_status(model_id: int):
             return []
         result = []
         for f in sorted(dirpath.iterdir()):
-            if f.suffix not in (".jpeg", ".mp4"):
+            if f.suffix not in (".jpeg", ".mp4") or f.stat().st_size == 0:
                 continue
             meta = {}
             mf = f.with_suffix(".json")
@@ -550,7 +582,10 @@ async def gallery_status(model_id: int):
                     meta = json.loads(mf.read_text())
                 except Exception:
                     pass
-            result.append({"id": f.stem, "ext": f.suffix, "meta": meta})
+            result.append({"id": f.stem, "ext": f.suffix, "meta": meta,
+                           "createdAt": meta.get("createdAt", "")})
+        # Sort by createdAt descending (newest first)
+        result.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
         return result
 
     base = IMAGES_DIR / str(model_id)
@@ -580,25 +615,6 @@ async def gallery_delete(model_id: int):
         del _gallery_state[model_id]
     return JSONResponse({"deleted": count})
 
-
-@router.get("/api/admin/loras/fetch-civitai-meta/{image_id}")
-async def fetch_image_meta(image_id: int):
-    """Fetch generation data for a CivitAI image via tRPC endpoint."""
-    if not CIVITAI_API_KEY:
-        raise HTTPException(403, "CIVITAI_API_KEY not configured")
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
-               "Content-Type": "application/json"}
-    params = json.dumps({"json": {"id": image_id, "authed": True}})
-    url = f"https://civitai.com/api/trpc/image.getGenerationData?input={params}"
-    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-        try:
-            r = await client.get(url)
-        except httpx.RequestError:
-            raise HTTPException(502, "Could not reach CivitAI")
-        if r.status_code != 200:
-            raise HTTPException(r.status_code, "CivitAI returned " + str(r.status_code))
-        data = r.json()
-    return JSONResponse(data.get("result", {}).get("data", {}).get("json", {}))
 
 
 @router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")
