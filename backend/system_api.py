@@ -32,8 +32,6 @@ router = APIRouter()
 # ── Request schemas ──────────────────────────────────────────────────────────
 
 
-class SettingsUpdate(BaseModel):
-    max_concurrent: int = None
 
 
 # ── Disk usage helpers ───────────────────────────────────────────────────────
@@ -125,6 +123,38 @@ def _get_pod_ram_bytes() -> int:
 @router.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@router.get("/api/admin/system/flush-status")
+async def flush_status():
+    """Check WAL status of all SQLite databases without blocking writers.
+
+    Uses fresh connections (not the shared thread-local ones) so the check
+    itself doesn't hold read locks that would make PASSIVE report busy.
+    """
+    import sqlite3
+    import db as _db
+    import gallery_db as _gdb
+
+    db_paths = [("jobs", str(_db.DB_PATH)), ("gallery", str(_gdb.GALLERY_DB_PATH))]
+    results = {}
+    for name, path in db_paths:
+        try:
+            conn = sqlite3.connect(path, timeout=2)
+            try:
+                row = conn.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+                busy, log, checkpointed = row
+                results[name] = {"busy": busy, "log": log, "checkpointed": checkpointed}
+            finally:
+                conn.close()
+        except Exception as e:
+            results[name] = {"error": str(e)}
+
+    safe = all(
+        r.get("busy", 1) == 0
+        for r in results.values() if "error" not in r
+    )
+    return {"safe": safe, "databases": results}
 
 
 @router.post("/api/admin/system/prepare-shutdown")
@@ -633,20 +663,6 @@ async def telemetry():
 # ── Settings ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/api/admin/settings")
-async def get_settings():
-    return {"max_concurrent": download._max_concurrent}
-
-
-@router.put("/api/admin/settings")
-async def update_settings(body: SettingsUpdate):
-    if body.max_concurrent is not None:
-        download._max_concurrent = max(1, min(10, body.max_concurrent))
-        with _queue_lock:
-            _schedule_downloads()
-    return {"max_concurrent": download._max_concurrent}
-
-
 # (key, sensitive, default, description)
 _ENV_GROUPS = [
     ("auth", "Authentication & API Tokens", [
@@ -678,6 +694,9 @@ _ENV_GROUPS = [
         ("REPO_BRANCH",     False, "main", "Git branch to track (main = production, dev = testing)"),
         ("DEV_MODE",        False, "false", "Development mode — stubs downloads, LLM, GPU stats"),
     ]),
+    ("dev", "Development (editable at runtime)", [
+        ("DEV_DOWNLOAD_DELAY", False, "5", "Seconds each stub download takes (0 = instant)"),
+    ]),
     ("runpod", "RunPod Environment (read-only, injected by RunPod)", [
         ("RUNPOD_API_KEY",   True,  "", "RunPod API key — used to query volume size for disk usage stats"),
         ("RUNPOD_POD_ID",    False, "", "Current pod ID — used with API key to query pod/volume info"),
@@ -697,6 +716,26 @@ def _mask(val):
     return val[:4] + "***" + val[-4:]
 
 
+# Variables editable at runtime from the settings page.
+# Maps env var name → (module_attr_path, cast_fn).
+# module_attr_path is "module.attr" for cross-module or just "attr" for config.
+_EDITABLE_VARS = {
+    "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
+    "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
+}
+
+
+def _resolve_editable(path: str):
+    """Resolve 'module.attr' to (module_obj, attr_name)."""
+    import importlib
+    parts = path.rsplit(".", 1)
+    if len(parts) == 2:
+        mod = importlib.import_module(parts[0])
+        return mod, parts[1]
+    import config as _cfg
+    return _cfg, parts[0]
+
+
 @router.get("/api/admin/settings/env")
 async def get_env_vars():
     """Return environment variables grouped by category (sensitive values masked)."""
@@ -704,9 +743,16 @@ async def get_env_vars():
     for group_id, label, var_defs in _ENV_GROUPS:
         if group_id == "runpod" and HOSTING != "runpod":
             continue
+        if group_id == "dev" and not DEV_MODE:
+            continue
         vars_list = []
         for key, sensitive, default, description in var_defs:
-            val = os.environ.get(key, "")
+            if key in _EDITABLE_VARS:
+                path, _ = _EDITABLE_VARS[key]
+                mod, attr = _resolve_editable(path)
+                val = str(getattr(mod, attr, ""))
+            else:
+                val = os.environ.get(key, "")
             vars_list.append({
                 "key": key,
                 "value": _mask(val) if sensitive else val,
@@ -714,9 +760,35 @@ async def get_env_vars():
                 "set": bool(val),
                 "default": default,
                 "description": description,
+                "editable": key in _EDITABLE_VARS,
             })
         groups.append({"id": group_id, "label": label, "vars": vars_list})
     return {"groups": groups}
+
+
+@router.put("/api/admin/settings/env")
+async def update_env_var(request: Request):
+    """Update an editable variable at runtime."""
+    body = await request.json()
+    key = body.get("key", "")
+    value = body.get("value", "")
+    if key not in _EDITABLE_VARS:
+        raise HTTPException(400, f"Variable {key} is not editable")
+    path, cast = _EDITABLE_VARS[key]
+    mod, attr = _resolve_editable(path)
+    try:
+        casted = cast(value)
+        # Clamp MAX_CONCURRENT_DOWNLOADS to 1-10
+        if key == "MAX_CONCURRENT_DOWNLOADS":
+            casted = max(1, min(10, casted))
+        setattr(mod, attr, casted)
+    except (ValueError, TypeError):
+        raise HTTPException(400, f"Invalid value for {key}")
+    # Trigger scheduler if concurrent downloads changed
+    if key == "MAX_CONCURRENT_DOWNLOADS":
+        with _queue_lock:
+            _schedule_downloads()
+    return {"key": key, "value": str(getattr(mod, attr))}
 
 
 class RevealRequest(BaseModel):
