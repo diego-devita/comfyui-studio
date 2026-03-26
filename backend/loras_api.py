@@ -470,8 +470,34 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
     rel_meta = _gdb.meta_path_for(source, model_id, iid)
     dest = _gdb.abs_path(rel_file)
 
-    # Skip if file already on disk (e.g. previous download that wasn't in DB)
+    # File on disk but not in DB — register it and skip download.
+    # This happens when files exist from a previous session.
     if dest.exists() and dest.stat().st_size > 0:
+        has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
+        stats = meta.get("stats") or {}
+        raw_meta = meta.get("raw_meta") or {}
+        prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
+        try:
+            _gdb.insert_image({
+                "civitai_id": iid, "file_uuid": _url_to_id(url),
+                "type": meta.get("type", "video" if ext == ".mp4" else "image"),
+                "ext": ext, "file_path": rel_file,
+                "thumb_path": rel_thumb if has_thumb else None,
+                "meta_path": rel_meta if _gdb.abs_path(rel_meta).exists() else None,
+                "model_id": model_id, "source": source,
+                "post_id": meta.get("postId"), "post_title": meta.get("postTitle", ""),
+                "username": meta.get("username", ""), "base_model": meta.get("baseModel", ""),
+                "width": meta.get("width"), "height": meta.get("height"),
+                "duration": meta.get("duration"), "audio": meta.get("audio"),
+                "file_size": dest.stat().st_size, "created_at": meta.get("createdAt"),
+                "reactions": stats.get("heartCount", 0) + stats.get("likeCount", 0),
+                "has_meta": _gdb.abs_path(rel_meta).exists() if rel_meta else False,
+                "search_mode": search_mode, "prompt": prompt,
+            })
+            if version_id:
+                _gdb.link_version(iid, version_id)
+        except Exception as e:
+            print(f"[gallery] DB insert (existing file) failed for {iid}: {e}", flush=True)
         return "skipped"
 
     # Retry up to 5 times with 2s delay between attempts.
@@ -910,22 +936,47 @@ async def gallery_item_meta(item_id: str):
 
 
 @router.delete("/api/admin/loras/{model_id}/gallery")
-async def gallery_delete(model_id: int):
-    """Delete all gallery images for a model.
+async def gallery_delete(model_id: int, version_id: int | None = None):
+    """Unlink gallery images from a version (or all versions of a model).
 
-    Removes DB records first (returns list of file paths), then deletes
-    the actual files from the flat store. DB deletion cascades to
-    image_versions automatically via ON DELETE CASCADE.
+    Community images are GLOBAL — they are never deleted from disk or DB.
+    This only removes the image_versions links so the images stop appearing
+    in this version's gallery. The files and DB records stay for future use.
+    Original/card images for this model ARE deleted (files + DB records)
+    since they belong to the model, not the global store.
     """
-    count, paths = _gdb.delete_by_model(model_id)
-    # Delete actual files from disk
-    for rel_path in paths:
-        full = _gdb.abs_path(rel_path)
-        if full.exists():
-            full.unlink()
+    # Remove version links
+    if version_id:
+        count = _gdb.delete_by_version(version_id)
+    else:
+        # Remove all version links for all versions of this model
+        # by finding all versions that have links
+        conn = _gdb._get_conn()
+        rows = conn.execute("""
+            SELECT DISTINCT iv.version_id FROM image_versions iv
+            JOIN gallery_images g ON iv.civitai_id = g.civitai_id
+            WHERE g.model_id = ?
+        """, (model_id,)).fetchall()
+        count = 0
+        for row in rows:
+            count += _gdb.delete_by_version(row["version_id"])
+
+    # Delete original/card images (these belong to the model)
+    originals = _gdb.list_images_by_model(model_id, source="original")
+    for img in originals:
+        for field in ("file_path", "thumb_path", "meta_path"):
+            if img.get(field):
+                full = _gdb.abs_path(img[field])
+                if full.exists():
+                    full.unlink()
+    if originals:
+        conn = _gdb._get_conn()
+        conn.execute("DELETE FROM gallery_images WHERE model_id = ? AND source = 'original'", (model_id,))
+        conn.commit()
+
     if model_id in _gallery_state:
         del _gallery_state[model_id]
-    return JSONResponse({"deleted": count})
+    return JSONResponse({"deleted": count + len(originals)})
 
 
 
