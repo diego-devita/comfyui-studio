@@ -9,6 +9,7 @@ from pathlib import Path
 import requests
 
 from config import MODELS_BASE, CIVITAI_API_KEY, HF_TOKEN, DEV_MODE
+import config as _cfg
 
 # ── Download state & parallel pool ──────────────────────────────────────────
 # In-memory state, resets on process restart.
@@ -78,6 +79,14 @@ def _on_download_complete() -> None:
         _schedule_downloads()
 
 
+def _fmt_size(b: int) -> str:
+    for u in ("B", "KB", "MB", "GB"):
+        if b < 1024:
+            return f"{b:.1f} {u}" if u != "B" else f"{b} B"
+        b /= 1024
+    return f"{b:.1f} TB"
+
+
 def _do_download(item: dict) -> None:
     """
     Download a single model file. Submitted to the thread pool executor.
@@ -85,6 +94,7 @@ def _do_download(item: dict) -> None:
     Updates _download_state with byte progress and rolling speed every 8 MB chunk.
     """
     from events import _events
+    import db as _db
 
     filename = item["file"]
     base_dir = item.get("_base_dir", MODELS_BASE)
@@ -104,11 +114,15 @@ def _do_download(item: dict) -> None:
         "_last_bytes": 0,
         "_last_time": now,
     }
+    _db.upsert_download(filename, item.get("dest", ""), "downloading")
+    dest = item.get("dest", "")
+    _events.emit("model.download.started", f"Download started: {filename} → {dest}/", severity="info", data={"filename": filename, "dest": dest})
 
     # DEV_MODE: create empty stub file instead of downloading
     if DEV_MODE:
         try:
-            time.sleep(0.3)  # brief delay for realistic UX
+            delay = _cfg.DEV_DOWNLOAD_DELAY if _cfg.DEV_DOWNLOAD_DELAY > 0 else 0.3
+            time.sleep(delay)
             dest_file.touch()
             _download_state[filename] = {
                 "status": "done",
@@ -119,7 +133,8 @@ def _do_download(item: dict) -> None:
                 "_last_bytes": 0,
                 "_last_time": 0.0,
             }
-            _events.emit("model.download.completed", f"Downloaded (stub): {filename}", severity="success", data={"filename": filename, "size": 0})
+            _db.complete_download(filename, 0)
+            _events.emit("model.download.completed", f"Download complete: {filename} (0 B)", severity="success", data={"filename": filename, "size": 0, "dest": dest})
         except Exception as e:
             _download_state[filename] = {
                 "status": "error",
@@ -130,7 +145,8 @@ def _do_download(item: dict) -> None:
                 "_last_bytes": 0,
                 "_last_time": 0.0,
             }
-            _events.emit("model.download.failed", f"Download failed: {filename}", severity="error", data={"filename": filename, "error": str(e)})
+            _db.fail_download(filename, str(e))
+            _events.emit("model.download.failed", f"Download failed: {filename} — {e}", severity="error", data={"filename": filename, "error": str(e), "dest": dest})
         finally:
             _on_download_complete()
         return
@@ -172,7 +188,8 @@ def _do_download(item: dict) -> None:
             "_last_bytes": 0,
             "_last_time": 0.0,
         }
-        _events.emit("model.download.completed", f"Downloaded: {filename}", severity="success", data={"filename": filename, "size": final_size})
+        _db.complete_download(filename, final_size)
+        _events.emit("model.download.completed", f"Download complete: {filename} ({_fmt_size(final_size)})", severity="success", data={"filename": filename, "size": final_size, "dest": dest})
 
     except Exception as e:
         if tmp_file.exists():
@@ -186,14 +203,17 @@ def _do_download(item: dict) -> None:
             "_last_bytes": 0,
             "_last_time": 0.0,
         }
-        _events.emit("model.download.failed", f"Download failed: {filename}", severity="error", data={"filename": filename, "error": str(e)})
+        _db.fail_download(filename, str(e))
+        _events.emit("model.download.failed", f"Download failed: {filename} — {e}", severity="error", data={"filename": filename, "error": str(e), "dest": dest})
 
     finally:
         _on_download_complete()
 
 
-def _enqueue_download(model: dict) -> None:
+def _enqueue_download(model: dict, source: str = "manual") -> None:
     """Add a model to the pending queue and trigger the scheduler."""
+    from events import _events
+    import db as _db
     filename = model["file"]
     _download_state[filename] = {
         "status": "queued",
@@ -204,6 +224,8 @@ def _enqueue_download(model: dict) -> None:
         "_last_bytes": 0,
         "_last_time": 0.0,
     }
+    _db.upsert_download(filename, model.get("dest", ""), "queued", source=source)
+    _events.emit("model.download.queued", f"Queued: {filename}", severity="info", data={"filename": filename, "dest": model.get("dest", ""), "source": source})
     with _queue_lock:
         _pending_queue.append(model)
         _schedule_downloads()

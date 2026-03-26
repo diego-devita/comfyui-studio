@@ -206,6 +206,11 @@ async def _start_event_consumer():
     if stalled > 0:
         _events.emit("system.startup", f"Marked {stalled} stalled jobs", severity="warning")
 
+    # Mark any downloads that were in-progress as failed (process died mid-download)
+    stale_dl = _db.cleanup_stale_downloads()
+    if stale_dl > 0:
+        _events.emit("system.startup", f"Marked {stale_dl} stale downloads as failed", severity="warning")
+
     # Register SIGTERM handler for graceful shutdown.
     # Docker sends SIGTERM before SIGKILL (10s grace period).
     # This flushes SQLite WAL files to prevent corruption.

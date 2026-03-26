@@ -13,6 +13,7 @@ app = FastAPI(title="ComfyUI Studio")
 
 API_KEY = os.environ.get("API_KEY", "changeme")
 DEV_MODE = os.environ.get("DEV_MODE", "false").lower() == "true"
+DEV_DOWNLOAD_DELAY = int(os.environ.get("DEV_DOWNLOAD_DELAY", "5"))
 CIVITAI_API_KEY = os.environ.get("CIVITAI_API_KEY", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))

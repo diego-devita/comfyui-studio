@@ -8,6 +8,7 @@ All timestamps stored as ISO 8601 strings (Italian timezone).
 import json
 import sqlite3
 import threading
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from config import STUDIO_DIR
@@ -70,6 +71,23 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
         CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity);
+
+        -- Download tracking: persists lifecycle across page navigations and restarts.
+        -- Real-time byte progress stays in memory (_download_state dict).
+        CREATE TABLE IF NOT EXISTS downloads (
+            filename     TEXT PRIMARY KEY,
+            dest         TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued', 'downloading', 'done', 'error')),
+            total_bytes  INTEGER DEFAULT 0,
+            error        TEXT,
+            source       TEXT,
+            queued_at    TEXT NOT NULL,
+            started_at   TEXT,
+            completed_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
     """)
     conn.commit()
 
@@ -273,6 +291,88 @@ def count_jobs_by_workflow() -> list[dict]:
         ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+
+# ── Download tracking ────────────────────────────────────────
+
+
+def _now_italian() -> str:
+    return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def upsert_download(filename: str, dest: str, status: str, source: str = None, error: str = None):
+    """Insert or update a download record."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        INSERT INTO downloads (filename, dest, status, source, error, queued_at, started_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(filename) DO UPDATE SET
+            status=excluded.status,
+            error=excluded.error,
+            started_at=CASE WHEN excluded.status='downloading' THEN ? ELSE downloads.started_at END,
+            completed_at=CASE WHEN excluded.status IN ('done','error') THEN ? ELSE downloads.completed_at END
+    """, (filename, dest, status, source, error, now, None, None, now, now))
+    conn.commit()
+
+
+def complete_download(filename: str, total_bytes: int = 0):
+    """Mark download as done."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        UPDATE downloads SET status='done', total_bytes=?, completed_at=?, error=NULL
+        WHERE filename=?
+    """, (total_bytes, now, filename))
+    conn.commit()
+
+
+def fail_download(filename: str, error: str):
+    """Mark download as error."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        UPDATE downloads SET status='error', error=?, completed_at=?
+        WHERE filename=?
+    """, (error, now, filename))
+    conn.commit()
+
+
+def get_downloads_for_files(filenames: list[str]) -> dict:
+    """Get download records for a list of filenames. Returns {filename: {status, ...}}."""
+    if not filenames:
+        return {}
+    conn = _get_conn()
+    placeholders = ",".join("?" * len(filenames))
+    rows = conn.execute(
+        f"SELECT * FROM downloads WHERE filename IN ({placeholders})", filenames
+    ).fetchall()
+    return {r["filename"]: dict(r) for r in rows}
+
+
+def get_active_downloads() -> list[dict]:
+    """Get all queued/downloading records."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT * FROM downloads WHERE status IN ('queued', 'downloading') ORDER BY queued_at"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def cleanup_stale_downloads() -> int:
+    """On boot: mark 'downloading' records as 'error' (process died mid-download).
+    Returns number of records cleaned up."""
+    conn = _get_conn()
+    now = _now_italian()
+    cursor = conn.execute("""
+        UPDATE downloads SET status='error', error='Process restarted during download', completed_at=?
+        WHERE status='downloading'
+    """, (now,))
+    conn.commit()
+    return cursor.rowcount
 
 
 # ── Helpers ──────────────────────────────────────────────────
