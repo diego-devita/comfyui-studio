@@ -120,7 +120,11 @@
   .gallery-urls .copy-btn:hover { opacity: 1; }
   .gallery-urls .copy-btn svg { width: 14px; height: 14px; fill: var(--muted); vertical-align: middle; }
   .gallery-urls .copied-flash { color: var(--accent); font-size: 11px; margin-left: 4px; }
-  #galleryGrid { max-height: calc(100vh - 400px); overflow-y: auto; }
+  #galleryGrid { max-height: calc(100vh - 400px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  #galleryGrid::-webkit-scrollbar { width: 6px; }
+  #galleryGrid::-webkit-scrollbar-track { background: transparent; }
+  #galleryGrid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #galleryGrid::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   .gallery-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
   .gallery-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   .gallery-section { display: flex; flex-wrap: wrap; gap: 6px; }

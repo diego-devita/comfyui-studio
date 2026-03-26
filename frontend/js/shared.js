@@ -292,5 +292,40 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // Inject DB safe-shutdown button before the logout link
+  var logoutLink = document.querySelector('.nav-logout');
+  if (logoutLink && !document.getElementById('dbSafeBtn')) {
+    var dbBtn = document.createElement('a');
+    dbBtn.href = '#';
+    dbBtn.id = 'dbSafeBtn';
+    dbBtn.className = 'nav-link';
+    dbBtn.title = 'Prepare safe shutdown (flush DB)';
+    dbBtn.style.cssText = 'color: #4dabf7; transition: color 0.2s;';
+    dbBtn.innerHTML = '<span class="icon icon-database icon-md" style="background-color: #4dabf7;"></span>';
+    dbBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      var icon = dbBtn.querySelector('.icon');
+      dbBtn.style.pointerEvents = 'none';
+      icon.style.backgroundColor = 'var(--muted)';
+      apiFetch('/api/admin/system/prepare-shutdown', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          icon.style.backgroundColor = '#51cf66';
+          dbBtn.title = 'Safe to power off';
+          showToast('DB flushed — safe to power off', 5000, 'success');
+        })
+        .catch(function(err) {
+          icon.style.backgroundColor = '#ff6b6b';
+          dbBtn.title = 'Flush failed';
+          if (err.message !== 'auth') showToast('Flush failed: ' + err.message, 5000, 'error');
+        })
+        .finally(function() {
+          dbBtn.style.pointerEvents = '';
+          setTimeout(function() { icon.style.backgroundColor = '#4dabf7'; dbBtn.title = 'Prepare safe shutdown (flush DB)'; }, 10000);
+        });
+    });
+    logoutLink.parentNode.insertBefore(dbBtn, logoutLink);
+  }
+
   initActivityPanel();
 });

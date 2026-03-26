@@ -97,6 +97,50 @@ async def health():
     return {"status": "ok"}
 
 
+@router.post("/api/admin/system/prepare-shutdown")
+async def prepare_shutdown():
+    """Flush all SQLite databases to prepare for safe pod shutdown.
+
+    Performs WAL checkpoint on all databases (jobs + gallery) so the
+    WAL files are merged into the main DB. This prevents corruption
+    when the pod is killed and a new pod mounts the same volume.
+
+    Also stops any running gallery downloads.
+
+    Safe to call anytime — does not affect running services.
+    """
+    import gallery_db as _gdb
+    import db as _db
+
+    errors = []
+
+    # Checkpoint gallery DB
+    try:
+        conn = _gdb._get_conn()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception as e:
+        errors.append(f"gallery: {e}")
+
+    # Checkpoint jobs DB
+    try:
+        conn = _db._get_conn()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception as e:
+        errors.append(f"jobs: {e}")
+
+    # Stop any running gallery downloads
+    from loras_api import _gallery_state
+    stopped = 0
+    for mid, st in _gallery_state.items():
+        if st.get("_stop") and st.get("status") == "downloading":
+            st["_stop"].set()
+            stopped += 1
+
+    if errors:
+        return {"status": "partial", "errors": errors, "stopped_downloads": stopped}
+    return {"status": "ok", "stopped_downloads": stopped}
+
+
 # ── Events endpoint ─────────────────────────────────────────────────────────
 
 

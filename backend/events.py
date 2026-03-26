@@ -3,6 +3,7 @@
 import asyncio
 import json
 import queue
+import signal
 import uuid
 from pathlib import Path
 
@@ -179,6 +180,23 @@ async def _start_event_consumer():
     stalled = _db.mark_stalled_jobs()
     if stalled > 0:
         _events.emit("system.startup", f"Marked {stalled} stalled jobs", severity="warning")
+
+    # Register SIGTERM handler for graceful shutdown.
+    # Docker sends SIGTERM before SIGKILL (10s grace period).
+    # This flushes SQLite WAL files to prevent corruption.
+    def _sigterm_handler(signum, frame):
+        print("[shutdown] SIGTERM received, flushing databases...", flush=True)
+        try:
+            _gdb._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        try:
+            _db._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        print("[shutdown] DB flush complete, exiting.", flush=True)
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     _events.emit("system.backend.started", "Backend started", severity="info",
                  data={"version": _load_version().get("app_version", "?")})

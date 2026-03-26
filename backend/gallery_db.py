@@ -74,10 +74,27 @@ def _get_conn() -> sqlite3.Connection:
 # ── Schema ───────────────────────────────────────────────────────────────────
 
 def init_gallery_db():
-    """Create tables and indexes if they don't exist.
+    """Create tables and indexes, recover from WAL corruption if needed.
 
-    Called once at backend startup. Idempotent — safe to call multiple times.
+    Called once at backend startup. If the DB is corrupted (e.g. pod was
+    killed without WAL checkpoint), deletes and recreates it. The gallery
+    DB is rebuilable — files on disk are the source of truth.
     """
+    # Recovery: try to open and checkpoint. If it fails, delete and recreate.
+    if GALLERY_DB_PATH.exists():
+        try:
+            conn = _get_conn()
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        except Exception as e:
+            print(f"[gallery_db] DB corrupted ({e}), recreating...", flush=True)
+            _local.conn = None
+            for p in (GALLERY_DB_PATH,
+                      GALLERY_DB_PATH.parent / (GALLERY_DB_PATH.name + "-wal"),
+                      GALLERY_DB_PATH.parent / (GALLERY_DB_PATH.name + "-shm")):
+                if p.exists():
+                    p.unlink()
+
     conn = _get_conn()
     conn.executescript("""
         -- Main image table: one row per unique media file on disk.
