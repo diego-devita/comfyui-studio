@@ -8,19 +8,54 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
-  main { max-width: 800px; margin: 0 auto; }
+  main { max-width: 900px; margin: 0 auto; }
 
-  .section-title {
+  /* ── Unlock bar ── */
+  .unlock-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .unlock-bar .status-text { color: var(--muted); flex: 1; }
+  .unlock-bar .status-text.revealed { color: var(--accent); }
+  .unlock-bar .countdown-wrap {
+    width: 120px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .unlock-bar .countdown-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transform-origin: left;
+    animation: countdown-shrink 30s linear forwards;
+  }
+  @keyframes countdown-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+  /* ── Group titles ── */
+  .group-title {
     font-family: var(--mono);
     font-size: 11px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 16px;
-    padding-bottom: 8px;
+    margin-bottom: 8px;
+    margin-top: 24px;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
   }
+  .group-title:first-of-type { margin-top: 0; }
 
+  /* ── Table ── */
   .env-table {
     width: 100%;
     border-collapse: collapse;
@@ -28,11 +63,18 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     overflow: hidden;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
+    table-layout: fixed;
   }
+  .env-table th:nth-child(1),
+  .env-table td:nth-child(1) { width: 28%; }
+  .env-table th:nth-child(2),
+  .env-table td:nth-child(2) { width: 30%; }
+  .env-table th:nth-child(3),
+  .env-table td:nth-child(3) { width: 42%; }
   .env-table th,
   .env-table td {
-    padding: 10px 16px;
+    padding: 8px 14px;
     text-align: left;
     font-family: var(--mono);
     font-size: 12px;
@@ -46,10 +88,13 @@
     background: rgba(20, 20, 32, 0.8);
   }
   .env-table tr:last-child td { border-bottom: none; }
-  .env-key { color: var(--text); font-weight: 700; }
+  .env-key { color: var(--text); font-weight: 700; white-space: nowrap; }
   .env-value { color: var(--text); word-break: break-all; }
   .env-value.masked { color: var(--muted); }
+  .env-value.revealed { color: var(--accent); }
   .env-value.not-set { color: var(--muted); font-style: italic; }
+  .env-desc { color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.6; }
+  .env-default { color: var(--muted); opacity: 0.6; }
   .env-dot {
     display: inline-block;
     width: 6px;
@@ -60,6 +105,31 @@
   }
   .env-dot.set { background: var(--success); }
   .env-dot.unset { background: var(--muted); }
+
+  /* ── Reveal dialog ── */
+  #revealDialog { max-width: 380px; }
+  #revealDialog .reveal-error {
+    color: var(--error);
+    font-size: 12px;
+    font-family: var(--mono);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #revealDialog input[type="password"] {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #revealDialog input[type="password"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -84,46 +154,200 @@
 </header>
 
 <main>
-  <div class="section-title">Environment Variables</div>
-  <table class="env-table" id="envTable">
-    <thead>
-      <tr>
-        <th>Variable</th>
-        <th>Value</th>
-      </tr>
-    </thead>
-    <tbody id="envBody">
-      <tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>
-    </tbody>
-  </table>
+  <div class="unlock-bar" id="unlockBar">
+    <span class="status-text" id="unlockStatus">Sensitive values are masked</span>
+    <button class="btn btn-sm" id="unlockBtn">Reveal secrets</button>
+  </div>
+  <div id="envGroups"><p style="color:var(--muted);">Loading...</p></div>
 </main>
+
+<dialog class="studio-dialog" id="revealDialog">
+  <div class="studio-dialog-body">
+    Enter your API key to reveal masked values for 30 seconds.
+    <input type="password" id="revealInput" placeholder="API key" autocomplete="off">
+    <div class="reveal-error" id="revealError"></div>
+  </div>
+  <div class="studio-dialog-actions">
+    <button class="studio-dialog-btn" id="revealCancel">Cancel</button>
+    <button class="studio-dialog-btn primary" id="revealSubmit">Reveal</button>
+  </div>
+</dialog>
 
 <script src="/static/js/shared.js"></script>
 <script>
 (function() {
   'use strict';
 
-  // ── Load env vars ──
-  var $envBody = document.getElementById('envBody');
+  var $groups = document.getElementById('envGroups');
+  var $unlockBar = document.getElementById('unlockBar');
+  var $unlockStatus = document.getElementById('unlockStatus');
+  var $unlockBtn = document.getElementById('unlockBtn');
+  var $dialog = document.getElementById('revealDialog');
+  var $revealInput = document.getElementById('revealInput');
+  var $revealError = document.getElementById('revealError');
+  var $revealSubmit = document.getElementById('revealSubmit');
+  var $revealCancel = document.getElementById('revealCancel');
+
+  var groupsData = null;
+  var revealedValues = null;
+  var countdownTimer = null;
+  var countdownSeconds = 0;
+
+  // ── Render ──
+
+  function render() {
+    if (!groupsData) return;
+    $groups.innerHTML = '';
+    groupsData.forEach(function(g) {
+      var title = document.createElement('div');
+      title.className = 'group-title';
+      title.textContent = g.label;
+      $groups.appendChild(title);
+
+      var table = document.createElement('table');
+      table.className = 'env-table';
+      table.innerHTML = '<thead><tr><th>Variable</th><th>Value</th><th>Description</th></tr></thead>';
+      var tbody = document.createElement('tbody');
+
+      g.vars.forEach(function(v) {
+        var row = document.createElement('tr');
+        var dotClass = v.set ? 'env-dot set' : 'env-dot unset';
+
+        // Value logic
+        var valText, valClass;
+        if (!v.set) {
+          valText = '(not set)';
+          valClass = 'env-value not-set';
+        } else if (v.sensitive && revealedValues && revealedValues[v.key] !== undefined) {
+          valText = revealedValues[v.key] || '(empty)';
+          valClass = 'env-value revealed';
+        } else if (v.sensitive) {
+          valText = v.value;
+          valClass = 'env-value masked';
+        } else {
+          valText = v.value;
+          valClass = 'env-value';
+        }
+
+        var descHtml = escHtml(v.description);
+        if (v.default) descHtml += '<br><span class="env-default">Default: ' + escHtml(v.default) + '</span>';
+
+        row.innerHTML =
+          '<td><span class="' + dotClass + '"></span><span class="env-key">' + escHtml(v.key) + '</span></td>' +
+          '<td class="' + valClass + '">' + escHtml(valText) + '</td>' +
+          '<td class="env-desc">' + descHtml + '</td>';
+        tbody.appendChild(row);
+      });
+
+      table.appendChild(tbody);
+      $groups.appendChild(table);
+    });
+  }
+
+  // ── Load ──
 
   async function loadEnv() {
     try {
       var resp = await apiFetch('/api/admin/settings/env');
       if (!resp.ok) return;
-      var vars = await resp.json();
-      $envBody.innerHTML = '';
-      vars.forEach(function(v) {
-        var row = document.createElement('tr');
-        var valClass = !v.set ? 'env-value not-set' : (v.sensitive ? 'env-value masked' : 'env-value');
-        var valText = !v.set ? '(not set)' : v.value;
-        var dotClass = v.set ? 'env-dot set' : 'env-dot unset';
-        row.innerHTML =
-          '<td><span class="' + dotClass + '"></span><span class="env-key">' + escHtml(v.key) + '</span></td>' +
-          '<td class="' + valClass + '">' + escHtml(valText) + '</td>';
-        $envBody.appendChild(row);
-      });
+      var data = await resp.json();
+      groupsData = data.groups;
+      render();
     } catch (e) {
-      if (e.message !== 'auth') $envBody.innerHTML = '<tr><td colspan="2" style="color:var(--error);">Failed to load</td></tr>';
+      if (e.message !== 'auth') $groups.innerHTML = '<p style="color:var(--error);">Failed to load</p>';
+    }
+  }
+
+  // ── Unlock flow ──
+
+  function hideSecrets() {
+    revealedValues = null;
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    $unlockStatus.textContent = 'Sensitive values are masked';
+    $unlockStatus.className = 'status-text';
+    $unlockBtn.textContent = 'Reveal secrets';
+    $unlockBtn.onclick = openDialog;
+    // Remove countdown bar if present
+    var cw = $unlockBar.querySelector('.countdown-wrap');
+    if (cw) cw.remove();
+    render();
+  }
+
+  function startCountdown() {
+    countdownSeconds = 30;
+    $unlockStatus.className = 'status-text revealed';
+    $unlockBtn.textContent = 'Hide now';
+    $unlockBtn.onclick = hideSecrets;
+
+    // Add countdown bar
+    var existing = $unlockBar.querySelector('.countdown-wrap');
+    if (existing) existing.remove();
+    var wrap = document.createElement('span');
+    wrap.className = 'countdown-wrap';
+    wrap.innerHTML = '<span class="countdown-fill"></span>';
+    $unlockBar.insertBefore(wrap, $unlockBtn);
+
+    updateCountdownText();
+    countdownTimer = setInterval(function() {
+      countdownSeconds--;
+      if (countdownSeconds <= 0) {
+        hideSecrets();
+      } else {
+        updateCountdownText();
+      }
+    }, 1000);
+  }
+
+  function updateCountdownText() {
+    $unlockStatus.textContent = 'Secrets visible — auto-hiding in ' + countdownSeconds + 's';
+  }
+
+  // ── Dialog ──
+
+  function openDialog() {
+    $revealInput.value = '';
+    $revealError.textContent = '';
+    $dialog.showModal();
+    $revealInput.focus();
+  }
+
+  $unlockBtn.onclick = openDialog;
+
+  $revealCancel.onclick = function() { $dialog.close(); };
+  $dialog.addEventListener('click', function(e) {
+    if (e.target === $dialog) $dialog.close();
+  });
+
+  $revealInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doReveal();
+  });
+
+  $revealSubmit.onclick = doReveal;
+
+  async function doReveal() {
+    var key = $revealInput.value.trim();
+    if (!key) { $revealError.textContent = 'Enter your API key'; return; }
+    $revealSubmit.disabled = true;
+    $revealError.textContent = '';
+    try {
+      var resp = await apiFetch('/api/admin/settings/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key }),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        $revealError.textContent = err.detail || 'Invalid API key';
+        return;
+      }
+      revealedValues = await resp.json();
+      $dialog.close();
+      render();
+      startCountdown();
+    } catch (e) {
+      if (e.message !== 'auth') $revealError.textContent = 'Request failed';
+    } finally {
+      $revealSubmit.disabled = false;
     }
   }
 
