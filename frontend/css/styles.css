@@ -184,6 +184,7 @@ header { min-height: 110px; }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 24px;
+  align-items: center;
 }
 .nav-link {
   padding: 12px 24px;
@@ -203,6 +204,100 @@ header { min-height: 110px; }
 }
 .nav-logout { margin-left: auto; color: var(--error); }
 .nav-logout:hover { color: #ff6688; }
+
+/* Nav links wrapper (injected by JS for mobile drawer) */
+.nav-links { display: contents; }
+
+/* Hamburger button — hidden on desktop */
+.nav-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+.nav-hamburger-icon,
+.nav-hamburger-icon::before,
+.nav-hamburger-icon::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--muted);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+.nav-hamburger-icon {
+  position: relative;
+}
+.nav-hamburger-icon::before,
+.nav-hamburger-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+.nav-hamburger-icon::before { top: -6px; }
+.nav-hamburger-icon::after  { top: 6px; }
+.nav-hamburger:hover .nav-hamburger-icon,
+.nav-hamburger:hover .nav-hamburger-icon::before,
+.nav-hamburger:hover .nav-hamburger-icon::after {
+  background: var(--text);
+}
+/* Animate to X when open */
+.nav-hamburger.open .nav-hamburger-icon { background: transparent; }
+.nav-hamburger.open .nav-hamburger-icon::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+.nav-hamburger.open .nav-hamburger-icon::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
+/* ── Mobile nav (<=768px) ── */
+@media (max-width: 768px) {
+  .main-nav {
+    flex-wrap: wrap;
+    padding: 0 12px;
+  }
+  .nav-hamburger { display: flex; }
+
+  .nav-links {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
+    width: 100%;
+    order: 99;
+  }
+  .nav-links.open {
+    grid-template-rows: 1fr;
+  }
+  .nav-links-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .nav-links-inner .nav-link {
+    display: block;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-links-inner .nav-link:last-child {
+    border-bottom: none;
+  }
+  .nav-links-inner .nav-link.active {
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+  }
+
+  /* Top-row items shrink padding, push icons right */
+  .main-nav > .nav-link { padding: 12px 10px; }
+  /* First direct nav-link after hamburger+wrapper = gear icon; push it right */
+  .nav-hamburger ~ .nav-links ~ .nav-link { margin-left: 0; }
+  .nav-hamburger ~ .nav-links + .nav-link { margin-left: auto; }
+  .main-nav > .nav-logout { margin-left: 0; }
+}
 
 /* ── Login Overlay ── */
 .login-overlay {
@@ -492,6 +587,12 @@ header { min-height: 110px; }
   font-size: 11px;
   text-align: center;
   padding: 16px 0;
+}
+
+/* Activity panel responsive */
+@media (max-width: 768px) {
+  .activity-panel-inner { padding: 0 16px; }
+  .activity-panel.open .activity-panel-inner { padding: 0 16px; }
 }
 
 /* ── Selection toolbar (global) ── */
