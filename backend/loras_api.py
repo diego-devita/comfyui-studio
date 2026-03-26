@@ -154,6 +154,22 @@ def _fetch_generation_data(image_id: int) -> dict | None:
     return None
 
 
+def _extract_thumbnail(video_path: Path) -> bool:
+    """Extract first frame from video as thumbnail using ffmpeg."""
+    thumb = video_path.with_suffix(".thumb.jpg")
+    if thumb.exists():
+        return True
+    try:
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_path), "-vframes", "1",
+             "-vf", "scale=300:-1", "-q:v", "5", "-f", "image2", str(thumb)],
+            capture_output=True, timeout=15)
+        return thumb.exists() and thumb.stat().st_size > 0
+    except Exception:
+        return False
+
+
 def _download_image(url: str, dest: Path, timeout: int = 30) -> bool:
     try:
         with httpx.stream("GET", url, timeout=timeout, follow_redirects=True) as resp:
@@ -416,6 +432,8 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
         ext = ".mp4" if ".mp4" in url else ".jpeg"
         dest = dest_dir / f"{iid}{ext}"
         if dest.exists() and dest.stat().st_size > 0:
+            if ext == ".mp4":
+                _extract_thumbnail(dest)
             state["skipped"] += 1
             continue
         # Retry up to 5 times with 2s delay
@@ -429,6 +447,8 @@ def _gallery_download_batch(items: list[tuple], dest_dir: Path,
             time.sleep(2)
         if not ok:
             continue
+        if ext == ".mp4":
+            _extract_thumbnail(dest)
         state["downloaded"] += 1
         # Fetch generation data from CivitAI tRPC
         if fetch_gen_data and meta.get("civitai_id"):
@@ -582,8 +602,10 @@ async def gallery_status(model_id: int):
                     meta = json.loads(mf.read_text())
                 except Exception:
                     pass
+            has_thumb = f.with_suffix(".thumb.jpg").exists()
             result.append({"id": f.stem, "ext": f.suffix, "meta": meta,
-                           "createdAt": meta.get("createdAt", "")})
+                           "createdAt": meta.get("createdAt", ""),
+                           "has_thumb": has_thumb})
         # Sort by createdAt descending (newest first)
         result.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
         return result

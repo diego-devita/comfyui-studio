@@ -141,7 +141,7 @@
   }
   .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
   .gallery-thumb:hover .expand-btn { opacity: 1; }
-  .video-placeholder { width: 150px; height: 150px; background: var(--bg); border-radius: 4px; }
+  .gallery-thumb .thumb-img { width: 150px; height: 150px; object-fit: cover; display: block; border-radius: 4px; background: var(--bg); }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
   #detailsMetaContent::-webkit-scrollbar { display: none; }
   .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
@@ -1557,7 +1557,7 @@
     document.getElementById('galleryDlBtn').textContent = 'Download';
     document.getElementById('galleryDlBtn').disabled = false;
     document.getElementById('galleryDeleteBtn').disabled = false;
-    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty"><span class="spinner sm" style="vertical-align:middle;margin-right:8px"></span>Loading...</div>';
     updateGalleryUrls();
     pollGallery();
   }
@@ -1659,7 +1659,8 @@
           source: source, key: prefix + img.id,
           civitai_id: m.civitai_id || img.id,
           createdAt: img.createdAt || m.createdAt || '',
-          username: m.username || ''
+          username: m.username || '',
+          has_thumb: img.has_thumb || false
         };
       }
       var card = (data.gallery_card || []).map(function(img) { return mapImg(img, 'gallery-card', 'card', 'card-'); });
@@ -1676,59 +1677,58 @@
       }
 
       document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community';
+      // Replace spinner with empty message if truly empty
+      if (all.length === 0 && status !== 'downloading') {
+        document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
+      }
     } catch(e) {
       if (e.message !== 'auth') console.error('Gallery poll error:', e);
     }
   }
 
   function toggleVideoPlay(thumb) {
+    var videoSrc = thumb.dataset.videoSrc;
+    if (!videoSrc) return;
     var video = thumb.querySelector('video');
-    if (!video) return;
     var overlay = thumb.querySelector('.play-overlay');
-    if (video.paused) {
-      if (galleryPlayingVideo && galleryPlayingVideo !== thumb) {
-        var prev = galleryPlayingVideo.querySelector('video');
-        if (prev) prev.pause();
-        galleryPlayingVideo.classList.remove('playing');
-        var po = galleryPlayingVideo.querySelector('.play-overlay');
-        if (po) po.innerHTML = PLAY_SVG;
-      }
-      video.play(); thumb.classList.add('playing'); overlay.innerHTML = PAUSE_SVG;
-      galleryPlayingVideo = thumb;
-    } else {
-      video.pause(); thumb.classList.remove('playing'); overlay.innerHTML = PLAY_SVG;
-      galleryPlayingVideo = null;
+
+    if (video) {
+      // Already playing — stop and swap back to image
+      stopVideoThumb(thumb);
+      return;
     }
+
+    // Stop any other playing video first
+    if (galleryPlayingVideo && galleryPlayingVideo !== thumb) {
+      stopVideoThumb(galleryPlayingVideo);
+    }
+
+    // Swap image to video
+    var img = thumb.querySelector('.thumb-img');
+    var v = document.createElement('video');
+    v.src = videoSrc; v.muted = true; v.loop = true; v.playsInline = true;
+    v.style.cssText = 'width:150px;height:150px;object-fit:cover;display:block;border-radius:4px';
+    v.autoplay = true;
+    if (img) img.replaceWith(v);
+    thumb.classList.add('playing');
+    if (overlay) overlay.innerHTML = PAUSE_SVG;
+    galleryPlayingVideo = thumb;
   }
 
-  // IntersectionObserver — swap placeholder/video based on visibility
-  var videoObserver = new IntersectionObserver(function(entries) {
-    entries.forEach(function(entry) {
-      var thumb = entry.target;
-      var src = thumb.dataset.videoSrc;
-      if (!src) return;
-      if (entry.isIntersecting) {
-        // Only create video if not already there
-        if (!thumb.querySelector('video')) {
-          var v = document.createElement('video');
-          v.src = src; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
-          var placeholder = thumb.querySelector('.video-placeholder');
-          if (placeholder) placeholder.replaceWith(v);
-        }
-      } else {
-        // Remove video, put placeholder back
-        var video = thumb.querySelector('video');
-        if (video) {
-          if (!video.paused) video.pause();
-          thumb.classList.remove('playing');
-          if (thumb === galleryPlayingVideo) galleryPlayingVideo = null;
-          var ph = document.createElement('div');
-          ph.className = 'video-placeholder';
-          video.replaceWith(ph);
-        }
-      }
-    });
-  }, { rootMargin: '100px' });
+  function stopVideoThumb(thumb) {
+    var video = thumb.querySelector('video');
+    if (!video) return;
+    video.pause();
+    // Swap video back to thumbnail image smoothly
+    var img = document.createElement('img');
+    img.className = 'thumb-img';
+    img.src = thumb.dataset.thumbSrc || '';
+    video.replaceWith(img);
+    thumb.classList.remove('playing');
+    var overlay = thumb.querySelector('.play-overlay');
+    if (overlay) overlay.innerHTML = PLAY_SVG;
+    if (galleryPlayingVideo === thumb) galleryPlayingVideo = null;
+  }
 
   function makeThumb(img) {
     var ext = img.ext || '.jpeg';
@@ -1747,13 +1747,16 @@
     });
 
     if (ext === '.mp4') {
+      var thumbUrl = img.has_thumb
+        ? '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.thumb.jpg'
+        : '';
       thumb.dataset.videoSrc = src;
-      thumb.innerHTML = '<div class="video-placeholder"></div><div class="play-overlay">' + PLAY_SVG + '</div>';
-      videoObserver.observe(thumb);
+      thumb.dataset.thumbSrc = thumbUrl;
+      thumb.innerHTML = '<img class="thumb-img" src="' + (thumbUrl || '') + '" loading="lazy"><div class="play-overlay">' + PLAY_SVG + '</div>';
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
     } else {
-      thumb.innerHTML = '<img src="' + src + '" loading="lazy">';
+      thumb.innerHTML = '<img class="thumb-img" src="' + src + '" loading="lazy">';
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
     }
