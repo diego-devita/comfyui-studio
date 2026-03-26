@@ -506,9 +506,11 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 "type": img.get("type", "image"),
                 "width": img.get("width"), "height": img.get("height"),
                 "username": img.get("username"),
+                "baseModel": img.get("baseModel"),
                 "createdAt": img.get("createdAt"),
                 "stats": img.get("stats"),
                 "raw_meta": img.get("meta"),
+                "raw_item": img,
             }
             batch.append((iid, url, meta))
             community_downloaded += 1
