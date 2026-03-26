@@ -344,13 +344,21 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
         raise HTTPException(403, "CIVITAI_API_KEY not configured")
 
     st = _gallery_state.get(model_id)
-    if st and st.get("status") in ("counting", "downloading"):
-        return JSONResponse({"status": st["status"], "message": "Already running"})
+    if st and st.get("status") == "downloading":
+        return JSONResponse({"status": "downloading", "message": "Already running"})
+
+    max_images = 200
+    if body.action.startswith("start:"):
+        try:
+            max_images = int(body.action.split(":")[1])
+        except (ValueError, IndexError):
+            pass
+    max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
-        "total": 0, "pages_fetched": 0, "_stop": stop,
+        "total": 0, "_stop": stop, "max_images": max_images,
     }
     threading.Thread(target=_gallery_thread, args=(model_id, stop), daemon=True).start()
     return JSONResponse({"status": "downloading"})
@@ -360,60 +368,50 @@ _GALLERY_MAX_IMAGES = 1000
 
 
 def _gallery_thread(model_id: int, stop: threading.Event):
-    """Stream gallery download: fetch pages and download immediately, max 1000 images."""
+    """Download model card images (from all versions) for a CivitAI model."""
     state = _gallery_state[model_id]
     gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
     gallery_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
+    max_images = state.get("max_images", 200)
 
-    cursor = None
-    seen = 0
-    while not stop.is_set() and seen < _GALLERY_MAX_IMAGES:
-        remaining = _GALLERY_MAX_IMAGES - seen
-        limit = min(200, remaining)
-        params = {"modelId": model_id, "limit": limit}
-        if cursor:
-            params["cursor"] = cursor
-        try:
-            r = httpx.get("https://civitai.com/api/v1/images", params=params,
-                          timeout=30, headers=headers)
-            if r.status_code != 200:
-                break
-            data = r.json()
-        except Exception:
-            break
-        items = data.get("items", [])
-        if not items:
-            break
+    # Fetch model info to get version images
+    try:
+        r = httpx.get(f"https://civitai.com/api/v1/models/{model_id}",
+                      timeout=30, headers=headers)
+        if r.status_code != 200:
+            state["status"] = "done"
+            return
+        model_data = r.json()
+    except Exception:
+        state["status"] = "done"
+        return
 
-        state["pages_fetched"] += 1
-
-        for img in items:
-            if stop.is_set() or seen >= _GALLERY_MAX_IMAGES:
-                break
+    # Collect all version images (model card images)
+    all_imgs = []
+    for v in model_data.get("modelVersions", []):
+        for img in v.get("images", []):
             iid, url = img.get("id"), img.get("url", "")
-            if not iid or not url:
-                continue
-            seen += 1
-            state["total"] = seen
+            if iid and url:
+                all_imgs.append((iid, url))
+    all_imgs = all_imgs[:max_images]
+    state["total"] = len(all_imgs)
 
-            jpeg = gallery_dir / f"{iid}.jpeg"
-            if jpeg.exists():
-                state["skipped"] += 1
-                continue
-            meta = _extract_image_meta(img.get("meta"))
-            if _download_image(url, jpeg):
-                state["downloaded"] += 1
-                if meta:
-                    jpeg.with_suffix(".json").write_text(
-                        json.dumps(meta, indent=2, ensure_ascii=False))
-            time.sleep(0.05)
+    # Download
+    for iid, url in all_imgs:
+        if stop.is_set():
+            state["status"] = "stopped"
+            return
+        # Detect extension from URL
+        ext = ".mp4" if ".mp4" in url else ".jpeg"
+        dest = gallery_dir / f"{iid}{ext}"
+        if dest.exists():
+            state["skipped"] += 1
+            continue
+        if _download_image(url, dest):
+            state["downloaded"] += 1
 
-        cursor = data.get("metadata", {}).get("nextCursor")
-        if not cursor:
-            break
-
-    state["status"] = "stopped" if stop.is_set() else "done"
+    state["status"] = "done"
     _events.emit("lora.gallery.done",
                  f"Gallery done for {model_id}: {state['downloaded']} new, {state['skipped']} skipped",
                  severity="success", data={"model_id": model_id})
@@ -429,7 +427,7 @@ async def gallery_status(model_id: int):
             return []
         result = []
         for f in sorted(dirpath.iterdir()):
-            if f.suffix != ".jpeg":
+            if f.suffix not in (".jpeg", ".mp4"):
                 continue
             meta = {}
             mf = f.with_suffix(".json")
@@ -438,7 +436,7 @@ async def gallery_status(model_id: int):
                     meta = json.loads(mf.read_text())
                 except Exception:
                     pass
-            result.append({"id": f.stem, "meta": meta})
+            result.append({"id": f.stem, "ext": f.suffix, "meta": meta})
         return result
 
     return JSONResponse({
@@ -453,6 +451,20 @@ async def gallery_status(model_id: int):
     })
 
 
+@router.delete("/api/admin/loras/{model_id}/gallery")
+async def gallery_delete(model_id: int):
+    """Delete all gallery images for a model."""
+    import shutil
+    gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
+    count = 0
+    if gallery_dir.is_dir():
+        count = sum(1 for f in gallery_dir.iterdir() if f.suffix in (".jpeg", ".mp4"))
+        shutil.rmtree(gallery_dir)
+    if model_id in _gallery_state:
+        del _gallery_state[model_id]
+    return JSONResponse({"deleted": count})
+
+
 @router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")
 async def serve_image(model_id: str, img_type: str, filename: str):
     """Serve a preview or gallery image with path traversal protection."""
@@ -464,4 +476,5 @@ async def serve_image(model_id: str, img_type: str, filename: str):
     path = IMAGES_DIR / model_id / img_type / filename
     if not path.exists():
         raise HTTPException(404, "Image not found")
-    return FileResponse(path, media_type="image/jpeg")
+    media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"
+    return FileResponse(path, media_type=media)
