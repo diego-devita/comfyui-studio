@@ -48,6 +48,7 @@ class GalleryActionRequest(BaseModel):
     nsfw: str = "X"
     sort: str = "Newest"
     period: str = "AllTime"
+    version_id: int | None = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -369,7 +370,8 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
-    api_params = {"nsfw": body.nsfw, "sort": body.sort, "period": body.period}
+    api_params = {"nsfw": body.nsfw, "sort": body.sort, "period": body.period,
+                   "version_id": body.version_id}
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
         "total": 0, "_stop": stop, "max_images": max_images,
@@ -459,6 +461,8 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                         "nsfw": api_params.get("nsfw", "X"),
                         "sort": api_params.get("sort", "Newest"),
                         "period": api_params.get("period", "AllTime")}
+        if api_params.get("version_id"):
+            params["modelVersionId"] = api_params["version_id"]
         if cursor:
             params["cursor"] = cursor
         try:
