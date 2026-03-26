@@ -1210,7 +1210,7 @@
       var civitaiId = extractBtn.dataset.civitaiId;
       if (!civitaiId) return;
       extractBtn.disabled = true; extractBtn.textContent = 'Fetching...';
-      apiFetch('/api/admin/loras/images/fetch-meta/' + civitaiId).then(function(resp) {
+      apiFetch('/api/admin/loras/fetch-civitai-meta/' + civitaiId).then(function(resp) {
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         return resp.json();
       }).then(function(data) {

@@ -581,7 +581,7 @@ async def gallery_delete(model_id: int):
     return JSONResponse({"deleted": count})
 
 
-@router.get("/api/admin/loras/images/fetch-meta/{image_id}")
+@router.get("/api/admin/loras/fetch-civitai-meta/{image_id}")
 async def fetch_image_meta(image_id: int):
     """Fetch full metadata for a CivitAI image by its numeric ID."""
     if not CIVITAI_API_KEY:
