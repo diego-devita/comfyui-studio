@@ -315,23 +315,18 @@
 
 <!-- Gallery Overlay -->
 <div class="civitai-overlay" id="galleryOverlay" style="display:none">
-  <div class="civitai-dialog" style="max-width:1200px">
+  <div class="civitai-dialog" style="max-width:1200px;padding:20px 40px">
     <button class="civitai-close" id="galleryClose">&times;</button>
 
-    <!-- Title row + Delete All -->
+    <!-- Title row: name + badge + count + links + Delete All -->
     <div class="gallery-header">
       <h3 id="galleryTitle"></h3>
       <span class="gallery-count" id="galleryCount"></span>
+      <span id="galleryCardLinks" style="display:flex;gap:8px;font-size:12px"></span>
       <span style="flex:1"></span>
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
     </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:8px 0 12px">
-
-    <!-- Card URLs (model + version page) -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:var(--muted)">
-      <span style="flex-shrink:0">Card:</span>
-      <div style="display:flex;flex-direction:column;gap:1px;min-width:0" id="galleryCardUrls"></div>
-    </div>
 
     <!-- Two panels side by side: CivitAI filters | Download controls -->
     <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:stretch">
@@ -374,7 +369,7 @@
           </span>
         </div>
         <!-- Community search URL (truncated to fit panel) -->
-        <div id="galleryCommunityUrl" style="margin-top:8px;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;min-width:0">
+        <div id="galleryCommunityUrl" style="margin-top:auto;padding-top:8px;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
         </div>
       </div>
 
@@ -1783,32 +1778,43 @@
   function _makeUrlLine(url) {
     // Helper: creates a truncated URL code + copy button
     var wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;align-items:center;gap:4px;min-width:0';
+    wrap.style.cssText = 'display:flex;align-items:center;gap:6px;min-width:0;flex:1';
     var code = document.createElement('code');
-    code.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--bg);padding:1px 5px;border-radius:3px;font-size:10px';
+    code.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--bg);padding:2px 6px;border-radius:3px;font-size:10px;min-width:0;flex:1';
     code.textContent = url;
     code.title = url;
     var btn = document.createElement('button');
     btn.className = 'copy-btn';
     btn.innerHTML = COPY_SVG;
-    btn.style.flexShrink = '0';
+    btn.style.cssText = 'flex-shrink:0;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center';
     btn.addEventListener('click', function() { copyUrlFlash(btn, url); });
     wrap.appendChild(code);
     wrap.appendChild(btn);
     return wrap;
   }
 
+  function _makeIconLink(url, label) {
+    // Helper: creates a compact link with external-link icon + label
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.title = url;
+    a.style.cssText = 'display:inline-flex;align-items:center;gap:3px;color:var(--accent);font-size:11px;text-decoration:none;white-space:nowrap';
+    a.innerHTML = '<i class="icon icon-external-link" style="width:10px;height:10px;vertical-align:middle"></i>' + label;
+    return a;
+  }
+
   function updateGalleryUrls() {
     if (!galleryModelId) return;
     var urls = getGalleryUrls();
 
-    // Card URLs: model page + version page, stacked vertically
-    var cardEl = document.getElementById('galleryCardUrls');
-    cardEl.innerHTML = '';
-    var modelUrl = 'https://civitai.com/models/' + galleryModelId;
-    var versionUrl = modelUrl + '?modelVersionId=' + (galleryVersionId || '');
-    cardEl.appendChild(_makeUrlLine(modelUrl));
-    if (galleryVersionId) cardEl.appendChild(_makeUrlLine(versionUrl));
+    // Card links in title row: API (JSON) + Page
+    var linksEl = document.getElementById('galleryCardLinks');
+    linksEl.innerHTML = '';
+    var apiUrl = 'https://civitai.com/api/v1/models/' + galleryModelId;
+    var pageUrl = 'https://civitai.com/models/' + galleryModelId + (galleryVersionId ? '?modelVersionId=' + galleryVersionId : '');
+    linksEl.appendChild(_makeIconLink(apiUrl, 'API'));
+    linksEl.appendChild(_makeIconLink(pageUrl, 'Card'));
 
     // Community URL: inside the filters panel, truncated
     var commEl = document.getElementById('galleryCommunityUrl');
