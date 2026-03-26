@@ -148,19 +148,23 @@
     border-radius: 3px; pointer-events: none; line-height: 1.4;
   }
   .gallery-thumb .thumb-star {
-    position: absolute; top: 4px; left: 4px; width: 20px; height: 20px;
+    position: absolute; top: 4px; left: 4px; width: 18px; height: 18px;
     background: none; border: none; cursor: pointer; padding: 0; z-index: 2;
-    font-size: 14px; line-height: 1; opacity: 0.4; transition: opacity 0.15s;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+    opacity: 0.3; transition: opacity 0.15s;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
   }
+  .gallery-thumb .thumb-star .icon { width: 14px; height: 14px; background-color: #fff; }
   .gallery-thumb .thumb-star.starred { opacity: 1; }
+  .gallery-thumb .thumb-star.starred .icon { background-color: #f5c518; }
   .gallery-thumb:hover .thumb-star { opacity: 0.8; }
   .detail-star {
     background: none; border: 1px solid var(--border); border-radius: 4px;
-    padding: 4px 10px; cursor: pointer; font-size: 16px; color: var(--muted);
-    transition: all 0.15s;
+    padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    color: var(--muted); font-size: 12px; transition: all 0.15s;
   }
+  .detail-star .icon { width: 14px; height: 14px; background-color: var(--muted); }
   .detail-star.starred { color: #f5c518; border-color: #f5c518; }
+  .detail-star.starred .icon { background-color: #f5c518; }
   .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
   #detailsMetaContent::-webkit-scrollbar { display: none; }
   .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
@@ -2021,20 +2025,21 @@
     badge.className = 'thumb-idx';
     badge.textContent = idx;
     thumb.appendChild(badge);
-    // Star button on thumbnail
+    // Star button on thumbnail — uses FA icon via CSS mask
     var star = document.createElement('button');
-    star.className = 'thumb-star' + (img.starred ? ' starred' : '');
-    star.textContent = img.starred ? '\u2605' : '\u2606';
-    star.title = img.starred ? 'Starred' : 'Not starred';
+    function updateThumbStar(s) {
+      star.className = 'thumb-star' + (s ? ' starred' : '');
+      star.innerHTML = '<i class="icon ' + (s ? 'icon-star-solid' : 'icon-star-regular') + '"></i>';
+      star.title = s ? 'Starred' : 'Not starred';
+    }
+    updateThumbStar(img.starred);
     star.addEventListener('click', function(e) {
       e.stopPropagation();
       apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
         return r.json();
       }).then(function(d) {
         img.starred = d.starred;
-        star.className = 'thumb-star' + (d.starred ? ' starred' : '');
-        star.textContent = d.starred ? '\u2605' : '\u2606';
-        star.title = d.starred ? 'Starred' : 'Not starred';
+        updateThumbStar(d.starred);
       });
     });
     thumb.appendChild(star);
@@ -2157,12 +2162,15 @@
       container.innerHTML = '<img id="detailImg" src="' + src + '" style="max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px">';
     }
     _lastRenderedMeta = img.meta;
-    // Star button at top-right of detail panel
-    var starHtml = '<div style="text-align:right;margin-bottom:8px"><button class="detail-star' +
-      (img.starred ? ' starred' : '') + '" id="detailStarBtn" title="' +
-      (img.starred ? 'Starred' : 'Not starred') + '">' +
-      (img.starred ? '\u2605' : '\u2606') + '</button></div>';
-    document.getElementById('detailMeta').innerHTML = starHtml + renderMeta(img.meta);
+    // Star button at top-right of detail panel — FA icon via CSS mask
+    function detailStarHtml(s) {
+      return '<div style="text-align:right;margin-bottom:8px"><button class="detail-star' +
+        (s ? ' starred' : '') + '" id="detailStarBtn" title="' +
+        (s ? 'Starred' : 'Not starred') + '"><i class="icon ' +
+        (s ? 'icon-star-solid' : 'icon-star-regular') + '"></i>' +
+        (s ? ' Starred' : ' Star') + '</button></div>';
+    }
+    document.getElementById('detailMeta').innerHTML = detailStarHtml(img.starred) + renderMeta(img.meta);
     document.getElementById('detailStarBtn').addEventListener('click', function() {
       apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
         return r.json();
@@ -2170,13 +2178,14 @@
         img.starred = d.starred;
         var btn = document.getElementById('detailStarBtn');
         btn.className = 'detail-star' + (d.starred ? ' starred' : '');
-        btn.textContent = d.starred ? '\u2605' : '\u2606';
+        btn.innerHTML = '<i class="icon ' + (d.starred ? 'icon-star-solid' : 'icon-star-regular') + '"></i>' +
+          (d.starred ? ' Starred' : ' Star');
         btn.title = d.starred ? 'Starred' : 'Not starred';
         // Also update thumbnail star
-        var thumb = document.querySelector('[data-key="' + img.key + '"] .thumb-star');
-        if (thumb) {
-          thumb.className = 'thumb-star' + (d.starred ? ' starred' : '');
-          thumb.textContent = d.starred ? '\u2605' : '\u2606';
+        var thumbStar = document.querySelector('[data-key="' + img.key + '"] .thumb-star');
+        if (thumbStar) {
+          thumbStar.className = 'thumb-star' + (d.starred ? ' starred' : '');
+          thumbStar.innerHTML = '<i class="icon ' + (d.starred ? 'icon-star-solid' : 'icon-star-regular') + '"></i>';
         }
       });
     });
