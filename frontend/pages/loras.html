@@ -321,21 +321,14 @@
           <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
         </select></label>
       </span>
-      <!-- tRPC filters -->
+      <!-- tRPC filters (matches CivitAI site) -->
       <span id="filtersTrpc" style="display:contents">
         <label>Sort <select id="gallerySortTrpc">
-          <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option>
+          <option value="Most Reactions" selected>Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Newest">Newest</option>
         </select></label>
         <label>Period <select id="galleryPeriodTrpc">
           <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
         </select></label>
-        <label>Type <select id="galleryMediaType">
-          <option value="all" selected>All</option><option value="image">Image</option><option value="video">Video</option>
-        </select></label>
-        <label>Level <select id="galleryBrowsingLevel">
-          <option value="31" selected>All</option><option value="16">XXX</option><option value="8">X</option><option value="4">Mature</option><option value="2">PG-13</option><option value="1">PG</option>
-        </select></label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryWithMeta"> Has meta</label>
       </span>
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="galleryFilterVersion" checked> Version filter</label>
     </div>
@@ -1677,14 +1670,10 @@
         sort: document.getElementById('gallerySortRest').value, period: document.getElementById('galleryPeriodRest').value,
         version_id: useVersion ? vid : null };
     }
-    var f = { mode: 'trpc', modelId: mid, limit: cap,
-      sort: document.getElementById('gallerySortTrpc').value, period: document.getElementById('galleryPeriodTrpc').value,
-      browsingLevel: parseInt(document.getElementById('galleryBrowsingLevel').value),
+    return { mode: 'trpc', modelId: mid, limit: cap,
+      sort: document.getElementById('gallerySortTrpc').value,
+      period: document.getElementById('galleryPeriodTrpc').value,
       version_id: useVersion ? vid : null };
-    var mt = document.getElementById('galleryMediaType').value;
-    if (mt !== 'all') f.types = [mt];
-    if (document.getElementById('galleryWithMeta').checked) f.withMeta = true;
-    return f;
   }
 
   function getGalleryUrls() {
@@ -1697,11 +1686,11 @@
         '&sort=' + encodeURIComponent(f.sort) + '&period=' + f.period;
       if (f.version_id) communityUrl += '&modelVersionId=' + f.version_id;
     } else {
-      var inp = {modelId: f.modelId, limit: parseInt(f.limit), authed: true, browsingLevel: f.browsingLevel, sort: f.sort, period: f.period};
-      if (f.version_id) inp.modelVersionId = f.version_id;
-      if (f.types) inp.types = f.types;
-      if (f.withMeta) inp.withMeta = true;
-      communityUrl = 'https://civitai.com/api/trpc/image.getInfinite?input=' + encodeURIComponent(JSON.stringify({json: inp}));
+      var inp = {modelVersionId: f.version_id || undefined, period: f.period,
+        sort: f.sort, limit: parseInt(f.limit), pending: true, cursor: null};
+      if (!f.version_id) inp.modelId = f.modelId;
+      communityUrl = 'https://civitai.com/api/trpc/image.getInfinite?input=' +
+        encodeURIComponent(JSON.stringify({json: inp, meta: {values: {cursor: ['undefined']}}}));
     }
     return { card: cardUrl, community: communityUrl };
   }
@@ -2066,7 +2055,7 @@
   }
   document.getElementById('galleryMode').addEventListener('change', toggleFilterMode);
   ['galleryNsfw', 'gallerySortRest', 'galleryPeriodRest', 'gallerySortTrpc', 'galleryPeriodTrpc',
-   'galleryMediaType', 'galleryBrowsingLevel', 'galleryWithMeta', 'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
+   'galleryCap', 'galleryFilterVersion'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', updateGalleryUrls);
   });
   document.getElementById('gallerySearch').addEventListener('input', function() {

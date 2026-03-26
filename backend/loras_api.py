@@ -46,18 +46,10 @@ class AddCivitaiRequest(BaseModel):
 class GalleryActionRequest(BaseModel):
     action: str
     mode: str = "trpc"
-    # REST filters
     nsfw: str = "X"
-    # Shared filters
-    sort: str = "Newest"
+    sort: str = "Most Reactions"
     period: str = "AllTime"
     version_id: int | None = None
-    # tRPC filters
-    browsingLevel: int = 31
-    types: list[str] | None = None
-    withMeta: bool = False
-    modelId: int | None = None
-    limit: str | int = "200"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -561,20 +553,21 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
         # Fetch page
         try:
             if use_trpc:
-                inp: dict = {"modelId": model_id, "limit": 200, "authed": True,
-                             "browsingLevel": api_params.get("browsingLevel", 31),
-                             "sort": api_params.get("sort", "Newest"),
-                             "period": api_params.get("period", "AllTime")}
+                # Replicate exact CivitAI site call
+                inp: dict = {"period": api_params.get("period", "AllTime"),
+                             "sort": api_params.get("sort", "Most Reactions"),
+                             "limit": 200, "pending": True}
                 if api_params.get("version_id"):
                     inp["modelVersionId"] = api_params["version_id"]
-                if api_params.get("types"):
-                    inp["types"] = api_params["types"]
-                if api_params.get("withMeta"):
-                    inp["withMeta"] = True
+                else:
+                    inp["modelId"] = model_id
                 if cursor:
                     inp["cursor"] = cursor
+                trpc_input = {"json": inp}
+                if not cursor:
+                    trpc_input["meta"] = {"values": {"cursor": ["undefined"]}}
                 r = httpx.get("https://civitai.com/api/trpc/image.getInfinite",
-                              params={"input": json.dumps({"json": inp})},
+                              params={"input": json.dumps(trpc_input)},
                               headers=headers, timeout=30)
                 if r.status_code != 200:
                     break
