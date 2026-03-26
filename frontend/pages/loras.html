@@ -270,7 +270,12 @@
     <div class="gallery-header">
       <h3 id="galleryTitle"></h3>
       <span class="gallery-count" id="galleryCount"></span>
-      <button class="btn btn--sm" id="galleryDlBtn">Download Images</button>
+      <select id="galleryCap" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+        <option value="10">10</option><option value="50">50</option><option value="100">100</option>
+        <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
+      </select>
+      <button class="btn btn--sm" id="galleryDlBtn">Download</button>
+      <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
     </div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
@@ -853,8 +858,10 @@
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
 
-    if (m.civitai_model_id) {
+    if (m.civitai_model_id && m.status === 'present') {
       refs.galleryBtn.style.display = '';
+      var imgCount = (m.images || []).length;
+      refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
       refs.galleryBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         openGallery(m.civitai_model_id, m.name);
@@ -1422,7 +1429,7 @@
     galleryDownloading = true;
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-        method: 'POST', body: { action: 'start' }
+        method: 'POST', body: { action: 'start:' + document.getElementById('galleryCap').value }
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
@@ -1486,9 +1493,9 @@
 
       // Build image list (previews + gallery)
       var all = (data.previews || []).map(function(img) {
-        return { id: img.id, type: 'previews', meta: img.meta || {} };
+        return { id: img.id, type: 'previews', ext: img.ext || '.jpeg', meta: img.meta || {} };
       }).concat((data.gallery || []).map(function(img) {
-        return { id: img.id, type: 'gallery', meta: img.meta || {} };
+        return { id: img.id, type: 'gallery', ext: img.ext || '.jpeg', meta: img.meta || {} };
       }));
 
       if (all.length !== galleryImages.length) {
@@ -1510,9 +1517,16 @@
       return;
     }
     galleryImages.forEach(function(img, idx) {
-      var el = document.createElement('img');
-      el.src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.jpeg';
-      el.loading = 'lazy';
+      var ext = img.ext || '.jpeg';
+      var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+      var el;
+      if (ext === '.mp4') {
+        el = document.createElement('video');
+        el.src = src; el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
+      } else {
+        el = document.createElement('img');
+        el.src = src; el.loading = 'lazy';
+      }
       el.addEventListener('click', function() { openDetail(idx); });
       grid.appendChild(el);
     });
@@ -1522,6 +1536,21 @@
   document.getElementById('galleryClose').addEventListener('click', closeGallery);
   document.getElementById('galleryOverlay').addEventListener('click', function(e) { if (e.target === this) closeGallery(); });
   document.getElementById('galleryDlBtn').addEventListener('click', toggleGalleryDl);
+  document.getElementById('galleryDeleteBtn').addEventListener('click', async function() {
+    if (!galleryModelId) return;
+    if (!await studioConfirm('Delete all gallery images?', {danger: true, yes: 'Delete All'})) return;
+    try {
+      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', { method: 'DELETE' });
+      if (resp.ok) {
+        var data = await resp.json();
+        showToast('Deleted ' + data.deleted + ' images');
+        galleryImages = [];
+        renderGalleryGrid();
+        document.getElementById('galleryProgress').style.display = 'none';
+        document.getElementById('galleryCount').textContent = '0 images';
+      }
+    } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
+  });
   document.getElementById('galleryThumbSize').addEventListener('input', function() {
     document.getElementById('galleryGrid').style.setProperty('--thumb-size', this.value + 'px');
   });
@@ -1534,9 +1563,17 @@
     detailIdx = idx;
     var img = galleryImages[idx];
     if (!img) return;
+    var ext = img.ext || '.jpeg';
+    var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
 
     document.getElementById('detailOverlay').style.display = 'flex';
-    document.getElementById('detailImg').src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + '.jpeg';
+    var container = document.querySelector('.detail-image');
+    var isVideo = ext === '.mp4';
+    if (isVideo) {
+      container.innerHTML = '<video id="detailImg" src="' + src + '" controls autoplay style="max-width:100%;max-height:calc(100vh - 80px);border-radius:8px"></video>';
+    } else {
+      container.innerHTML = '<img id="detailImg" src="' + src + '" style="max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px">';
+    }
     document.getElementById('detailMeta').innerHTML = renderMeta(img.meta);
     document.getElementById('detailPrev').style.display = idx > 0 ? '' : 'none';
     document.getElementById('detailNext').style.display = idx < galleryImages.length - 1 ? '' : 'none';
