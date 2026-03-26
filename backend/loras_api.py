@@ -635,6 +635,8 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 "username": (img.get("user") or {}).get("username") if use_trpc else img.get("username"),
                 "postId": img.get("postId"),
                 "postTitle": img.get("postTitle", ""),
+                "duration": (img.get("metadata") or {}).get("duration"),
+                "audio": (img.get("metadata") or {}).get("audio"),
                 "baseModel": img.get("baseModel"),
                 "createdAt": img.get("createdAt"),
                 "stats": img.get("stats"),
