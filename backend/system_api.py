@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import threading
@@ -15,8 +16,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import (
-    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
-    VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR,
+    app, API_KEY, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
+    VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR, DEV_MODE, HOSTING,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
 from download import _download_state, _max_concurrent, _queue_lock, _schedule_downloads
@@ -42,8 +43,8 @@ _cached_disk_used = 0
 _cached_disk_time = 0.0
 
 
-async def _get_volume_size_gb() -> int:
-    """Get network volume size from RunPod API (cached)."""
+async def _get_runpod_volume_size_gb() -> int:
+    """Get network volume size from RunPod GraphQL API (cached)."""
     global _cached_volume_size
     if _cached_volume_size > 0:
         return _cached_volume_size
@@ -68,6 +69,34 @@ async def _get_volume_size_gb() -> int:
     return 0
 
 
+async def _get_disk_stats() -> tuple[int, int, int]:
+    """Return (total, used, free) in bytes for the workspace volume.
+
+    RunPod: network volume size from GraphQL + du for used (statvfs unreliable).
+    Generic: shutil.disk_usage on STUDIO_DIR.
+    """
+    if HOSTING == "runpod":
+        vol_gb = await _get_runpod_volume_size_gb()
+        if vol_gb <= 0:
+            return 0, 0, 0
+        total = vol_gb * 1024 * 1024 * 1024
+        global _cached_disk_used
+        if _cached_disk_used == 0:
+            try:
+                du = subprocess.run(["du", "-sb", "/workspace"], capture_output=True, text=True, timeout=30)
+                if du.returncode == 0:
+                    _cached_disk_used = int(du.stdout.split()[0])
+            except Exception:
+                pass
+        return total, _cached_disk_used, max(0, total - _cached_disk_used)
+    else:
+        try:
+            usage = shutil.disk_usage(str(STUDIO_DIR))
+            return usage.total, usage.used, usage.free
+        except Exception:
+            return 0, 0, 0
+
+
 def _get_pod_ram_bytes() -> int:
     """Get pod RAM limit from cgroup (not host total)."""
     try:
@@ -82,9 +111,10 @@ def _get_pod_ram_bytes() -> int:
             return int(f.read().strip())
     except Exception:
         pass
-    mem_gb = os.environ.get("RUNPOD_MEM_GB", "")
-    if mem_gb:
-        return int(mem_gb) * 1024 * 1024 * 1024
+    if HOSTING == "runpod":
+        mem_gb = os.environ.get("RUNPOD_MEM_GB", "")
+        if mem_gb:
+            return int(mem_gb) * 1024 * 1024 * 1024
     return 0
 
 
@@ -214,14 +244,7 @@ async def system_status():
         comfyui_status = "unreachable"
 
     try:
-        vol_gb = await _get_volume_size_gb()
-        vol_size = vol_gb * 1024 * 1024 * 1024 if vol_gb > 0 else 0
-        global _cached_disk_used
-        if _cached_disk_used == 0:
-            du = subprocess.run(["du", "-sb", "/workspace"], capture_output=True, text=True, timeout=30)
-            if du.returncode == 0:
-                _cached_disk_used = int(du.stdout.split()[0])
-        free_bytes = max(0, vol_size - _cached_disk_used) if vol_size > 0 else 0
+        vol_size, _cached_disk_used, free_bytes = await _get_disk_stats()
     except Exception:
         vol_size = 0
         free_bytes = 0
@@ -547,18 +570,24 @@ async def telemetry():
     except Exception:
         pass
 
-    try:
-        nvsmi = subprocess.run(
-            ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=3,
-        )
-        if nvsmi.returncode == 0:
-            parts = nvsmi.stdout.strip().split(", ")
-            if len(parts) >= 2 and result["gpu"]:
-                result["gpu"]["util_percent"] = int(parts[0])
-                result["gpu"]["temp_c"] = int(parts[1])
-    except Exception:
-        pass
+    if DEV_MODE:
+        # Fake nvidia-smi values so frontend gauges don't show "undefined"
+        if result["gpu"]:
+            result["gpu"]["util_percent"] = 15
+            result["gpu"]["temp_c"] = 45
+    else:
+        try:
+            nvsmi = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if nvsmi.returncode == 0:
+                parts = nvsmi.stdout.strip().split(", ")
+                if len(parts) >= 2 and result["gpu"]:
+                    result["gpu"]["util_percent"] = int(parts[0])
+                    result["gpu"]["temp_c"] = int(parts[1])
+        except Exception:
+            pass
 
     try:
         with open("/proc/loadavg") as f:
@@ -569,23 +598,34 @@ async def telemetry():
         pass
 
     global _cached_disk_used, _cached_disk_time
-    vol_gb = await _get_volume_size_gb()
-    if vol_gb > 0:
-        disk_total = vol_gb * 1024 * 1024 * 1024
-        if time.time() - _cached_disk_time > 60:
-            _cached_disk_time = time.time()
-            def _bg_du():
-                global _cached_disk_used, _cached_disk_time
-                try:
-                    du = subprocess.run(["du", "-sb", "/workspace"], capture_output=True, text=True, timeout=60)
-                    if du.returncode == 0:
-                        _cached_disk_used = int(du.stdout.split()[0])
-                except Exception:
-                    pass
-            threading.Thread(target=_bg_du, daemon=True).start()
-        result["disk_total"] = disk_total
-        result["disk_used"] = _cached_disk_used
-        result["disk_percent"] = round(_cached_disk_used / disk_total * 100, 1) if disk_total > 0 else 0
+    if HOSTING == "runpod":
+        # RunPod: volume size from GraphQL, used from background du (statvfs unreliable)
+        vol_gb = await _get_runpod_volume_size_gb()
+        if vol_gb > 0:
+            disk_total = vol_gb * 1024 * 1024 * 1024
+            if time.time() - _cached_disk_time > 60:
+                _cached_disk_time = time.time()
+                def _bg_du():
+                    global _cached_disk_used, _cached_disk_time
+                    try:
+                        du = subprocess.run(["du", "-sb", "/workspace"], capture_output=True, text=True, timeout=60)
+                        if du.returncode == 0:
+                            _cached_disk_used = int(du.stdout.split()[0])
+                    except Exception:
+                        pass
+                threading.Thread(target=_bg_du, daemon=True).start()
+            result["disk_total"] = disk_total
+            result["disk_used"] = _cached_disk_used
+            result["disk_percent"] = round(_cached_disk_used / disk_total * 100, 1) if disk_total > 0 else 0
+    else:
+        # Generic: standard filesystem stats
+        try:
+            usage = shutil.disk_usage(str(STUDIO_DIR))
+            result["disk_total"] = usage.total
+            result["disk_used"] = usage.used
+            result["disk_percent"] = round(usage.used / usage.total * 100, 1) if usage.total > 0 else 0
+        except Exception:
+            pass
 
     return result
 
@@ -607,37 +647,90 @@ async def update_settings(body: SettingsUpdate):
     return {"max_concurrent": download._max_concurrent}
 
 
+# (key, sensitive, default, description)
+_ENV_GROUPS = [
+    ("auth", "Authentication & API Tokens", [
+        ("API_KEY",         True,  "changeme",        "Master password for web login and X-API-Key header"),
+        ("CIVITAI_API_KEY", True,  "",                 "CivitAI API token — used for model downloads and metadata fetches"),
+        ("HF_TOKEN",        True,  "",                 "HuggingFace token — required for gated models (Flux, WAN, etc.)"),
+    ]),
+    ("paths", "Paths", [
+        ("STUDIO_DIR",        False, "/workspace/studio",   "Root directory for all Studio data on the volume"),
+        ("COMFYUI_DIR",       False, "/workspace/ComfyUI",  "ComfyUI installation path"),
+        ("LLAMA_SERVER_PATH", False, "/opt/llama-server",   "Path to llama.cpp server binary (baked into Docker image)"),
+    ]),
+    ("ports", "Ports", [
+        ("STUDIO_PORT",       False, "8000", "Studio backend HTTP port"),
+        ("COMFYUI_PORT",      False, "8188", "ComfyUI API port"),
+        ("LLAMA_SERVER_PORT", False, "8080", "llama.cpp server port"),
+    ]),
+    ("comfyui", "ComfyUI", [
+        ("COMFYUI_FLAGS",      False, "--highvram", "VRAM management mode (--highvram, --normalvram, --lowvram)"),
+        ("COMFYUI_EXTRA_ARGS", False, "",           "Additional ComfyUI command-line arguments"),
+    ]),
+    ("downloads", "Downloads", [
+        ("MAX_CONCURRENT_DOWNLOADS", False, "3", "Maximum parallel download threads (1-10)"),
+    ]),
+    ("infra", "Infrastructure", [
+        ("RUNTIME_VERSION", False, "0",    "Docker image runtime version number — set at build time, read-only"),
+        ("HOSTING",         False, "",      "Hosting provider (runpod, etc.) — empty = generic/local"),
+        ("REPO_URL",        False, "https://github.com/diego-devita/comfyui-studio.git", "Git repository URL for OTA updates"),
+        ("REPO_BRANCH",     False, "main", "Git branch to track (main = production, dev = testing)"),
+        ("DEV_MODE",        False, "false", "Development mode — stubs downloads, LLM, GPU stats"),
+    ]),
+    ("runpod", "RunPod Environment (read-only, injected by RunPod)", [
+        ("RUNPOD_API_KEY",   True,  "", "RunPod API key — used to query volume size for disk usage stats"),
+        ("RUNPOD_POD_ID",    False, "", "Current pod ID — used with API key to query pod/volume info"),
+        ("RUNPOD_DC_ID",     False, "", "Datacenter where this pod is running"),
+        ("RUNPOD_VOLUME_ID", False, "", "Network volume attached to this pod"),
+        ("RUNPOD_MEM_GB",    False, "", "Pod RAM in GB — fallback for RAM stats when cgroup info unavailable"),
+        ("PUBLIC_KEY",       False, "", "SSH public key injected by RunPod for remote access"),
+    ]),
+]
+
+
+def _mask(val):
+    if not val or val == "changeme":
+        return val
+    if len(val) <= 8:
+        return "***"
+    return val[:4] + "***" + val[-4:]
+
+
 @router.get("/api/admin/settings/env")
 async def get_env_vars():
-    """Return environment variables relevant to the app (sensitive values masked)."""
-    def _mask(val):
-        if not val or val == "changeme":
-            return val
-        if len(val) <= 8:
-            return "***"
-        return val[:4] + "***" + val[-4:]
+    """Return environment variables grouped by category (sensitive values masked)."""
+    groups = []
+    for group_id, label, var_defs in _ENV_GROUPS:
+        if group_id == "runpod" and HOSTING != "runpod":
+            continue
+        vars_list = []
+        for key, sensitive, default, description in var_defs:
+            val = os.environ.get(key, "")
+            vars_list.append({
+                "key": key,
+                "value": _mask(val) if sensitive else val,
+                "sensitive": sensitive,
+                "set": bool(val),
+                "default": default,
+                "description": description,
+            })
+        groups.append({"id": group_id, "label": label, "vars": vars_list})
+    return {"groups": groups}
 
-    env_keys = [
-        ("API_KEY", True),
-        ("CIVITAI_API_KEY", True),
-        ("HF_TOKEN", True),
-        ("RUNPOD_API_KEY", True),
-        ("COMFYUI_DIR", False),
-        ("COMFYUI_PORT", False),
-        ("REPO_URL", False),
-        ("MAX_CONCURRENT_DOWNLOADS", False),
-        ("RUNPOD_POD_ID", False),
-        ("RUNPOD_DC_ID", False),
-        ("RUNPOD_VOLUME_ID", False),
-        ("PUBLIC_KEY", False),
-    ]
-    result = []
-    for key, sensitive in env_keys:
-        val = os.environ.get(key, "")
-        result.append({
-            "key": key,
-            "value": _mask(val) if sensitive else val,
-            "sensitive": sensitive,
-            "set": bool(val),
-        })
+
+class RevealRequest(BaseModel):
+    api_key: str
+
+
+@router.post("/api/admin/settings/reveal")
+async def reveal_secrets(body: RevealRequest):
+    """Reveal sensitive env var values. Requires API key as second factor."""
+    if not secrets.compare_digest(body.api_key, API_KEY):
+        raise HTTPException(403, "Invalid API key")
+    result = {}
+    for _gid, _label, var_defs in _ENV_GROUPS:
+        for key, sensitive, _default, _desc in var_defs:
+            if sensitive:
+                result[key] = os.environ.get(key, "")
     return result
