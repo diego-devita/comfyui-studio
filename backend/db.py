@@ -55,6 +55,21 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
         CREATE INDEX IF NOT EXISTS idx_jobs_queued_at ON jobs(queued_at);
         CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
+
+        -- Events log: replaces the old events.jsonl file.
+        -- Ring buffer behavior enforced by periodic cleanup, not DB constraint.
+        CREATE TABLE IF NOT EXISTS events (
+            id          TEXT PRIMARY KEY,
+            type        TEXT NOT NULL,
+            timestamp   TEXT NOT NULL,
+            severity    TEXT NOT NULL DEFAULT 'info',
+            message     TEXT NOT NULL DEFAULT '',
+            data        TEXT DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+        CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity);
     """)
     conn.commit()
 
@@ -181,6 +196,69 @@ def mark_stalled_jobs():
     """)
     conn.commit()
     return cursor.rowcount
+
+
+# ── Event CRUD ───────────────────────────────────────────────
+
+
+def save_event(event: dict):
+    """Insert an event into the database."""
+    conn = _get_conn()
+    conn.execute("""
+        INSERT OR IGNORE INTO events (id, type, timestamp, severity, message, data)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        event.get("id"),
+        event.get("type", ""),
+        event.get("timestamp", ""),
+        event.get("severity", "info"),
+        event.get("message", ""),
+        json.dumps(event.get("data", {}), ensure_ascii=False),
+    ))
+    conn.commit()
+
+
+def list_events(limit: int = 100, types: list[str] = None,
+                severity: str = None) -> list[dict]:
+    """List events from DB, newest first."""
+    conn = _get_conn()
+    wheres = []
+    params = []
+    if types:
+        placeholders = ",".join("?" * len(types))
+        wheres.append(f"type IN ({placeholders})")
+        params.extend(types)
+    if severity:
+        wheres.append("severity = ?")
+        params.append(severity)
+    where_sql = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+    rows = conn.execute(
+        f"SELECT * FROM events {where_sql} ORDER BY timestamp DESC LIMIT ?",
+        params + [limit]
+    ).fetchall()
+    result = []
+    for row in rows:
+        d = dict(row)
+        if d.get("data"):
+            try:
+                d["data"] = json.loads(d["data"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        result.append(d)
+    # Return in chronological order (oldest first) for the UI
+    result.reverse()
+    return result
+
+
+def trim_events(max_count: int = 1000):
+    """Keep only the most recent max_count events. Called periodically."""
+    conn = _get_conn()
+    conn.execute("""
+        DELETE FROM events WHERE id NOT IN (
+            SELECT id FROM events ORDER BY timestamp DESC LIMIT ?
+        )
+    """, (max_count,))
+    conn.commit()
 
 
 def count_jobs_by_workflow() -> list[dict]:

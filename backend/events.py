@@ -5,7 +5,6 @@ import json
 import queue
 import signal
 import uuid
-from pathlib import Path
 
 from fastapi import WebSocket
 
@@ -27,23 +26,28 @@ class EventSubscriber:
 
 
 class EventBus:
-    """Central event dispatcher with in-memory log and async subscriber dispatch."""
+    """Central event dispatcher with SQLite persistence and async subscriber dispatch.
 
-    def __init__(self, max_log: int = 1000, log_file: str = None):
+    Events are persisted to the studio SQLite database (db/studio.db) instead
+    of the old events.jsonl file. The in-memory ring buffer is kept for fast
+    access by the WebSocket pusher and activity panel.
+    """
+
+    def __init__(self, max_log: int = 1000):
         self._log: list[dict] = []
         self._max_log = max_log
         self._queue: queue.Queue = queue.Queue()
         self._subscribers: list[EventSubscriber] = []
-        self._log_file = Path(log_file) if log_file else None
-        # Load persisted events on startup
-        if self._log_file and self._log_file.exists():
-            try:
-                for line in self._log_file.read_text().strip().split("\n"):
-                    if line:
-                        self._log.append(json.loads(line))
-                self._log = self._log[-self._max_log:]
-            except Exception:
-                pass
+        self._db_ready = False
+
+    def init_from_db(self):
+        """Load recent events from SQLite into memory. Called after DB init."""
+        try:
+            import db as _db
+            self._log = _db.list_events(limit=self._max_log)
+            self._db_ready = True
+        except Exception:
+            pass
 
     def subscribe(self, subscriber: EventSubscriber):
         self._subscribers.append(subscriber)
@@ -59,26 +63,29 @@ class EventBus:
             "message": message,
             "data": data or {},
         }
-        # Ring buffer
+        # Ring buffer (in-memory, for fast WS push)
         self._log.append(event)
         if len(self._log) > self._max_log:
             self._log = self._log[-self._max_log:]
-        # Persist to disk
-        if self._log_file:
+        # Persist to SQLite
+        if self._db_ready:
             try:
-                self._log_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(self._log_file, "a") as f:
-                    f.write(json.dumps(event, ensure_ascii=False) + "\n")
-                # Rotate if too large (>5MB)
-                if self._log_file.stat().st_size > 5_000_000:
-                    lines = self._log_file.read_text().strip().split("\n")
-                    self._log_file.write_text("\n".join(lines[-self._max_log:]) + "\n")
+                import db as _db
+                _db.save_event(event)
             except Exception:
                 pass
-        # Queue for async dispatch
+        # Queue for async dispatch to WS subscribers
         self._queue.put(event)
 
     def get_log(self, limit: int = 100, types: list[str] = None, severity: str = None) -> list[dict]:
+        # Read from DB if available (more complete than in-memory)
+        if self._db_ready:
+            try:
+                import db as _db
+                return _db.list_events(limit=limit, types=types, severity=severity)
+            except Exception:
+                pass
+        # Fallback to in-memory
         log = self._log
         if types:
             type_set = set(types)
@@ -88,10 +95,7 @@ class EventBus:
         return log[-limit:]
 
 
-_events = EventBus(
-    max_log=1000,
-    log_file=str(STUDIO_DIR / "events.jsonl"),
-)
+_events = EventBus(max_log=1000)
 
 
 class _WebSocketPusher(EventSubscriber):
@@ -161,6 +165,10 @@ async def _start_event_consumer():
                          severity="info")
 
     import db as _db
+
+    # Load persisted events from SQLite into memory, trim old ones
+    _events.init_from_db()
+    _db.trim_events(1000)
 
     # Initialize gallery image store (SQLite)
     import gallery_db as _gdb
