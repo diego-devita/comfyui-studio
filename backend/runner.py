@@ -86,7 +86,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
     except ImportError:
         _exec_progress.pop(prompt_id, None)
         return
-    except Exception:
+    except Exception as e:
         _exec_progress.pop(prompt_id, None)
         return
 

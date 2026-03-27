@@ -140,7 +140,7 @@ def save_job(job: dict):
         "status": job.get("status", "queued"),
         "params": json.dumps(job.get("params", {}), ensure_ascii=False),
         "seeds": json.dumps(job.get("seeds", {}), ensure_ascii=False),
-        "output": job.get("output"),
+        "output": json.dumps(job.get("output")) if isinstance(job.get("output"), (dict, list)) else job.get("output"),
         "outputs": json.dumps(job.get("outputs")) if job.get("outputs") else None,
         "output_dir": job.get("output_dir"),
         "input_image": job.get("input_image"),
@@ -491,9 +491,10 @@ def _row_to_job(row: sqlite3.Row) -> dict:
                 d[field] = json.loads(d[field])
             except (json.JSONDecodeError, TypeError):
                 pass
-    if d.get("outputs"):
-        try:
-            d["outputs"] = json.loads(d["outputs"])
-        except (json.JSONDecodeError, TypeError):
-            pass
+    for field in ("output", "outputs"):
+        if d.get(field) and isinstance(d[field], str) and d[field].startswith(("{", "[")):
+            try:
+                d[field] = json.loads(d[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
     return d
