@@ -241,35 +241,50 @@ def _inject_loras_chain(template: dict, loras: list[dict]) -> dict:
     return template
 
 
-def _inject_loras_paired(template: dict, loras: list[dict], lora_file_map: dict,
+def _inject_loras_paired(template: dict, params: dict,
                          nodes: list[str] = None, start_slot: int = 3) -> dict:
-    """Inject LoRA pairs into Power Lora Loader nodes (WAN-style).
+    """Inject LoRAs into Power Lora Loader nodes (WAN-style).
 
-    Each LoRA pair has high/low files injected into the respective nodes.
+    Reads loras_high and loras_low from params as separate lists of
+    {file, strength} dicts. Each list is injected into its respective node.
     """
     template = copy.deepcopy(template)
-    if not loras:
-        return template
 
     if nodes is None:
         nodes = ["lora_high", "lora_low"]
 
-    slot_idx = start_slot
-    for lora_sel in loras:
-        pid = lora_sel.get("pair_id", "")
-        str_h = lora_sel.get("strength_high", 1.0)
-        str_l = lora_sel.get("strength_low", 1.0)
-        pair = lora_file_map.get(pid, {})
-        high_file = pair.get("high", pair.get("both", ""))
-        low_file = pair.get("low", pair.get("both", ""))
-        if not high_file:
-            continue
-        slot = f"lora_{slot_idx}"
-        if len(nodes) >= 1 and nodes[0] in template["nodes"]:
-            template["nodes"][nodes[0]]["inputs"][slot] = {"on": True, "lora": high_file, "strength": str_h}
-        if len(nodes) >= 2 and nodes[1] in template["nodes"]:
-            template["nodes"][nodes[1]]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": str_l}
-        slot_idx += 1
+    loras_high = params.get("loras_high", [])
+    loras_low = params.get("loras_low", [])
+    if isinstance(loras_high, str):
+        import json as _j
+        loras_high = _j.loads(loras_high) if loras_high else []
+    if isinstance(loras_low, str):
+        import json as _j
+        loras_low = _j.loads(loras_low) if loras_low else []
+
+    # Inject high noise LoRAs
+    if loras_high and len(nodes) >= 1 and nodes[0] in template["nodes"]:
+        slot_idx = start_slot
+        for lora in loras_high:
+            lora_file = lora.get("file", "") if isinstance(lora, dict) else str(lora)
+            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
+            if not lora_file:
+                continue
+            slot = f"lora_{slot_idx}"
+            template["nodes"][nodes[0]]["inputs"][slot] = {"on": True, "lora": lora_file, "strength": strength}
+            slot_idx += 1
+
+    # Inject low noise LoRAs
+    if loras_low and len(nodes) >= 2 and nodes[1] in template["nodes"]:
+        slot_idx = start_slot
+        for lora in loras_low:
+            lora_file = lora.get("file", "") if isinstance(lora, dict) else str(lora)
+            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
+            if not lora_file:
+                continue
+            slot = f"lora_{slot_idx}"
+            template["nodes"][nodes[1]]["inputs"][slot] = {"on": True, "lora": lora_file, "strength": strength}
+            slot_idx += 1
 
     # Remove template placeholders from Power Lora Loader nodes
     for node_key in nodes:
@@ -481,14 +496,14 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
 
         # LoRA injection
         lora_mode = stage.get("lora_injection")
-        if lora_mode and selected_loras:
+        if lora_mode:
             if lora_mode == "paired":
                 template = _inject_loras_paired(
-                    template, selected_loras, lora_file_map,
+                    template, params,
                     nodes=stage.get("lora_nodes"),
                     start_slot=stage.get("lora_start_slot", 3),
                 )
-            else:
+            elif selected_loras:
                 template = _inject_loras_chain(template, selected_loras)
 
         # VAE override

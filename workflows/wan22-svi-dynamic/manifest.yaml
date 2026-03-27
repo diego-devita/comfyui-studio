@@ -1,8 +1,8 @@
 id: wan22-svi-dynamic
 category: i2v
 name: "WAN 2.2 SVI Pro Multi-Scene"
-version: 9
-date: "2026-03-23 01:40"
+version: 10
+date: "2026-03-28 00:58"
 type: dynamic
 description: "Multi-scene I2V using SVI Pro technique. Configurable scene count, per-scene prompts, durations and seeds, LoRA picker. GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""
@@ -73,12 +73,17 @@ inputs:
         default: -1
         tooltip: "Seed for this specific scene. Use -1 for random. Setting different seeds per scene varies the motion style; using the same seed across scenes creates more consistent movement patterns."
 
-  - id: loras
-    name: "LoRAs"
-    type: lora_picker
-    base_model: "wan-i2v-14b"
+  - id: loras_high
+    name: "LoRAs (High Noise)"
+    type: lora_picker_dynamic
     max_loras: 3
-    tooltip: "Select up to 3 LoRA pairs compatible with WAN I2V 14B. LoRAs come in high/low noise pairs — both are applied automatically at different sampling stages. The LightX2V accelerator LoRA is always included; pick additional style or motion LoRAs here."
+    tooltip: "LoRAs for the high noise pass (first sampling stage). The LightX2V accelerator and SVI Pro High are always included."
+
+  - id: loras_low
+    name: "LoRAs (Low Noise)"
+    type: lora_picker_dynamic
+    max_loras: 3
+    tooltip: "LoRAs for the low noise pass (second sampling stage). The LightX2V accelerator and SVI Pro Low are always included."
 
 outputs:
   - id: video

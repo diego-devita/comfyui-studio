@@ -348,6 +348,10 @@ async def _build_workflow(
             form_params["scenes"] = json.loads(form_params["scenes"])
         if isinstance(form_params.get("loras"), str):
             form_params["loras"] = json.loads(form_params["loras"])
+        if isinstance(form_params.get("loras_high"), str):
+            form_params["loras_high"] = json.loads(form_params["loras_high"])
+        if isinstance(form_params.get("loras_low"), str):
+            form_params["loras_low"] = json.loads(form_params["loras_low"])
         try:
             form_params["_output_dir"] = output_dir
             workflow, dynamic_seeds = _assemble_dynamic_workflow(manifest, form_params)
