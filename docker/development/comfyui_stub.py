@@ -344,7 +344,16 @@ async def _simulate_execution(prompt_id, client_id, workflow):
     Sends the same WebSocket message sequence as real ComfyUI:
     execution_start → execution_cached → executing(node) → progress → executed → executing(None)
     """
-    await asyncio.sleep(0.3)
+    # Wait for the WS client to connect before sending messages.
+    # The runner starts a thread that connects to /ws?clientId=X after receiving
+    # the POST /prompt response. Without this wait, messages go into ws_queue
+    # but nobody reads them because the WS isn't connected yet.
+    for _ in range(50):  # up to 5 seconds
+        await asyncio.sleep(0.1)
+        info = active_prompts.get(prompt_id)
+        if info and info.get("_ws_connected"):
+            break
+    await asyncio.sleep(0.2)
 
     info = active_prompts.get(prompt_id)
     if not info:
@@ -380,7 +389,11 @@ async def _simulate_execution(prompt_id, client_id, workflow):
         })
 
         # For sampler nodes, send progress steps
-        if ct in ("KSampler", "KSamplerAdvanced"):
+        SAMPLER_TYPES = {
+            "KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced",
+            "WanVideoSampler",
+        }
+        if ct in SAMPLER_TYPES:
             total_steps = 20
             for step in range(1, total_steps + 1):
                 info["ws_queue"].append({
@@ -486,6 +499,11 @@ async def websocket_handler(request):
 
     client_id = request.query.get("clientId", "stub")
     preview_jpeg = _generate_preview_jpeg()
+
+    # Signal that this client_id is connected so _simulate_execution can start
+    for pid, info in active_prompts.items():
+        if info.get("client_id") == client_id:
+            info["_ws_connected"] = True
 
     try:
         while True:
