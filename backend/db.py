@@ -57,8 +57,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_jobs_queued_at ON jobs(queued_at);
         CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
 
-        -- Events log: replaces the old events.jsonl file.
-        -- Ring buffer behavior enforced by periodic cleanup, not DB constraint.
+        -- Events log. Ring buffer behavior enforced by periodic cleanup, not DB constraint.
         CREATE TABLE IF NOT EXISTS events (
             id          TEXT PRIMARY KEY,
             type        TEXT NOT NULL,

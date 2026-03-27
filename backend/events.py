@@ -28,9 +28,9 @@ class EventSubscriber:
 class EventBus:
     """Central event dispatcher with SQLite persistence and async subscriber dispatch.
 
-    Events are persisted to the studio SQLite database (db/studio.db) instead
-    of the old events.jsonl file. The in-memory ring buffer is kept for fast
-    access by the WebSocket pusher and activity panel.
+    Events are persisted to the studio SQLite database (db/studio.db).
+    The in-memory ring buffer is kept for fast access by the WebSocket
+    pusher and activity panel.
     """
 
     def __init__(self, max_log: int = 1000):
@@ -170,7 +170,7 @@ async def _start_event_consumer():
     _events.init_from_db()
     _db.trim_events(1000)
 
-    # Remove legacy files/dirs (events.jsonl, jobs/, jobs_old/)
+    # Remove legacy files/dirs from pre-SQLite era
     import shutil as _shutil
     for legacy in ["events.jsonl"]:
         p = STUDIO_DIR / legacy
