@@ -14,9 +14,7 @@ import db as _db
 from workflows import (
     _load_manifest, _load_workflow_json,
     _make_input_filename,
-    _assemble_dynamic_workflow, _assemble_t2i_workflow,
-    _assemble_t2i_batch_workflow, _assemble_i2i_batch_workflow,
-    _assemble_ipa_batch_workflow, _assemble_faceid_batch_workflow,
+    _assemble_dynamic_workflow,
 )
 
 # ── Execution progress tracking (via ComfyUI WebSocket) ──────────────────
@@ -80,14 +78,29 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
     comfy_ws = COMFY_URL.replace("http://", "ws://").replace("https://", "wss://")
     ws_url = f"{comfy_ws}/ws?clientId={client_id}"
 
+    def _mark_stalled(reason="WebSocket listener terminated unexpectedly"):
+        """Mark the job as stalled in DB if it never completed."""
+        if job_record and job_record.get("status") in ("queued", "running"):
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone(timedelta(hours=1)))
+            job_record["status"] = "stalled"
+            job_record["error"] = reason
+            job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+            _save_job(job_record)
+            from events import _events
+            _events.emit("job.failed", f"Job stalled: {reason[:100]}", severity="error",
+                         data={"prompt_id": prompt_id})
+
     try:
         from websockets.sync.client import connect as ws_connect
         ws = ws_connect(ws_url)
     except ImportError:
         _exec_progress.pop(prompt_id, None)
+        _mark_stalled("websockets library not available")
         return
     except Exception as e:
         _exec_progress.pop(prompt_id, None)
+        _mark_stalled(f"WebSocket connection failed: {e}")
         return
 
     _preview_seq = 0
@@ -276,8 +289,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                 break
 
             _exec_progress[prompt_id] = state
-    except Exception:
-        pass
+    except Exception as _ws_err:
+        _mark_stalled(f"WebSocket error: {_ws_err}")
     finally:
         _exec_progress.pop(prompt_id, None)
         try:
@@ -336,23 +349,8 @@ async def _build_workflow(
         if isinstance(form_params.get("loras"), str):
             form_params["loras"] = json.loads(form_params["loras"])
         try:
-            if workflow_id == "t2i-dynamic":
-                form_params["_output_dir"] = output_dir
-                workflow, dynamic_seeds = _assemble_t2i_workflow(manifest, form_params)
-            elif workflow_id == "t2i-batch":
-                form_params["_output_dir"] = output_dir
-                workflow, dynamic_seeds = _assemble_t2i_batch_workflow(manifest, form_params)
-            elif workflow_id == "i2i-batch":
-                form_params["_output_dir"] = output_dir
-                workflow, dynamic_seeds = _assemble_i2i_batch_workflow(manifest, form_params)
-            elif workflow_id == "ipa-batch":
-                form_params["_output_dir"] = output_dir
-                workflow, dynamic_seeds = _assemble_ipa_batch_workflow(manifest, form_params)
-            elif workflow_id == "faceid-batch":
-                form_params["_output_dir"] = output_dir
-                workflow, dynamic_seeds = _assemble_faceid_batch_workflow(manifest, form_params)
-            else:
-                workflow, dynamic_seeds = _assemble_dynamic_workflow(manifest, form_params)
+            form_params["_output_dir"] = output_dir
+            workflow, dynamic_seeds = _assemble_dynamic_workflow(manifest, form_params)
         except Exception as e:
             raise HTTPException(500, f"Workflow assembly failed: {str(e)}")
     else:

@@ -1,0 +1,49 @@
+{
+  "nodes": {
+    "load_image": {
+      "inputs": {"image": "{{input_image}}"},
+      "class_type": "LoadImage",
+      "_meta": {"title": "Load Face Reference"}
+    },
+    "insightface": {
+      "inputs": {
+        "provider": "CUDA",
+        "model_name": "buffalo_l"
+      },
+      "class_type": "IPAdapterInsightFaceLoader",
+      "_meta": {"title": "InsightFace Loader"}
+    },
+    "faceid_loader": {
+      "inputs": {
+        "model": "{{model}}",
+        "preset": "{{faceid_preset}}",
+        "lora_strength": "{{faceid_lora_strength}}",
+        "provider": "CUDA"
+      },
+      "class_type": "IPAdapterUnifiedLoaderFaceID",
+      "_meta": {"title": "FaceID Loader"}
+    },
+    "faceid_apply": {
+      "inputs": {
+        "model": ["faceid_loader", 0],
+        "ipadapter": ["faceid_loader", 1],
+        "image": ["load_image", 0],
+        "weight": "{{faceid_weight}}",
+        "weight_faceidv2": "{{faceid_v2_weight}}",
+        "weight_type": "linear",
+        "combine_embeds": "concat",
+        "start_at": 0.0,
+        "end_at": 1.0,
+        "embeds_scaling": "V only",
+        "insightface": ["insightface", 0]
+      },
+      "class_type": "IPAdapterFaceID",
+      "_meta": {"title": "FaceID Apply"}
+    }
+  },
+  "imports": ["model"],
+  "exports": {
+    "model": {"node": "faceid_apply", "output": 0}
+  },
+  "variables": ["input_image", "faceid_preset", "faceid_lora_strength", "faceid_weight", "faceid_v2_weight"]
+}

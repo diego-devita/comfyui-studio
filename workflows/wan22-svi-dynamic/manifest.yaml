@@ -14,30 +14,22 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: "paired"
+    lora_nodes: ["lora_high", "lora_low"]
+    lora_start_slot: 3
   - block: scene_first
     file: "scene_first.json"
-    repeat: 1
+    scene_index: 0
   - block: scene_extend
     file: "scene_extend.json"
-    repeat_variable: "extra_scenes"
+    repeat: "extra_scenes"
+    chain: true
+    chain_imports:
+      prev_samples: "samples"
+      prev_images: "images"
   - block: output
     file: "output.json"
-
-connections:
-  setup_to_scenes:
-    model_high: "setup.model_high"
-    model_low: "setup.model_low"
-    clip: "setup.clip"
-    vae: "setup.vae"
-    sampler: "setup.sampler"
-    sigmas_high: "setup.sigmas_high"
-    sigmas_low: "setup.sigmas_low"
-    anchor_samples: "setup.anchor_samples"
-  scene_chain:
-    prev_samples: "prev_scene.samples"
-    prev_images: "prev_scene.images"
-  last_scene_to_output:
-    final_images: "last_scene.images"
+    in_repeat: false
 
 defaults:
   negative_prompt: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"

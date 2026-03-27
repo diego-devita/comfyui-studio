@@ -97,123 +97,245 @@ def _check_model_exists(filename: str) -> bool:
     return False
 
 
-# ── Dynamic workflow assembly ────────────────────────────────────────────────
+# ── Dynamic workflow assembly v2 — Generic declarative pipeline assembler ────
 
 
-def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
-    """Assemble a dynamic workflow from block templates based on manifest and runtime params."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    # Check /workspace first, then /app
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found: tried {WORKFLOWS_DIR / wf_id / blocks_subdir} and {WORKFLOWS_DIR / wf_id / blocks_subdir}. Run Check for Updates to download workflow blocks.")
-    defaults = manifest.get("defaults", {})
+def _eval_condition(condition: str, params: dict) -> bool:
+    """Evaluate a condition string against params.
 
-    # Load block templates
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
+    Supports:
+      - "param_name"         → truthy check (exists, non-empty, non-false)
+      - "param != value"     → inequality
+      - "param == value"     → equality
+    """
+    if not condition:
+        return True
+    condition = condition.strip()
+    for op in ("!=", "=="):
+        if op in condition:
+            left, right = condition.split(op, 1)
+            left, right = left.strip(), right.strip()
+            val = str(params.get(left, ""))
+            if op == "!=":
+                return val != right
+            return val == right
+    # Simple truthy check
+    val = params.get(condition)
+    if val is None or val == "" or val is False or val == "false":
+        return False
+    return True
 
-    pipeline = manifest["pipeline"]
-    block_templates = {}
-    for stage in pipeline:
-        block_templates[stage["block"]] = load_block(stage["file"])
 
-    # Scene count comes from the scenes list itself
-    scenes = params.get("scenes", [])
-    if not scenes:
-        scenes = [{"prompt": "", "duration": 5}]
-    num_scenes = len(scenes)
+def _stage_is_active(stage: dict, params: dict) -> bool:
+    """Check if a pipeline stage should be included based on its condition."""
+    cond = stage.get("condition")
+    if cond and not _eval_condition(cond, params):
+        return False
+    return True
 
-    neg_prompt = defaults.get("negative_prompt", "")
-    lora_accelerator = defaults.get("lora_accelerator", "")
-    lora_acc_str_high = defaults.get("lora_accelerator_strength_high", 3)
-    lora_acc_str_low = defaults.get("lora_accelerator_strength_low", 1.5)
-    steps = defaults.get("steps", 6)
-    split_step = defaults.get("split_step", 3)
 
-    # Build LoRA inputs from picker
-    raw_loras = params.get("loras", [])
-    # Normalize: can be list of strings (pair_ids) or list of {pair_id, strength}
-    selected_loras = []
+def _resolve_block_file(stage: dict, params: dict) -> str | None:
+    """Determine which block file to load for a stage. Returns None to skip."""
+    if "switch" in stage:
+        value = str(params.get(stage["switch"], stage.get("default", "")))
+        cases = stage.get("cases", {})
+        file = cases.get(value, cases.get(stage.get("default", ""), None))
+        return file  # None means skip
+    return stage.get("file")
+
+
+def _normalize_loras(raw_loras: list) -> list[dict]:
+    """Normalize LoRA list from params into a consistent format."""
+    result = []
     for item in raw_loras:
         if isinstance(item, str):
-            selected_loras.append({"pair_id": item, "strength_high": 1.0, "strength_low": 1.0})
+            result.append({"pair_id": item, "strength_high": 1.0, "strength_low": 1.0})
         elif isinstance(item, dict):
-            # Support both single strength and separate H/L
             sh = float(item.get("strength_high", item.get("strength", 1.0)))
             sl = float(item.get("strength_low", item.get("strength", 1.0)))
-            selected_loras.append({"pair_id": item.get("pair_id", ""), "strength_high": sh, "strength_low": sl})
+            result.append({
+                "pair_id": item.get("pair_id", ""),
+                "file": item.get("file", ""),
+                "strength": float(item.get("strength", 1.0)),
+                "strength_high": sh,
+                "strength_low": sl,
+            })
+    return result
 
-    # Resolve pair_ids to high/low files from models catalog
+
+def _build_lora_file_map() -> dict:
+    """Build pair_id → {high: file, low: file, both: file} from catalogs."""
     _reload_models()
-    lora_file_map = {}  # pair_id -> {high: file, low: file, both: file}
+    lora_map = {}
     for cat in _all_categories():
         for m in cat.get("models", []):
             pid = m.get("pair_id")
             if pid:
                 role = m.get("pair_role", "both")
-                if pid not in lora_file_map:
-                    lora_file_map[pid] = {}
-                lora_file_map[pid][role] = m["file"]
+                if pid not in lora_map:
+                    lora_map[pid] = {}
+                lora_map[pid][role] = m["file"]
+    return lora_map
 
-    # Collected workflow nodes (global ID -> node)
+
+def _inject_loras_chain(template: dict, loras: list[dict]) -> dict:
+    """Inject a LoRA chain into a setup block template.
+
+    Creates LoraLoader nodes chained from the model/clip export sources.
+    Rewires clip consumers and updates model/clip exports.
+    """
+    template = copy.deepcopy(template)
+    if not loras:
+        return template
+
+    model_exp = template.get("exports", {}).get("model")
+    clip_exp = template.get("exports", {}).get("clip")
+    if not model_exp or not clip_exp:
+        return template
+
+    model_source = [model_exp["node"], model_exp["output"]]
+    clip_source = [clip_exp["node"], clip_exp["output"]]
+
+    prev_model = model_source
+    prev_clip = clip_source
+    lora_nodes = {}
+
+    for i, lora in enumerate(loras):
+        lora_file = lora.get("file", "")
+        if not lora_file:
+            continue
+        strength = float(lora.get("strength", 1.0))
+        lora_id = f"_lora_{i}"
+        lora_nodes[lora_id] = {
+            "inputs": {
+                "lora_name": lora_file,
+                "strength_model": strength,
+                "strength_clip": strength,
+                "model": prev_model,
+                "clip": prev_clip,
+            },
+            "class_type": "LoraLoader",
+            "_meta": {"title": f"LoRA: {lora_file[:30]}"}
+        }
+        prev_model = [lora_id, 0]
+        prev_clip = [lora_id, 1]
+
+    if not lora_nodes:
+        return template
+
+    template["nodes"].update(lora_nodes)
+
+    # Rewire all nodes that referenced the original clip source
+    for node_id, node_def in template["nodes"].items():
+        if node_id.startswith("_lora_"):
+            continue
+        for key, val in node_def.get("inputs", {}).items():
+            if (isinstance(val, list) and len(val) == 2
+                    and val[0] == clip_source[0] and val[1] == clip_source[1]):
+                node_def["inputs"][key] = list(prev_clip)
+
+    last_lora = list(lora_nodes.keys())[-1]
+    template["exports"]["model"] = {"node": last_lora, "output": 0}
+    template["exports"]["clip"] = {"node": last_lora, "output": 1}
+
+    return template
+
+
+def _inject_loras_paired(template: dict, loras: list[dict], lora_file_map: dict,
+                         nodes: list[str] = None, start_slot: int = 3) -> dict:
+    """Inject LoRA pairs into Power Lora Loader nodes (WAN-style).
+
+    Each LoRA pair has high/low files injected into the respective nodes.
+    """
+    template = copy.deepcopy(template)
+    if not loras:
+        return template
+
+    if nodes is None:
+        nodes = ["lora_high", "lora_low"]
+
+    slot_idx = start_slot
+    for lora_sel in loras:
+        pid = lora_sel.get("pair_id", "")
+        str_h = lora_sel.get("strength_high", 1.0)
+        str_l = lora_sel.get("strength_low", 1.0)
+        pair = lora_file_map.get(pid, {})
+        high_file = pair.get("high", pair.get("both", ""))
+        low_file = pair.get("low", pair.get("both", ""))
+        if not high_file:
+            continue
+        slot = f"lora_{slot_idx}"
+        if len(nodes) >= 1 and nodes[0] in template["nodes"]:
+            template["nodes"][nodes[0]]["inputs"][slot] = {"on": True, "lora": high_file, "strength": str_h}
+        if len(nodes) >= 2 and nodes[1] in template["nodes"]:
+            template["nodes"][nodes[1]]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": str_l}
+        slot_idx += 1
+
+    # Remove template placeholders from Power Lora Loader nodes
+    for node_key in nodes:
+        if node_key in template["nodes"]:
+            inputs = template["nodes"][node_key]["inputs"]
+            for k in list(inputs.keys()):
+                if k.startswith("{{"):
+                    del inputs[k]
+
+    return template
+
+
+def _inject_vae_override(template: dict, vae_name: str) -> dict:
+    """Add a VAELoader node and redirect the vae export."""
+    template = copy.deepcopy(template)
+    template["nodes"]["_vae_override"] = {
+        "inputs": {"vae_name": vae_name},
+        "class_type": "VAELoader",
+        "_meta": {"title": "VAE Override"}
+    }
+    template["exports"]["vae"] = {"node": "_vae_override", "output": 0}
+    return template
+
+
+def _resolve_seed(params: dict, iteration: int, seed_key: str = "seed") -> int:
+    """Resolve seed for a given iteration. -1 = random, otherwise increment."""
+    seed = int(params.get(seed_key, -1))
+    if seed == -1:
+        return random.randint(0, 2**53)
+    if iteration > 0:
+        return seed + iteration
+    return seed
+
+
+def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
+    """Generic assembler: build any dynamic workflow from its manifest pipeline.
+
+    Handles: condition, switch, repeat, chain, lora_injection, vae_override.
+    Returns (workflow_dict, resolved_seeds).
+    """
+    wf_id = manifest["id"]
+    blocks_subdir = manifest.get("blocks_dir", "blocks")
+    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
+    if not blocks_dir.exists():
+        raise FileNotFoundError(
+            f"Blocks directory not found: {blocks_dir}. Run Check for Updates."
+        )
+    defaults = manifest.get("defaults", {})
+    pipeline = manifest["pipeline"]
+
+    def load_block(filename):
+        return json.loads((blocks_dir / filename).read_text())
+
+    # LoRA preparation
+    selected_loras = _normalize_loras(params.get("loras", []))
+    lora_file_map = _build_lora_file_map() if selected_loras else {}
+
+    # Workflow state
     workflow = {}
-    node_counter = [100]  # mutable counter
+    node_counter = [100]
+    block_exports = {}  # instance_name -> {export_name: [global_id, output_idx]}
+    resolved_seeds = {}
 
     def next_id():
         node_counter[0] += 1
         return str(node_counter[0])
-
-    # Track block instance exports: block_instance_name -> {export_name: [global_id, output_idx]}
-    block_exports = {}
-
-    def instantiate_block(block_name, template, variables, imports_map):
-        """Instantiate a block: assign global IDs, resolve imports and variables."""
-        local_to_global = {}
-        instance_name = block_name
-
-        # Assign global IDs to all nodes
-        for local_id in template["nodes"]:
-            local_to_global[local_id] = next_id()
-
-        # Process each node
-        for local_id, node_def in template["nodes"].items():
-            global_id = local_to_global[local_id]
-            node = {
-                "class_type": node_def["class_type"],
-                "_meta": dict(node_def.get("_meta", {})),
-            }
-
-            # Resolve _meta title variables
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-
-            # Process inputs
-            inputs = {}
-            for key, val in node_def.get("inputs", {}).items():
-                # Skip template LoRA slot placeholders
-                if key.startswith("{{") and key.endswith("}}"):
-                    continue
-                resolved = _resolve_value(val, local_to_global, imports_map, variables)
-                inputs[key] = resolved
-            node["inputs"] = inputs
-            workflow[global_id] = node
-
-        # Record exports
-        exports = {}
-        for exp_name, exp_def in template.get("exports", {}).items():
-            exp_node = exp_def["node"]
-            exp_output = exp_def["output"]
-            if exp_node in local_to_global:
-                exports[exp_name] = [local_to_global[exp_node], exp_output]
-        block_exports[instance_name] = exports
-
-        return exports
 
     def _resolve_value(val, local_to_global, imports_map, variables):
         """Resolve a value: local refs, import refs, variable substitutions."""
@@ -222,7 +344,6 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
             if isinstance(ref_id, str):
                 if ref_id in local_to_global:
                     return [local_to_global[ref_id], ref_out]
-                # Might be a global reference already
                 return val
             return val
         if isinstance(val, str):
@@ -233,7 +354,6 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
                 if var_name in variables:
                     return variables[var_name]
                 return val
-            # Replace inline {{var}} in strings
             for vk, vv in variables.items():
                 val = val.replace("{{" + vk + "}}", str(vv))
             return val
@@ -247,1029 +367,255 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> dict:
             return resolved
         return val
 
-    # --- Instantiate setup block ---
-    setup_vars = {
-        "steps": steps,
-        "split_step": split_step,
-        "input_image": params.get("_uploaded_image", "input.png"),
-        "lora_accelerator": lora_accelerator,
-        "lora_accelerator_strength_high": lora_acc_str_high,
-        "lora_accelerator_strength_low": lora_acc_str_low,
-        "svi_pro_high": "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors",
-        "svi_pro_low": "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors",
-    }
-    setup_tmpl = block_templates["setup"]
+    def instantiate_block(instance_name, template, variables, imports_map):
+        """Instantiate a block: assign global IDs, resolve imports and variables."""
+        local_to_global = {lid: next_id() for lid in template["nodes"]}
+        for local_id, node_def in template["nodes"].items():
+            global_id = local_to_global[local_id]
+            node = {"class_type": node_def["class_type"], "_meta": dict(node_def.get("_meta", {}))}
+            title = node["_meta"].get("title", "")
+            for vk, vv in variables.items():
+                title = title.replace("{{" + vk + "}}", str(vv))
+            node["_meta"]["title"] = title
+            inputs = {}
+            for key, val in node_def.get("inputs", {}).items():
+                if key.startswith("{{") and key.endswith("}}"):
+                    continue
+                inputs[key] = _resolve_value(val, local_to_global, imports_map, variables)
+            node["inputs"] = inputs
+            workflow[global_id] = node
+        exports = {}
+        for exp_name, exp_def in template.get("exports", {}).items():
+            if exp_def["node"] in local_to_global:
+                exports[exp_name] = [local_to_global[exp_def["node"]], exp_def["output"]]
+        block_exports[instance_name] = exports
+        return exports
 
-    # Inject user-selected LoRAs into setup template before instantiation
-    setup_tmpl = copy.deepcopy(setup_tmpl)
-    lora_idx = 3  # lora_1 = accelerator, lora_2 = SVI Pro (both hardcoded)
-    for lora_sel in selected_loras:
-        pid = lora_sel["pair_id"]
-        str_h = lora_sel["strength_high"]
-        str_l = lora_sel["strength_low"]
-        pair = lora_file_map.get(pid, {})
-        high_file = pair.get("high", pair.get("both", ""))
-        low_file = pair.get("low", pair.get("both", ""))
-        if high_file:
-            slot = f"lora_{lora_idx}"
-            setup_tmpl["nodes"]["lora_high"]["inputs"][slot] = {"on": True, "lora": high_file, "strength": str_h}
-            setup_tmpl["nodes"]["lora_low"]["inputs"][slot] = {"on": True, "lora": low_file or high_file, "strength": str_l}
-            lora_idx += 1
+    def _latest_exports() -> dict:
+        """Flatten all block exports into a single dict (later exports override earlier)."""
+        merged = {}
+        for _inst, exps in block_exports.items():
+            merged.update(exps)
+        return merged
 
-    # Remove template placeholders
-    for node_key in ["lora_high", "lora_low"]:
-        inputs = setup_tmpl["nodes"][node_key]["inputs"]
-        for k in list(inputs.keys()):
-            if k.startswith("{{"):
-                del inputs[k]
+    def _build_variables(stage: dict, iteration: int = 0, seed: int = None) -> dict:
+        """Build the variables dict for a stage from params + defaults + iteration info."""
+        variables = dict(defaults)
+        # Add all params as variables (strings get cast by the block template)
+        for k, v in params.items():
+            if not k.startswith("_") and not isinstance(v, (list, dict)):
+                variables[k] = v
+        # Special computed variables
+        variables["_output_dir"] = params.get("_output_dir", wf_id)
+        variables["output_dir"] = params.get("_output_dir", wf_id)
+        variables["output_prefix"] = params.get("_output_dir", wf_id)
+        variables["input_image"] = params.get("_uploaded_image", "input.png")
+        # Resolution
+        variables["width"] = int(params.get("width", defaults.get("width", 1024)))
+        variables["height"] = int(params.get("height", defaults.get("height", 1024)))
+        # Iteration
+        variables["batch_num"] = str(iteration + 1)
+        variables["_iteration"] = iteration
+        if seed is not None:
+            variables["seed"] = seed
+        # Hires computed dimensions
+        if params.get("hires_enabled"):
+            scale = float(params.get("hires_scale", 1.5))
+            variables["hires_width"] = int(variables["width"] * scale)
+            variables["hires_height"] = int(variables["height"] * scale)
+        return variables
 
-    setup_exports = instantiate_block("setup", setup_tmpl, setup_vars, {})
+    # ── Group pipeline stages into execution units ──
+    # A repeat group: all stages from a block with `repeat` until a block with
+    # `in_repeat: false` or the end of pipeline. Stages before any repeat are singles.
+    # Chain groups (WAN SVI): `chain: true` on a repeat block means each iteration's
+    # exports feed into the next via `chain_imports`.
 
-    # --- Instantiate scenes ---
-    prev_scene_exports = None
-    last_scene_exports = None
-    resolved_seeds = {}
+    groups = []  # Each: {"type": "single"|"repeat"|"chain", "stages": [...], "param": ...}
+    current_repeat = None
 
-    for i in range(num_scenes):
-        scene = scenes[i] if i < len(scenes) else {"prompt": "", "duration": 5}
+    for stage in pipeline:
+        has_repeat = stage.get("repeat") is not None
+        if has_repeat and current_repeat is None:
+            current_repeat = {
+                "type": "chain" if stage.get("chain") else "repeat",
+                "param": stage["repeat"],
+                "chain_imports": stage.get("chain_imports", {}),
+                "stages": [stage],
+            }
+        elif current_repeat is not None and not stage.get("in_repeat") is False:
+            # Check explicit opt-out
+            if stage.get("in_repeat", True) is False:
+                groups.append(current_repeat)
+                current_repeat = None
+                groups.append({"type": "single", "stages": [stage]})
+            elif has_repeat:
+                # New repeat block — flush previous group
+                groups.append(current_repeat)
+                current_repeat = {
+                    "type": "chain" if stage.get("chain") else "repeat",
+                    "param": stage["repeat"],
+                    "chain_imports": stage.get("chain_imports", {}),
+                    "stages": [stage],
+                }
+            else:
+                current_repeat["stages"].append(stage)
+        else:
+            groups.append({"type": "single", "stages": [stage]})
+
+    if current_repeat:
+        groups.append(current_repeat)
+
+    # ── Execute groups ──
+
+    def _process_stage(stage, variables, extra_imports=None):
+        """Process a single pipeline stage. Returns exports or None if skipped."""
+        if not _stage_is_active(stage, params):
+            return None
+
+        block_file = _resolve_block_file(stage, params)
+        if block_file is None:
+            return None
+
+        template = load_block(block_file)
+
+        # LoRA injection
+        lora_mode = stage.get("lora_injection")
+        if lora_mode and selected_loras:
+            if lora_mode == "paired":
+                template = _inject_loras_paired(
+                    template, selected_loras, lora_file_map,
+                    nodes=stage.get("lora_nodes"),
+                    start_slot=stage.get("lora_start_slot", 3),
+                )
+            else:
+                template = _inject_loras_chain(template, selected_loras)
+
+        # VAE override
+        if stage.get("vae_override") and params.get("vae_override"):
+            template = _inject_vae_override(template, params["vae_override"])
+
+        # Build imports from all previous exports
+        imports_map = _latest_exports()
+        if extra_imports:
+            imports_map.update(extra_imports)
+
+        return instantiate_block(
+            f"{stage['block']}_{variables.get('_iteration', 0)}",
+            template, variables, imports_map,
+        )
+
+    # ── Scene-based variable provider (WAN SVI) ──
+
+    def _scene_variables(iteration):
+        """Build variables for scene-based workflows."""
+        scenes = params.get("scenes", [])
+        if not scenes:
+            scenes = [{"prompt": "", "duration": 5}]
+        scene = scenes[iteration] if iteration < len(scenes) else {"prompt": "", "duration": 5}
         duration_sec = int(scene.get("duration", 5))
-        duration_frames = duration_sec * 16 + 1
         scene_seed = int(scene.get("seed", params.get("seed", -1)))
         if scene_seed == -1:
             scene_seed = random.randint(0, 2**53)
-        resolved_seeds[f"scene_{i+1}"] = scene_seed
-
-        scene_vars = {
+        resolved_seeds[f"scene_{iteration + 1}"] = scene_seed
+        return {
+            **defaults,
             "prompt": scene.get("prompt", ""),
-            "negative_prompt": neg_prompt,
-            "duration_frames": duration_frames,
+            "negative_prompt": defaults.get("negative_prompt", ""),
+            "duration_frames": duration_sec * 16 + 1,
             "seed": scene_seed,
-            "scene_num": str(i + 1),
+            "scene_num": str(iteration + 1),
+            "input_image": params.get("_uploaded_image", "input.png"),
         }
 
-        # Build imports map from setup exports
-        imports_map = {
-            "model_high": setup_exports["model_high"],
-            "model_low": setup_exports["model_low"],
-            "clip": setup_exports["clip"],
-            "vae": setup_exports["vae"],
-            "sampler": setup_exports["sampler"],
-            "sigmas_high": setup_exports["sigmas_high"],
-            "sigmas_low": setup_exports["sigmas_low"],
-            "anchor_samples": setup_exports["anchor_samples"],
-        }
+    for group in groups:
+        if group["type"] == "single":
+            for stage in group["stages"]:
+                if stage.get("scene_index") is not None:
+                    variables = _scene_variables(stage["scene_index"])
+                else:
+                    variables = _build_variables(stage)
+                _process_stage(stage, variables)
 
-        if i == 0:
-            tmpl = block_templates["scene_first"]
-            scene_exports = instantiate_block(f"scene_{i}", tmpl, scene_vars, imports_map)
-        else:
-            tmpl = block_templates["scene_extend"]
-            imports_map["prev_samples"] = prev_scene_exports["samples"]
-            imports_map["prev_images"] = prev_scene_exports["images"]
-            scene_exports = instantiate_block(f"scene_{i}", tmpl, scene_vars, imports_map)
+        elif group["type"] == "repeat":
+            param = group["param"]
+            if isinstance(param, int):
+                count = param
+            else:
+                count = int(params.get(param, 1))
 
-        prev_scene_exports = scene_exports
-        last_scene_exports = scene_exports
+            for i in range(count):
+                seed = _resolve_seed(params, i)
+                resolved_seeds[f"batch_{i + 1}"] = seed
+                for stage in group["stages"]:
+                    variables = _build_variables(stage, iteration=i, seed=seed)
+                    _process_stage(stage, variables)
 
-    # --- Instantiate output block ---
-    output_tmpl = block_templates["output"]
-    # For single scene, images come from vae_decode; for multi, from last overlap
-    final_images = last_scene_exports["images"]
-    output_imports = {"final_images": final_images}
-    instantiate_block("output", output_tmpl, {}, output_imports)
+        elif group["type"] == "chain":
+            param = group["param"]
+            chain_imports_map = group.get("chain_imports", {})
+
+            # For scene-based chains, count comes from scenes list
+            scenes = params.get("scenes", [])
+            if not scenes:
+                scenes = [{"prompt": "", "duration": 5}]
+
+            if isinstance(param, int):
+                count = param
+            elif param == "extra_scenes":
+                count = max(len(scenes) - 1, 0)
+            else:
+                count = int(params.get(param, 0))
+
+            prev_chain_exports = None
+            for i in range(count):
+                # For scene-based chains, use scene variables
+                if params.get("scenes") and group["stages"][0].get("file", "").startswith("scene"):
+                    variables = _scene_variables(i + 1 if param == "extra_scenes" else i)
+                else:
+                    seed = _resolve_seed(params, i)
+                    variables = _build_variables(group["stages"][0], iteration=i, seed=seed)
+
+                # Map previous chain exports to import names
+                extra_imports = {}
+                if prev_chain_exports and chain_imports_map:
+                    for import_name, export_name in chain_imports_map.items():
+                        if export_name in prev_chain_exports:
+                            extra_imports[import_name] = prev_chain_exports[export_name]
+
+                for stage in group["stages"]:
+                    exports = _process_stage(stage, variables, extra_imports)
+                    if exports:
+                        prev_chain_exports = exports
 
     return workflow, resolved_seeds
 
 
-def _assemble_faceid_batch_workflow(manifest: dict, params: dict) -> tuple:
-    """Assemble a FaceID workflow: checkpoint + clip_skip + loras + InsightFace + FaceID + generate."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
-
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
-
-    workflow = {}
-    node_counter = [100]
-
-    def next_id():
-        node_counter[0] += 1
-        return str(node_counter[0])
-
-    def resolve_val(val, local_map, imports, variables):
-        if isinstance(val, list) and len(val) == 2:
-            ref_id, ref_out = val
-            if isinstance(ref_id, str) and ref_id in local_map:
-                return [local_map[ref_id], ref_out]
-            return val
-        if isinstance(val, str):
-            if val.startswith("{{") and val.endswith("}}"):
-                vn = val[2:-2]
-                if vn in imports:
-                    return imports[vn]
-                if vn in variables:
-                    return variables[vn]
-                return val
-            for vk, vv in variables.items():
-                val = val.replace("{{" + vk + "}}", str(vv))
-            return val
-        if isinstance(val, dict):
-            return {k: resolve_val(v, local_map, imports, variables) for k, v in val.items()}
-        return val
-
-    def instantiate(name, template, variables, imports):
-        local_to_global = {lid: next_id() for lid in template["nodes"]}
-        for lid, ndef in template["nodes"].items():
-            gid = local_to_global[lid]
-            node = {"class_type": ndef["class_type"], "_meta": dict(ndef.get("_meta", {}))}
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-            inputs_resolved = {}
-            for k, v in ndef.get("inputs", {}).items():
-                if k.startswith("{{"):
-                    continue
-                inputs_resolved[k] = resolve_val(v, local_to_global, imports, variables)
-            node["inputs"] = inputs_resolved
-            workflow[gid] = node
-        exports = {}
-        for en, ed in template.get("exports", {}).items():
-            if ed["node"] in local_to_global:
-                exports[en] = [local_to_global[ed["node"]], ed["output"]]
-        return exports
-
-    # Extract params
-    checkpoint = params.get("checkpoint", "")
-    positive_prompt = params.get("positive_prompt", "")
-    negative_prompt = params.get("negative_prompt", "")
-    clip_skip = int(params.get("clip_skip", -2))
-    faceid_preset = params.get("faceid_preset", "FACEID PLUS V2")
-    faceid_lora_strength = float(params.get("faceid_lora_strength", 0.6))
-    faceid_weight = float(params.get("faceid_weight", 0.85))
-    faceid_v2_weight = float(params.get("faceid_v2_weight", 0.85))
-    width = int(params.get("width", 832))
-    height = int(params.get("height", 1216))
-    batch_size = int(params.get("batch_size", 1))
-    steps = int(params.get("steps", 19))
-    cfg = float(params.get("cfg", 4.0))
-    sampler_name = params.get("sampler_name", "euler_ancestral")
-    scheduler = params.get("scheduler", "normal")
-    denoise = float(params.get("denoise", 1.0))
-    seed = int(params.get("seed", -1))
-    if seed == -1:
-        seed = random.randint(0, 2**53)
-    output_dir = params.get("_output_dir", "faceid-batch")
-    uploaded_image = params.get("_uploaded_image", "input.png")
-
-    # --- Setup block (checkpoint + clip_skip + prompts) ---
-    setup_tmpl = copy.deepcopy(load_block("setup.json"))
-
-    # Inject user LoRAs (before FaceID modifies the model)
-    raw_loras = params.get("loras", [])
-    if raw_loras:
-        _reload_models()
-        prev_model = ["checkpoint", 0]
-        prev_clip = ["clip_skip", 0]
-        lora_nodes = {}
-        for i, lora in enumerate(raw_loras):
-            lora_file = lora.get("file", "") if isinstance(lora, dict) else lora
-            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
-            if not lora_file:
-                continue
-            lora_id = f"lora_{i}"
-            lora_nodes[lora_id] = {
-                "inputs": {
-                    "lora_name": lora_file,
-                    "strength_model": strength,
-                    "strength_clip": strength,
-                    "model": prev_model,
-                    "clip": prev_clip,
-                },
-                "class_type": "LoraLoader",
-                "_meta": {"title": f"LoRA: {lora_file[:30]}"}
-            }
-            prev_model = [lora_id, 0]
-            prev_clip = [lora_id, 1]
-
-        if lora_nodes:
-            setup_tmpl["nodes"].update(lora_nodes)
-            setup_tmpl["nodes"]["pos_prompt"]["inputs"]["clip"] = prev_clip
-            setup_tmpl["nodes"]["neg_prompt"]["inputs"]["clip"] = prev_clip
-            last_lora = list(lora_nodes.keys())[-1]
-            setup_tmpl["exports"]["model"] = {"node": last_lora, "output": 0}
-            setup_tmpl["exports"]["clip"] = {"node": last_lora, "output": 1}
-
-    setup_vars = {
-        "checkpoint": checkpoint,
-        "clip_skip": clip_skip,
-        "positive_prompt": positive_prompt,
-        "negative_prompt": negative_prompt,
-    }
-    setup_exports = instantiate("setup", setup_tmpl, setup_vars, {})
-
-    # --- LoadImage (face reference) ---
-    load_img_id = next_id()
-    workflow[load_img_id] = {
-        "inputs": {"image": uploaded_image},
-        "class_type": "LoadImage",
-        "_meta": {"title": "Load Face Reference"}
-    }
-
-    # --- InsightFaceLoader ---
-    insightface_id = next_id()
-    workflow[insightface_id] = {
-        "inputs": {
-            "provider": "CUDA",
-            "model_name": "buffalo_l",
-        },
-        "class_type": "IPAdapterInsightFaceLoader",
-        "_meta": {"title": "InsightFace Loader"}
-    }
-
-    # --- IPAdapterUnifiedLoaderFaceID (loads FaceID model + applies LoRA) ---
-    faceid_loader_id = next_id()
-    workflow[faceid_loader_id] = {
-        "inputs": {
-            "model": setup_exports["model"],
-            "preset": faceid_preset,
-            "lora_strength": faceid_lora_strength,
-            "provider": "CUDA",
-        },
-        "class_type": "IPAdapterUnifiedLoaderFaceID",
-        "_meta": {"title": "FaceID Loader"}
-    }
-
-    # --- IPAdapterFaceID (apply face reference) ---
-    faceid_apply_id = next_id()
-    workflow[faceid_apply_id] = {
-        "inputs": {
-            "model": [faceid_loader_id, 0],
-            "ipadapter": [faceid_loader_id, 1],
-            "image": [load_img_id, 0],
-            "weight": faceid_weight,
-            "weight_faceidv2": faceid_v2_weight,
-            "weight_type": "linear",
-            "combine_embeds": "concat",
-            "start_at": 0.0,
-            "end_at": 1.0,
-            "embeds_scaling": "V only",
-            "insightface": [insightface_id, 0],
-        },
-        "class_type": "IPAdapterFaceID",
-        "_meta": {"title": "FaceID Apply"}
-    }
-    faceid_model_ref = [faceid_apply_id, 0]
-
-    # --- Generate block (EmptyLatentImage + KSampler + VAEDecode + SaveImage) ---
-    gen_tmpl = load_block("generate.json")
-    gen_vars = {
-        "width": width, "height": height, "batch_size": batch_size,
-        "seed": seed, "steps": steps, "cfg": cfg,
-        "sampler_name": sampler_name, "scheduler": scheduler,
-        "denoise": denoise, "output_prefix": output_dir,
-    }
-    gen_imports = {
-        "model": faceid_model_ref,
-        "positive": setup_exports["positive"],
-        "negative": setup_exports["negative"],
-        "vae": setup_exports["vae"],
-    }
-    instantiate("gen", gen_tmpl, gen_vars, gen_imports)
-
-    return workflow, {"seed": seed}
-
-
-def _assemble_ipa_batch_workflow(manifest: dict, params: dict) -> tuple:
-    """Assemble an IP-Adapter workflow: checkpoint + clip_skip + loras + IPA + generate."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
-
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
-
-    workflow = {}
-    node_counter = [100]
-
-    def next_id():
-        node_counter[0] += 1
-        return str(node_counter[0])
-
-    def resolve_val(val, local_map, imports, variables):
-        if isinstance(val, list) and len(val) == 2:
-            ref_id, ref_out = val
-            if isinstance(ref_id, str) and ref_id in local_map:
-                return [local_map[ref_id], ref_out]
-            return val
-        if isinstance(val, str):
-            if val.startswith("{{") and val.endswith("}}"):
-                vn = val[2:-2]
-                if vn in imports:
-                    return imports[vn]
-                if vn in variables:
-                    return variables[vn]
-                return val
-            for vk, vv in variables.items():
-                val = val.replace("{{" + vk + "}}", str(vv))
-            return val
-        if isinstance(val, dict):
-            return {k: resolve_val(v, local_map, imports, variables) for k, v in val.items()}
-        return val
-
-    def instantiate(name, template, variables, imports):
-        local_to_global = {lid: next_id() for lid in template["nodes"]}
-        for lid, ndef in template["nodes"].items():
-            gid = local_to_global[lid]
-            node = {"class_type": ndef["class_type"], "_meta": dict(ndef.get("_meta", {}))}
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-            inputs_resolved = {}
-            for k, v in ndef.get("inputs", {}).items():
-                if k.startswith("{{"):
-                    continue
-                inputs_resolved[k] = resolve_val(v, local_to_global, imports, variables)
-            node["inputs"] = inputs_resolved
-            workflow[gid] = node
-        exports = {}
-        for en, ed in template.get("exports", {}).items():
-            if ed["node"] in local_to_global:
-                exports[en] = [local_to_global[ed["node"]], ed["output"]]
-        return exports
-
-    # Extract params
-    checkpoint = params.get("checkpoint", "")
-    positive_prompt = params.get("positive_prompt", "")
-    negative_prompt = params.get("negative_prompt", "")
-    clip_skip = int(params.get("clip_skip", -2))
-    ipa_preset = params.get("ipa_preset", "PLUS FACE (portraits)")
-    ipa_weight = float(params.get("ipa_weight", 0.8))
-    ipa_start = float(params.get("ipa_start", 0.0))
-    ipa_end = float(params.get("ipa_end", 1.0))
-    width = int(params.get("width", 832))
-    height = int(params.get("height", 1216))
-    batch_size = int(params.get("batch_size", 1))
-    steps = int(params.get("steps", 19))
-    cfg = float(params.get("cfg", 4.0))
-    sampler_name = params.get("sampler_name", "euler_ancestral")
-    scheduler = params.get("scheduler", "normal")
-    denoise = float(params.get("denoise", 1.0))
-    seed = int(params.get("seed", -1))
-    if seed == -1:
-        seed = random.randint(0, 2**53)
-    output_dir = params.get("_output_dir", "ipa-batch")
-    uploaded_image = params.get("_uploaded_image", "input.png")
-
-    # --- Setup block (checkpoint + clip_skip + prompts) ---
-    setup_tmpl = copy.deepcopy(load_block("setup.json"))
-
-    # Inject LoRAs (chain after checkpoint, before IPA)
-    raw_loras = params.get("loras", [])
-    if raw_loras:
-        _reload_models()
-        prev_model = ["checkpoint", 0]
-        prev_clip = ["clip_skip", 0]
-        lora_nodes = {}
-        for i, lora in enumerate(raw_loras):
-            lora_file = lora.get("file", "") if isinstance(lora, dict) else lora
-            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
-            if not lora_file:
-                continue
-            lora_id = f"lora_{i}"
-            lora_nodes[lora_id] = {
-                "inputs": {
-                    "lora_name": lora_file,
-                    "strength_model": strength,
-                    "strength_clip": strength,
-                    "model": prev_model,
-                    "clip": prev_clip,
-                },
-                "class_type": "LoraLoader",
-                "_meta": {"title": f"LoRA: {lora_file[:30]}"}
-            }
-            prev_model = [lora_id, 0]
-            prev_clip = [lora_id, 1]
-
-        if lora_nodes:
-            setup_tmpl["nodes"].update(lora_nodes)
-            setup_tmpl["nodes"]["pos_prompt"]["inputs"]["clip"] = prev_clip
-            setup_tmpl["nodes"]["neg_prompt"]["inputs"]["clip"] = prev_clip
-            last_lora = list(lora_nodes.keys())[-1]
-            setup_tmpl["exports"]["model"] = {"node": last_lora, "output": 0}
-            setup_tmpl["exports"]["clip"] = {"node": last_lora, "output": 1}
-
-    setup_vars = {
-        "checkpoint": checkpoint,
-        "clip_skip": clip_skip,
-        "positive_prompt": positive_prompt,
-        "negative_prompt": negative_prompt,
-    }
-    setup_exports = instantiate("setup", setup_tmpl, setup_vars, {})
-
-    # --- LoadImage (reference for IP-Adapter) ---
-    load_img_id = next_id()
-    workflow[load_img_id] = {
-        "inputs": {"image": uploaded_image},
-        "class_type": "LoadImage",
-        "_meta": {"title": "Load Reference Image"}
-    }
-
-    # --- IPAdapterUnifiedLoader (auto-loads the right IPA model) ---
-    ipa_loader_id = next_id()
-    workflow[ipa_loader_id] = {
-        "inputs": {
-            "model": setup_exports["model"],
-            "preset": ipa_preset,
-        },
-        "class_type": "IPAdapterUnifiedLoader",
-        "_meta": {"title": "IP-Adapter Loader"}
-    }
-
-    # --- IPAdapterAdvanced (apply reference image) ---
-    ipa_apply_id = next_id()
-    workflow[ipa_apply_id] = {
-        "inputs": {
-            "model": [ipa_loader_id, 0],
-            "ipadapter": [ipa_loader_id, 1],
-            "image": [load_img_id, 0],
-            "weight": ipa_weight,
-            "weight_type": "linear",
-            "combine_embeds": "concat",
-            "start_at": ipa_start,
-            "end_at": ipa_end,
-            "embeds_scaling": "V only",
-        },
-        "class_type": "IPAdapterAdvanced",
-        "_meta": {"title": "IP-Adapter Apply"}
-    }
-    # The IPA-modified model replaces setup model for generation
-    ipa_model_ref = [ipa_apply_id, 0]
-
-    # --- Generate block (EmptyLatentImage + KSampler + VAEDecode + SaveImage) ---
-    gen_tmpl = load_block("generate.json")
-    gen_vars = {
-        "width": width, "height": height, "batch_size": batch_size,
-        "seed": seed, "steps": steps, "cfg": cfg,
-        "sampler_name": sampler_name, "scheduler": scheduler,
-        "denoise": denoise, "output_prefix": output_dir,
-    }
-    gen_imports = {
-        "model": ipa_model_ref,
-        "positive": setup_exports["positive"],
-        "negative": setup_exports["negative"],
-        "vae": setup_exports["vae"],
-    }
-    instantiate("gen", gen_tmpl, gen_vars, gen_imports)
-
-    return workflow, {"seed": seed}
-
-
-def _assemble_i2i_batch_workflow(manifest: dict, params: dict) -> tuple:
-    """Assemble an img2img batch workflow: checkpoint + clip_skip + loras + encode input + N variations."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
-
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
-
-    workflow = {}
-    node_counter = [100]
-
-    def next_id():
-        node_counter[0] += 1
-        return str(node_counter[0])
-
-    def resolve_val(val, local_map, imports, variables):
-        if isinstance(val, list) and len(val) == 2:
-            ref_id, ref_out = val
-            if isinstance(ref_id, str) and ref_id in local_map:
-                return [local_map[ref_id], ref_out]
-            return val
-        if isinstance(val, str):
-            if val.startswith("{{") and val.endswith("}}"):
-                vn = val[2:-2]
-                if vn in imports:
-                    return imports[vn]
-                if vn in variables:
-                    return variables[vn]
-                return val
-            for vk, vv in variables.items():
-                val = val.replace("{{" + vk + "}}", str(vv))
-            return val
-        if isinstance(val, dict):
-            return {k: resolve_val(v, local_map, imports, variables) for k, v in val.items()}
-        return val
-
-    def instantiate(name, template, variables, imports):
-        local_to_global = {lid: next_id() for lid in template["nodes"]}
-        for lid, ndef in template["nodes"].items():
-            gid = local_to_global[lid]
-            node = {"class_type": ndef["class_type"], "_meta": dict(ndef.get("_meta", {}))}
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-            inputs_resolved = {}
-            for k, v in ndef.get("inputs", {}).items():
-                if k.startswith("{{"):
-                    continue
-                inputs_resolved[k] = resolve_val(v, local_to_global, imports, variables)
-            node["inputs"] = inputs_resolved
-            workflow[gid] = node
-        exports = {}
-        for en, ed in template.get("exports", {}).items():
-            if ed["node"] in local_to_global:
-                exports[en] = [local_to_global[ed["node"]], ed["output"]]
-        return exports
-
-    # Extract params
-    checkpoint = params.get("checkpoint", "")
-    positive_prompt = params.get("positive_prompt", "")
-    negative_prompt = params.get("negative_prompt", "")
-    clip_skip = int(params.get("clip_skip", -2))
-    steps = int(params.get("steps", 19))
-    cfg = float(params.get("cfg", 4.0))
-    sampler_name = params.get("sampler_name", "euler_ancestral")
-    scheduler = params.get("scheduler", "normal")
-    denoise = float(params.get("denoise", 0.5))
-    batch_count = int(params.get("batch_count", 1))
-    output_dir = params.get("_output_dir", "i2i-batch")
-    uploaded_image = params.get("_uploaded_image", "input.png")
-
-    # --- Setup block (checkpoint + clip_skip + prompts) ---
-    setup_tmpl = copy.deepcopy(load_block("setup.json"))
-
-    # Inject LoRAs
-    raw_loras = params.get("loras", [])
-    if raw_loras:
-        _reload_models()
-        prev_model = ["checkpoint", 0]
-        prev_clip = ["clip_skip", 0]
-        lora_nodes = {}
-        for i, lora in enumerate(raw_loras):
-            lora_file = lora.get("file", "") if isinstance(lora, dict) else lora
-            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
-            if not lora_file:
-                continue
-            lora_id = f"lora_{i}"
-            lora_nodes[lora_id] = {
-                "inputs": {
-                    "lora_name": lora_file,
-                    "strength_model": strength,
-                    "strength_clip": strength,
-                    "model": prev_model,
-                    "clip": prev_clip,
-                },
-                "class_type": "LoraLoader",
-                "_meta": {"title": f"LoRA: {lora_file[:30]}"}
-            }
-            prev_model = [lora_id, 0]
-            prev_clip = [lora_id, 1]
-
-        if lora_nodes:
-            setup_tmpl["nodes"].update(lora_nodes)
-            setup_tmpl["nodes"]["pos_prompt"]["inputs"]["clip"] = prev_clip
-            setup_tmpl["nodes"]["neg_prompt"]["inputs"]["clip"] = prev_clip
-            last_lora = list(lora_nodes.keys())[-1]
-            setup_tmpl["exports"]["model"] = {"node": last_lora, "output": 0}
-            setup_tmpl["exports"]["clip"] = {"node": last_lora, "output": 1}
-
-    setup_vars = {
-        "checkpoint": checkpoint,
-        "clip_skip": clip_skip,
-        "positive_prompt": positive_prompt,
-        "negative_prompt": negative_prompt,
-    }
-    setup_exports = instantiate("setup", setup_tmpl, setup_vars, {})
-
-    # --- LoadImage + VAEEncode (injected directly) ---
-    load_img_id = next_id()
-    workflow[load_img_id] = {
-        "inputs": {"image": uploaded_image},
-        "class_type": "LoadImage",
-        "_meta": {"title": "Load Input Image"}
-    }
-    vae_enc_id = next_id()
-    workflow[vae_enc_id] = {
-        "inputs": {
-            "pixels": [load_img_id, 0],
-            "vae": setup_exports["vae"],
-        },
-        "class_type": "VAEEncode",
-        "_meta": {"title": "VAE Encode Input"}
-    }
-    latent_ref = [vae_enc_id, 0]
-
-    # --- Generate blocks (batch variations with different seeds) ---
-    resolved_seeds = {}
-    gen_tmpl = load_block("generate.json")
-
-    for i in range(batch_count):
-        seed = int(params.get("seed", -1))
-        if seed == -1:
-            seed = random.randint(0, 2**53)
-        elif batch_count > 1 and i > 0:
-            seed = seed + i
-        resolved_seeds[f"batch_{i+1}"] = seed
-
-        gen_vars = {
-            "seed": seed, "steps": steps, "cfg": cfg,
-            "sampler_name": sampler_name, "scheduler": scheduler,
-            "denoise": denoise, "output_prefix": output_dir,
-            "batch_num": str(i + 1),
-        }
-        gen_imports = {
-            "model": setup_exports["model"],
-            "positive": setup_exports["positive"],
-            "negative": setup_exports["negative"],
-            "vae": setup_exports["vae"],
-            "latent_image": latent_ref,
-        }
-        instantiate(f"gen_{i}", gen_tmpl, gen_vars, gen_imports)
-
-    return workflow, resolved_seeds
-
-
-def _assemble_t2i_batch_workflow(manifest: dict, params: dict) -> tuple:
-    """Assemble a simple T2I batch workflow: checkpoint + clip_skip + loras + generate."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
-
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
-
-    workflow = {}
-    node_counter = [100]
-
-    def next_id():
-        node_counter[0] += 1
-        return str(node_counter[0])
-
-    def resolve_val(val, local_map, imports, variables):
-        if isinstance(val, list) and len(val) == 2:
-            ref_id, ref_out = val
-            if isinstance(ref_id, str) and ref_id in local_map:
-                return [local_map[ref_id], ref_out]
-            return val
-        if isinstance(val, str):
-            if val.startswith("{{") and val.endswith("}}"):
-                vn = val[2:-2]
-                if vn in imports:
-                    return imports[vn]
-                if vn in variables:
-                    return variables[vn]
-                return val
-            for vk, vv in variables.items():
-                val = val.replace("{{" + vk + "}}", str(vv))
-            return val
-        if isinstance(val, dict):
-            return {k: resolve_val(v, local_map, imports, variables) for k, v in val.items()}
-        return val
-
-    def instantiate(name, template, variables, imports):
-        local_to_global = {lid: next_id() for lid in template["nodes"]}
-        for lid, ndef in template["nodes"].items():
-            gid = local_to_global[lid]
-            node = {"class_type": ndef["class_type"], "_meta": dict(ndef.get("_meta", {}))}
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-            inputs_resolved = {}
-            for k, v in ndef.get("inputs", {}).items():
-                if k.startswith("{{"):
-                    continue
-                inputs_resolved[k] = resolve_val(v, local_to_global, imports, variables)
-            node["inputs"] = inputs_resolved
-            workflow[gid] = node
-        exports = {}
-        for en, ed in template.get("exports", {}).items():
-            if ed["node"] in local_to_global:
-                exports[en] = [local_to_global[ed["node"]], ed["output"]]
-        return exports
-
-    # Extract params
-    checkpoint = params.get("checkpoint", "")
-    positive_prompt = params.get("positive_prompt", "")
-    negative_prompt = params.get("negative_prompt", "")
-    clip_skip = int(params.get("clip_skip", -2))
-    width = int(params.get("width", 832))
-    height = int(params.get("height", 1216))
-    batch_size = int(params.get("batch_size", 1))
-    steps = int(params.get("steps", 19))
-    cfg = float(params.get("cfg", 4.0))
-    sampler_name = params.get("sampler_name", "euler_ancestral")
-    scheduler = params.get("scheduler", "normal")
-    denoise = float(params.get("denoise", 1.0))
-    seed = int(params.get("seed", -1))
-    if seed == -1:
-        seed = random.randint(0, 2**53)
-    output_dir = params.get("_output_dir", "t2i-batch")
-
-    # --- Setup block ---
-    setup_tmpl = copy.deepcopy(load_block("setup.json"))
-
-    # Inject LoRAs
-    raw_loras = params.get("loras", [])
-    if raw_loras:
-        _reload_models()
-        prev_model = ["checkpoint", 0]
-        prev_clip = ["clip_skip", 0]
-        lora_nodes = {}
-        for i, lora in enumerate(raw_loras):
-            lora_file = lora.get("file", "") if isinstance(lora, dict) else lora
-            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
-            if not lora_file:
-                continue
-            lora_id = f"lora_{i}"
-            lora_nodes[lora_id] = {
-                "inputs": {
-                    "lora_name": lora_file,
-                    "strength_model": strength,
-                    "strength_clip": strength,
-                    "model": prev_model,
-                    "clip": prev_clip,
-                },
-                "class_type": "LoraLoader",
-                "_meta": {"title": f"LoRA: {lora_file[:30]}"}
-            }
-            prev_model = [lora_id, 0]
-            prev_clip = [lora_id, 1]
-
-        if lora_nodes:
-            setup_tmpl["nodes"].update(lora_nodes)
-            setup_tmpl["nodes"]["pos_prompt"]["inputs"]["clip"] = prev_clip
-            setup_tmpl["nodes"]["neg_prompt"]["inputs"]["clip"] = prev_clip
-            last_lora = list(lora_nodes.keys())[-1]
-            setup_tmpl["exports"]["model"] = {"node": last_lora, "output": 0}
-            setup_tmpl["exports"]["clip"] = {"node": last_lora, "output": 1}
-
-    setup_vars = {
-        "checkpoint": checkpoint,
-        "clip_skip": clip_skip,
-        "positive_prompt": positive_prompt,
-        "negative_prompt": negative_prompt,
-    }
-    setup_exports = instantiate("setup", setup_tmpl, setup_vars, {})
-
-    # --- Generate block ---
-    gen_tmpl = load_block("generate.json")
-    gen_vars = {
-        "width": width, "height": height, "batch_size": batch_size,
-        "seed": seed, "steps": steps, "cfg": cfg,
-        "sampler_name": sampler_name, "scheduler": scheduler,
-        "denoise": denoise, "output_prefix": output_dir,
-    }
-    gen_imports = {
-        "model": setup_exports["model"],
-        "positive": setup_exports["positive"],
-        "negative": setup_exports["negative"],
-        "vae": setup_exports["vae"],
-    }
-    instantiate("gen", gen_tmpl, gen_vars, gen_imports)
-
-    return workflow, {"seed": seed}
-
-
-def _assemble_t2i_workflow(manifest: dict, params: dict) -> tuple:
-    """Assemble a T2I workflow from blocks."""
-    wf_id = manifest["id"]
-    blocks_subdir = manifest.get("blocks_dir", "blocks")
-    blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        blocks_dir = WORKFLOWS_DIR / wf_id / blocks_subdir
-    if not blocks_dir.exists():
-        raise FileNotFoundError(f"Blocks directory not found for {wf_id}")
-
-    def load_block(filename):
-        return json.loads((blocks_dir / filename).read_text())
-
-    workflow = {}
-    node_counter = [100]
-
-    def next_id():
-        node_counter[0] += 1
-        return str(node_counter[0])
-
-    def resolve_val(val, local_map, imports, variables):
-        if isinstance(val, list) and len(val) == 2:
-            ref_id, ref_out = val
-            if isinstance(ref_id, str) and ref_id in local_map:
-                return [local_map[ref_id], ref_out]
-            return val
-        if isinstance(val, str):
-            if val.startswith("{{") and val.endswith("}}"):
-                vn = val[2:-2]
-                if vn in imports:
-                    return imports[vn]
-                if vn in variables:
-                    return variables[vn]
-                return val
-            for vk, vv in variables.items():
-                val = val.replace("{{" + vk + "}}", str(vv))
-            return val
-        if isinstance(val, dict):
-            return {k: resolve_val(v, local_map, imports, variables) for k, v in val.items()}
-        return val
-
-    def instantiate(name, template, variables, imports):
-        local_to_global = {lid: next_id() for lid in template["nodes"]}
-        for lid, ndef in template["nodes"].items():
-            gid = local_to_global[lid]
-            node = {"class_type": ndef["class_type"], "_meta": dict(ndef.get("_meta", {}))}
-            title = node["_meta"].get("title", "")
-            for vk, vv in variables.items():
-                title = title.replace("{{" + vk + "}}", str(vv))
-            node["_meta"]["title"] = title
-            inputs_resolved = {}
-            for k, v in ndef.get("inputs", {}).items():
-                if k.startswith("{{"):
-                    continue
-                inputs_resolved[k] = resolve_val(v, local_to_global, imports, variables)
-            node["inputs"] = inputs_resolved
-            workflow[gid] = node
-        exports = {}
-        for en, ed in template.get("exports", {}).items():
-            if ed["node"] in local_to_global:
-                exports[en] = [local_to_global[ed["node"]], ed["output"]]
-        return exports
-
-    # Extract params
-    checkpoint = params.get("checkpoint", "")
-    positive_prompt = params.get("positive_prompt", "")
-    negative_prompt = params.get("negative_prompt", "")
-    width = int(params.get("width", 1024))
-    height = int(params.get("height", 1024))
-    steps = int(params.get("steps", 25))
-    cfg = float(params.get("cfg", 7.0))
-    sampler_name = params.get("sampler_name", "euler")
-    scheduler = params.get("scheduler", "normal")
-    batch_count = int(params.get("batch_count", 1))
-    hires_enabled = params.get("hires_enabled", False)
-    hires_scale = float(params.get("hires_scale", 1.5))
-    hires_steps = int(params.get("hires_steps", 15))
-    hires_denoise = float(params.get("hires_denoise", 0.5))
-    facefix_enabled = params.get("facefix_enabled", False)
-    facefix_steps = int(params.get("facefix_steps", 20))
-    facefix_denoise = float(params.get("facefix_denoise", 0.4))
-    output_dir = params.get("_output_dir", "t2i")
-
-    # --- Setup block ---
-    setup_tmpl = copy.deepcopy(load_block("setup.json"))
-
-    # Inject LoRAs into setup
-    raw_loras = params.get("loras", [])
-    if raw_loras:
-        _reload_models()
-        # Resolve LoRA filenames
-        lora_files = {}
-        for cat in _all_categories():
-            for m in cat.get("models", []):
-                if m.get("file"):
-                    lora_files[m["file"]] = m
-
-        # Add LoraLoader nodes chained after checkpoint
-        prev_model = ["checkpoint", 0]
-        prev_clip = ["checkpoint", 1]
-        lora_nodes = {}
-        for i, lora in enumerate(raw_loras):
-            lora_file = lora.get("file", "") if isinstance(lora, dict) else lora
-            strength = float(lora.get("strength", 1.0)) if isinstance(lora, dict) else 1.0
-            if not lora_file:
-                continue
-            lora_id = f"lora_{i}"
-            lora_nodes[lora_id] = {
-                "inputs": {
-                    "lora_name": lora_file,
-                    "strength_model": strength,
-                    "strength_clip": strength,
-                    "model": prev_model,
-                    "clip": prev_clip,
-                },
-                "class_type": "LoraLoader",
-                "_meta": {"title": f"LoRA: {lora_file[:30]}"}
-            }
-            prev_model = [lora_id, 0]
-            prev_clip = [lora_id, 1]
-
-        if lora_nodes:
-            setup_tmpl["nodes"].update(lora_nodes)
-            setup_tmpl["nodes"]["pos_prompt"]["inputs"]["clip"] = prev_clip
-            setup_tmpl["nodes"]["neg_prompt"]["inputs"]["clip"] = prev_clip
-            last_lora = list(lora_nodes.keys())[-1]
-            setup_tmpl["exports"]["model"] = {"node": last_lora, "output": 0}
-            setup_tmpl["exports"]["clip"] = {"node": last_lora, "output": 1}
-
-    # VAE override
-    vae_override = params.get("vae_override", "")
-    if vae_override:
-        setup_tmpl["nodes"]["vae_override"] = {
-            "inputs": {"vae_name": vae_override},
-            "class_type": "VAELoader",
-            "_meta": {"title": "VAE Override"}
-        }
-        setup_tmpl["exports"]["vae"] = {"node": "vae_override", "output": 0}
-
-    setup_vars = {"checkpoint": checkpoint, "positive_prompt": positive_prompt, "negative_prompt": negative_prompt}
-    setup_exports = instantiate("setup", setup_tmpl, setup_vars, {})
-
-    # --- Generate blocks (batch) ---
-    resolved_seeds = {}
-    gen_tmpl = load_block("generate.json")
-    last_gen_exports = None
-
-    for i in range(batch_count):
-        seed = int(params.get("seed", -1))
-        if seed == -1:
-            seed = random.randint(0, 2**53)
-        elif batch_count > 1 and i > 0:
-            seed = seed + i  # Increment seed for batch
-        resolved_seeds[f"batch_{i+1}"] = seed
-
-        gen_vars = {
-            "width": width, "height": height,
-            "seed": seed, "steps": steps, "cfg": cfg,
-            "sampler_name": sampler_name, "scheduler": scheduler,
-            "batch_num": str(i + 1),
-        }
-        gen_imports = {
-            "model": setup_exports["model"],
-            "positive": setup_exports["positive"],
-            "negative": setup_exports["negative"],
-            "vae": setup_exports["vae"],
-        }
-        gen_exports = instantiate(f"gen_{i}", gen_tmpl, gen_vars, gen_imports)
-
-        # --- Optional hires fix ---
-        current_image = gen_exports["image"]
-        if hires_enabled:
-            hires_tmpl = load_block("hires.json")
-            hires_w = int(width * hires_scale)
-            hires_h = int(height * hires_scale)
-            hires_vars = {
-                "hires_width": hires_w, "hires_height": hires_h,
-                "hires_steps": hires_steps, "hires_denoise": hires_denoise,
-                "seed": seed, "cfg": cfg,
-                "sampler_name": sampler_name, "scheduler": scheduler,
-            }
-            hires_imports = {
-                "model": setup_exports["model"],
-                "positive": setup_exports["positive"],
-                "negative": setup_exports["negative"],
-                "vae": setup_exports["vae"],
-                "image": current_image,
-            }
-            hires_exports = instantiate(f"hires_{i}", hires_tmpl, hires_vars, hires_imports)
-            current_image = hires_exports["image"]
-
-        # --- Optional face fix ---
-        if facefix_enabled:
-            facefix_tmpl = load_block("face_fix.json")
-            facefix_vars = {
-                "seed": seed, "cfg": cfg,
-                "sampler_name": sampler_name, "scheduler": scheduler,
-                "facefix_steps": facefix_steps, "facefix_denoise": facefix_denoise,
-            }
-            facefix_imports = {
-                "model": setup_exports["model"],
-                "clip": setup_exports["clip"],
-                "positive": setup_exports["positive"],
-                "negative": setup_exports["negative"],
-                "vae": setup_exports["vae"],
-                "image": current_image,
-            }
-            facefix_exports = instantiate(f"facefix_{i}", facefix_tmpl, facefix_vars, facefix_imports)
-            current_image = facefix_exports["image"]
-
-        # --- Output block ---
-        out_tmpl = load_block("output.json")
-        out_vars = {"output_dir": output_dir, "batch_num": str(i + 1)}
-        instantiate(f"output_{i}", out_tmpl, out_vars, {"final_image": current_image})
-
-        last_gen_exports = gen_exports
-
-    return workflow, resolved_seeds
+def get_required_models(manifest: dict, params: dict = None) -> set:
+    """Determine required models based on active pipeline stages.
+
+    If params is provided, only models from active stages are included.
+    Otherwise, returns all models from always + all stages.
+    """
+    models = set(manifest.get("required_models", []))
+    always = manifest.get("required_models_map", {}).get("always", [])
+    models.update(always)
+
+    for stage in manifest.get("pipeline", []):
+        if params and not _stage_is_active(stage, params):
+            continue
+        stage_models = stage.get("models", [])
+        if isinstance(stage_models, list):
+            models.update(stage_models)
+        elif isinstance(stage_models, dict):
+            if params and "switch" in stage:
+                value = str(params.get(stage["switch"], stage.get("default", "")))
+                models.update(stage_models.get(value, []))
+            else:
+                for case_models in stage_models.values():
+                    if isinstance(case_models, list):
+                        models.update(case_models)
+    return models
 
 
 # ── API-to-workflow format conversion ────────────────────────────────────────

@@ -543,8 +543,19 @@ async def system_update(request: Request):
             async def _restart():
                 await asyncio.sleep(1)
                 os.chdir(str(BACKEND_DIR))
+                uvicorn_bin = shutil.which("uvicorn")
+                if not uvicorn_bin:
+                    # Fallback: try common venv paths
+                    for candidate in ["/workspace/venv/bin/uvicorn", "/opt/venv/bin/uvicorn"]:
+                        if os.path.isfile(candidate):
+                            uvicorn_bin = candidate
+                            break
+                if not uvicorn_bin:
+                    print("[update] FATAL: uvicorn not found on PATH, cannot restart", flush=True)
+                    auth._maintenance_mode = False
+                    return
                 os.execv(
-                    shutil.which("uvicorn"),
+                    uvicorn_bin,
                     ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"), "--workers", "1"],
                 )
             asyncio.get_event_loop().create_task(_restart())

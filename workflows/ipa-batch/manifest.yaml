@@ -12,6 +12,9 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: true
+  - block: ipa_apply
+    file: "ipa_apply.json"
   - block: generate
     file: "generate.json"
 
