@@ -4,9 +4,9 @@
 # no ComfyUI, no custom nodes. Just Python + backend deps +
 # a ComfyUI stub server for fake responses.
 #
-# Source code is mounted read-only from the host repo.
-# Runtime data (catalogs, db, assets, gallery) lives in a
-# separate volume so it doesn't pollute the git repo.
+# Host repo is mounted for live code editing (backend, frontend, tools).
+# Runtime data (catalogs, database, assets, llm) lives in a persistent
+# volume (~/.studio-dev) that survives container rebuilds.
 #
 # Build:
 #   docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
@@ -16,10 +16,10 @@
 #     -p 8000:8000 -p 8188:8188 \
 #     -v $(pwd)/backend:/workspace/studio/backend \
 #     -v $(pwd)/frontend:/workspace/studio/frontend \
+#     -v $(pwd)/tools:/workspace/studio/tools \
 #     -v $(pwd)/workflows:/workspace/studio/workflows \
 #     -v $(pwd)/version.json:/workspace/studio/version.json \
 #     -v ~/.studio-dev:/workspace/studio/data \
-#     -e API_KEY=test \
 #     comfyui-studio-dev
 # ============================================================
 

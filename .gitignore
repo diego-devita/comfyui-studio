@@ -9,4 +9,4 @@ __pycache__/
 .repo/
 .session_secret
 events.jsonl
-db/
+database/

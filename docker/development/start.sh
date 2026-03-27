@@ -10,20 +10,23 @@ COMFYUI_DIR="${COMFYUI_DIR:-/workspace/ComfyUI}"
 DATA_DIR="${STUDIO_DIR}/data"
 REPO_CATALOGS="/repo-catalogs"
 
-# ── Data directories (persisted in ~/.studio-dev on host) ──
+# ── Persistent data directories ──
+# These live in DATA_DIR which should be a mounted volume (~/.studio-dev).
+# If not mounted, they still work but are lost on container removal.
 mkdir -p "${DATA_DIR}/catalogs" \
+         "${DATA_DIR}/database" \
          "${DATA_DIR}/assets/input" \
          "${DATA_DIR}/assets/output" \
-         "${DATA_DIR}/db" \
          "${DATA_DIR}/llm/models"
 
-# ── Fake ComfyUI tree (persisted, models survive container restart) ──
-# Mirrors the real ComfyUI directory structure so downloads work.
-# All dest values from catalogs (checkpoints, loras, vae, etc.) go here.
+# ── Fake ComfyUI tree ──
+# Mirrors real ComfyUI directory structure so model downloads land correctly.
 mkdir -p "${DATA_DIR}/comfyui/models/checkpoints" \
+         "${DATA_DIR}/comfyui/models/diffusion_models" \
          "${DATA_DIR}/comfyui/models/loras" \
          "${DATA_DIR}/comfyui/models/vae" \
          "${DATA_DIR}/comfyui/models/clip" \
+         "${DATA_DIR}/comfyui/models/text_encoders" \
          "${DATA_DIR}/comfyui/models/controlnet" \
          "${DATA_DIR}/comfyui/models/ipadapter" \
          "${DATA_DIR}/comfyui/models/upscale_models" \
@@ -38,7 +41,7 @@ if [ -e "${COMFYUI_DIR}" ] || [ -L "${COMFYUI_DIR}" ]; then
 fi
 ln -sfn "${DATA_DIR}/comfyui" "${COMFYUI_DIR}"
 
-# ── Seed catalogs from repo (first run only) ──
+# ── Seed catalogs from repo (first boot only) ──
 if [ -d "${REPO_CATALOGS}" ]; then
     for f in models.json loras.json llm.json; do
         if [ ! -f "${DATA_DIR}/catalogs/${f}" ] && [ -f "${REPO_CATALOGS}/${f}" ]; then
@@ -48,8 +51,10 @@ if [ -d "${REPO_CATALOGS}" ]; then
     done
 fi
 
-# ── Symlink runtime dirs into locations the backend expects ──
-for name in catalogs assets db llm; do
+# ── Symlink persistent dirs into STUDIO_DIR ──
+# The backend expects catalogs/, database/, assets/, llm/ under STUDIO_DIR.
+# We symlink them from the persistent data volume.
+for name in catalogs database assets llm; do
     target="${STUDIO_DIR}/${name}"
     source="${DATA_DIR}/${name}"
     if [ -e "${target}" ] || [ -L "${target}" ]; then

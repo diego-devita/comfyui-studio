@@ -62,7 +62,7 @@ LLAMA_SERVER_PATH = Path(os.environ.get("LLAMA_SERVER_PATH", "/opt/llama-server"
 LLAMA_SERVER_PORT = int(os.environ.get("LLAMA_SERVER_PORT", "8080"))
 
 # DB
-DB_DIR = STUDIO_DIR / "db"
+DB_DIR = STUDIO_DIR / "database"
 
 # Auth
 SESSION_SECRET_PATH = STUDIO_DIR / ".session_secret"

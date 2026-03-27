@@ -1,6 +1,6 @@
 """ComfyUI Studio — SQLite database layer.
 
-Single DB file at STUDIO_DIR/db/studio.db.
+Single DB file at STUDIO_DIR/database/studio.db.
 Thread-safe via WAL mode + serialized access.
 All timestamps stored as ISO 8601 strings (Italian timezone).
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from config import STUDIO_DIR
 
-DB_PATH = STUDIO_DIR / "db" / "studio.db"
+DB_PATH = STUDIO_DIR / "database" / "studio.db"
 _local = threading.local()
 
 

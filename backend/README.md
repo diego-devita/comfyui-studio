@@ -276,7 +276,7 @@ STUDIO_DIR (/workspace/studio)
 ├── llm/
 │   ├── models/          LLM_MODELS_DIR     — downloaded LLM GGUF files
 │   └── config.json      LLM_CONFIG_PATH    — llama-server config
-├── db/                  DB_DIR             — SQLite databases (studio.db, gallery.db)
+├── database/            DB_DIR             — SQLite databases (studio.db)
 ├── version.json         VERSION_JSON       — component versions
 └── .session_secret      SESSION_SECRET_PATH — HMAC signing key
 ```
