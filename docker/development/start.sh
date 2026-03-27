@@ -64,7 +64,7 @@ for name in catalogs database assets llm; do
 done
 
 # ── Start ComfyUI stub server (background) ──
-echo "[1/2] Starting ComfyUI stub on port ${COMFYUI_PORT}..."
+echo "[1/3] Starting ComfyUI stub on port ${COMFYUI_PORT}..."
 python3 /app/comfyui_stub.py --port "${COMFYUI_PORT}" &
 
 for i in $(seq 1 10); do
@@ -75,8 +75,28 @@ for i in $(seq 1 10); do
     sleep 0.5
 done
 
+# ── Start Datasette (background, waits for DB to exist) ──
+DATASETTE_PORT="${DATASETTE_PORT:-8001}"
+echo "[2/3] Starting Datasette on port ${DATASETTE_PORT}..."
+(
+    # Wait for studio.db to be created by the backend on first boot
+    for i in $(seq 1 30); do
+        [ -f "${DATA_DIR}/database/studio.db" ] && break
+        sleep 1
+    done
+    datasette "${DATA_DIR}/database/studio.db" \
+        --host 0.0.0.0 \
+        --port "${DATASETTE_PORT}" \
+        --setting base_url /admin/db/ \
+        --metadata /app/datasette/metadata.json \
+        --static static:/app/datasette/ \
+        --setting default_allow_sql true \
+        --setting allow_download false \
+        --setting sql_time_limit_ms 5000
+) &
+
 # ── Start Studio backend with hot reload ──
-echo "[2/2] Starting Studio backend on port ${STUDIO_PORT} (hot reload)..."
+echo "[3/3] Starting Studio backend on port ${STUDIO_PORT} (hot reload)..."
 cd "${STUDIO_DIR}/backend"
 uvicorn main:app \
     --host 0.0.0.0 \

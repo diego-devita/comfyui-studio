@@ -117,6 +117,19 @@ def _get_pod_ram_bytes() -> int:
 
 
 
+def _get_db_counts() -> dict:
+    """Get row counts for all studio.db tables."""
+    try:
+        conn = _db._get_conn()
+        counts = {}
+        for table in ("jobs", "events", "downloads", "workflows"):
+            row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            counts[table] = row[0] if row else 0
+        return counts
+    except Exception:
+        return {}
+
+
 # ── Health endpoint ──────────────────────────────────────────────────────────
 
 
@@ -328,6 +341,10 @@ async def system_status():
         "comfyui": {"status": comfyui_status},
         "nodes": {"total_packages": total_packages},
         "disk": {"total_bytes": vol_size, "used_bytes": _cached_disk_used, "free_bytes": free_bytes},
+        "database": {
+            "tables": _get_db_counts(),
+            "datasette_url": "http://localhost:8001/admin/db/" if DEV_MODE else None,
+        },
     }
 
 

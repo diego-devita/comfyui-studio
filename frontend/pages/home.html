@@ -347,6 +347,7 @@
     <!-- System Info -->
     <div class="sys-info" id="sysInfo">
       <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
+      <div id="dbStatus"></div>
       <div id="diskInfo">Disk: --</div>
     </div>
   </div>
@@ -487,6 +488,23 @@
       $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort) + ' <a href="' + comfyUrl + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open ComfyUI"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
     } else {
       $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: ' + (comfy.status || 'Not running'));
+    }
+
+    // Database info
+    var db = data.database || {};
+    var $dbStatus = document.getElementById('dbStatus');
+    if (db.tables) {
+      var t = db.tables;
+      var parts = [];
+      if (t.jobs) parts.push(t.jobs + ' jobs');
+      if (t.events) parts.push(t.events + ' events');
+      if (t.downloads) parts.push(t.downloads + ' downloads');
+      if (t.workflows) parts.push(t.workflows + ' workflows');
+      var dbHtml = dotHtml('green', 'Database: ' + parts.join(', '));
+      if (db.datasette_url) {
+        dbHtml += ' <a href="' + db.datasette_url + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Explore database"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
+      }
+      $dbStatus.innerHTML = dbHtml;
     }
 
     // Disk info
