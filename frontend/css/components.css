@@ -22,11 +22,13 @@ header {
 .logo span { color: var(--accent); }
 .logo small {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 15px;
   letter-spacing: 3px;
-  color: var(--muted);
+  color: black;
+  background: gray;
   text-transform: uppercase;
   margin-left: 14px;
+  margin-top: 12px;
   font-weight: 400;
 }
 
@@ -345,7 +347,7 @@ main { padding: 32px 40px 64px; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .base-model-pill {
-  padding: 2px 10px 1px 10px;
+  padding: 1px 10px 1px 10px;
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
@@ -354,6 +356,23 @@ main { padding: 32px 40px 64px; }
   background: brown;
   color: white;
   border: none;
+}
+
+/* ── JSON eye icon (view model JSON) ── */
+.json-eye {
+  --radius: 20px;
+  width: var(--radius);
+  height: var(--radius);
+  background: #fff;
+  line-height: 10px;
+  vertical-align: bottom;
+  color: white;
+}
+
+/* ── Name bracket tag (e.g. [SDXL] suffix in card titles) ── */
+.name-bracket-tag {
+  color: brown;
+  font-weight: 500;
 }
 
 /* ── Progress Bar (models/loras download) ── */
@@ -743,12 +762,16 @@ main { padding: 32px 40px 64px; }
   inset: 0;
   background: rgba(10, 10, 15, 0.95);
   z-index: 20000;
-  overflow-y: auto;
+  justify-content: center;
+  align-items: center;
   padding: 32px;
+}
+.json-viewer-overlay[style*="block"] {
+  display: flex !important;
 }
 .json-viewer-box {
   max-width: 700px;
-  margin: 0 auto;
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -781,11 +804,24 @@ main { padding: 32px 40px 64px; }
 }
 
 /* ── Responsive (shared) ── */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   header { padding: 20px 20px; }
+  main { padding: 24px 20px 48px; }
+
+  /* Status bar: allow height to grow, wrap stats */
+  .status-bar {
+    height: auto;
+    min-height: var(--status-bar-h);
+    flex-wrap: wrap;
+    padding: 6px 20px;
+    gap: 2px 0;
+  }
+  .stat { padding: 4px 12px; }
+}
+
+@media (max-width: 640px) {
   .status-bar { padding: 0 20px; }
   .filter-panel { padding: 0 20px; }
-  main { padding: 20px 20px 48px; }
   .card-grid { grid-template-columns: 1fr; }
   .card-grid.compact .model-card {
     grid-template-columns: 1fr auto auto;
@@ -795,4 +831,11 @@ main { padding: 32px 40px 64px; }
   .logo { font-size: 18px; }
   .logo small { display: block; margin-left: 0; margin-top: 4px; }
   .filter-label { min-width: 60px; }
+}
+
+@media (max-width: 480px) {
+  header { padding: 16px 16px; }
+  main { padding: 16px 16px 48px; }
+  .status-bar { padding: 0 16px; }
+  .filter-panel { padding: 0 16px; }
 }

@@ -80,6 +80,12 @@
   .comp-table td:last-child { text-align: center; }
   .comp-table th:last-child { text-align: center; }
 
+  @media (max-width: 768px) {
+    .comp-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .comp-table { min-width: 520px; }
+    .comp-table th, .comp-table td { padding: 10px 12px; }
+  }
+
   /* ── Toggle Switch ── */
 
   .status-dot {
@@ -259,9 +265,9 @@
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
   <a href="/admin/llm" class="nav-link">LLM</a>
-  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
-  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 
 <!-- Header -->
@@ -322,6 +328,7 @@
     </div>
 
     <!-- Component Table -->
+    <div class="comp-table-wrap">
     <table class="comp-table" id="compTable">
       <thead>
         <tr>
@@ -335,10 +342,12 @@
       <tbody id="compBody">
       </tbody>
     </table>
+    </div>
 
     <!-- System Info -->
     <div class="sys-info" id="sysInfo">
       <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
+      <div id="dbStatus"></div>
       <div id="diskInfo">Disk: --</div>
     </div>
   </div>
@@ -479,6 +488,23 @@
       $comfyStatus.innerHTML = dotHtml('green', 'ComfyUI: Running on port ' + comfyPort) + ' <a href="' + comfyUrl + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open ComfyUI"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
     } else {
       $comfyStatus.innerHTML = dotHtml('red', 'ComfyUI: ' + (comfy.status || 'Not running'));
+    }
+
+    // Database info
+    var db = data.database || {};
+    var $dbStatus = document.getElementById('dbStatus');
+    if (db.tables) {
+      var t = db.tables;
+      var parts = [];
+      if (t.jobs) parts.push(t.jobs + ' jobs');
+      if (t.events) parts.push(t.events + ' events');
+      if (t.downloads) parts.push(t.downloads + ' downloads');
+      if (t.workflows) parts.push(t.workflows + ' workflows');
+      var dbHtml = dotHtml('green', 'Database: ' + parts.join(', '));
+      if (db.browser_url) {
+        dbHtml += ' <a href="' + db.browser_url + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Explore database"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
+      }
+      $dbStatus.innerHTML = dbHtml;
     }
 
     // Disk info

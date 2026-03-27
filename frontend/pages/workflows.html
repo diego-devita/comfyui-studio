@@ -192,6 +192,8 @@
     border-radius: 12px;
     border: 1px solid var(--border);
     color: var(--muted);
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
   .detail-item.present { border-color: var(--success); color: var(--success); }
   .detail-item.missing { border-color: var(--border); color: var(--muted); }
@@ -210,9 +212,9 @@
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
   <a href="/admin/llm" class="nav-link">LLM</a>
-  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
-  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 
 <!-- Header -->
@@ -268,6 +270,7 @@
   function handleWorkflowData(data) {
     workflows = Array.isArray(data) ? data : (data.workflows || []);
     renderCards();
+    _startPollIfNeeded();
   }
 
   function renderCards() {
@@ -299,14 +302,16 @@
     const nodesPresent = ns.installed || 0;
     const nodesTotal = ns.total || 0;
 
-    // Build detail arrays: all required models with present/missing status
+    // Build detail arrays: all required models with present/missing/downloading status
     const missingModels = new Set(ms.missing || []);
+    const downloadingModels = new Set(ms.downloading || []);
+    const downloadingCount = downloadingModels.size;
     const allRequiredModels = (wf.required_models || []).length > 0
       ? wf.required_models
-      : [...(ms.missing || [])];
+      : [...(ms.missing || []), ...(ms.downloading || [])];
     const models = allRequiredModels.map(f => ({
       name: f,
-      status: missingModels.has(f) ? 'missing' : 'present'
+      status: downloadingModels.has(f) ? 'downloading' : missingModels.has(f) ? 'missing' : 'present'
     }));
 
     const missingNodes = new Set(ns.missing || []);
@@ -339,9 +344,12 @@
     const modelCountClass = allModelsOk ? 'all-good' : 'has-missing';
     const nodeCountClass = allNodesOk ? 'all-good' : 'has-missing';
 
-    const installBtn = !allModelsOk
-      ? '<button class="btn btn--sm dep-action" data-install="' + escHtml(wf.id) + '">Install Missing</button>'
-      : '';
+    var installBtn = '';
+    if (downloadingCount > 0) {
+      installBtn = '<button class="btn btn--sm dep-action" disabled><span class="spinner sm"></span> Downloading ' + (modelsPresent + downloadingCount) + '/' + modelsTotal + '</button>';
+    } else if (!allModelsOk) {
+      installBtn = '<button class="btn btn--sm dep-action" data-install="' + escHtml(wf.id) + '">Install Missing</button>';
+    }
 
     card.innerHTML =
       '<div class="wf-card-top">' +
@@ -429,7 +437,8 @@
         btn.disabled = false;
         btn.textContent = 'Install Missing';
       } else {
-        btn.textContent = 'Queued';
+        // Reload to pick up new download state, then start polling
+        initialLoad();
       }
     } catch (e) {
       if (e.message !== 'auth') {
@@ -438,6 +447,41 @@
         btn.textContent = 'Install Missing';
       }
     }
+  }
+
+  // ── Auto-poll while downloads are active ──
+  var _pollTimer = null;
+  function _startPollIfNeeded() {
+    if (_pollTimer) return;
+    var hasActive = workflows.some(function(wf) {
+      return wf.models_status && wf.models_status.downloading && wf.models_status.downloading.length > 0;
+    });
+    if (!hasActive) return;
+    _pollTimer = setInterval(async function() {
+      try {
+        var resp = await apiFetch('/api/admin/workflows');
+        if (!resp.ok) return;
+        var data = await resp.json();
+        var list = Array.isArray(data) ? data : (data.workflows || []);
+        // Check if any workflow just became ready
+        list.forEach(function(wf) {
+          var old = workflows.find(function(o) { return o.id === wf.id; });
+          if (old && !old.ready && wf.ready) {
+            showToast('All models installed for ' + (wf.name || wf.id), 3000, 'success');
+          }
+        });
+        workflows = list;
+        renderCards();
+        // Stop polling if no more active downloads
+        var stillActive = list.some(function(wf) {
+          return wf.models_status && wf.models_status.downloading && wf.models_status.downloading.length > 0;
+        });
+        if (!stillActive) {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+        }
+      } catch(e) {}
+    }, 3000);
   }
 
   // ── Boot ──

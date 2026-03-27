@@ -12,9 +12,12 @@ app = FastAPI(title="ComfyUI Studio")
 # ── Configuration ────────────────────────────────────────────────────────────
 
 API_KEY = os.environ.get("API_KEY", "changeme")
+DEV_MODE = os.environ.get("DEV_MODE", "false").lower() == "true"
+DEV_DOWNLOAD_DELAY = int(os.environ.get("DEV_DOWNLOAD_DELAY", "5"))
 CIVITAI_API_KEY = os.environ.get("CIVITAI_API_KEY", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
+HOSTING = os.environ.get("HOSTING", "").lower().strip()
 
 # ── Studio directory ─────────────────────────────────────────────────────────
 
@@ -46,9 +49,6 @@ LLM_MODELS_JSON = CATALOGS_DIR / "llm.json"
 # Workflows — working copy outside git (editable on pod)
 WORKFLOWS_DIR = STUDIO_DIR / "workflows"
 
-# Jobs (legacy JSON — to be replaced by DB)
-JOBS_DIR = STUDIO_DIR / "jobs"
-
 # Assets (input/output for ComfyUI)
 ASSETS_DIR = STUDIO_DIR / "assets"
 ASSETS_INPUT_DIR = ASSETS_DIR / "input"
@@ -62,7 +62,7 @@ LLAMA_SERVER_PATH = Path(os.environ.get("LLAMA_SERVER_PATH", "/opt/llama-server"
 LLAMA_SERVER_PORT = int(os.environ.get("LLAMA_SERVER_PORT", "8080"))
 
 # DB
-DB_DIR = STUDIO_DIR / "db"
+DB_DIR = STUDIO_DIR / "database"
 
 # Auth
 SESSION_SECRET_PATH = STUDIO_DIR / ".session_secret"

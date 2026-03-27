@@ -8,19 +8,54 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
-  main { max-width: 800px; margin: 0 auto; }
+  main { max-width: 900px; margin: 0 auto; }
 
-  .section-title {
+  /* ── Unlock bar ── */
+  .unlock-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .unlock-bar .status-text { color: var(--muted); flex: 1; }
+  .unlock-bar .status-text.revealed { color: var(--accent); }
+  .unlock-bar .countdown-wrap {
+    width: 120px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .unlock-bar .countdown-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transform-origin: left;
+    animation: countdown-shrink 30s linear forwards;
+  }
+  @keyframes countdown-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+  /* ── Group titles ── */
+  .group-title {
     font-family: var(--mono);
     font-size: 11px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 16px;
-    padding-bottom: 8px;
+    margin-bottom: 8px;
+    margin-top: 24px;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
   }
+  .group-title:first-of-type { margin-top: 0; }
 
+  /* ── Table ── */
   .env-table {
     width: 100%;
     border-collapse: collapse;
@@ -28,11 +63,18 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     overflow: hidden;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
+    table-layout: fixed;
   }
+  .env-table th:nth-child(1),
+  .env-table td:nth-child(1) { width: 28%; }
+  .env-table th:nth-child(2),
+  .env-table td:nth-child(2) { width: 30%; }
+  .env-table th:nth-child(3),
+  .env-table td:nth-child(3) { width: 42%; }
   .env-table th,
   .env-table td {
-    padding: 10px 16px;
+    padding: 8px 14px;
     text-align: left;
     font-family: var(--mono);
     font-size: 12px;
@@ -46,10 +88,25 @@
     background: rgba(20, 20, 32, 0.8);
   }
   .env-table tr:last-child td { border-bottom: none; }
-  .env-key { color: var(--text); font-weight: 700; }
+  .env-key { color: var(--text); font-weight: 700; word-break: break-all; }
   .env-value { color: var(--text); word-break: break-all; }
   .env-value.masked { color: var(--muted); }
+  .env-value.revealed { color: var(--accent); }
   .env-value.not-set { color: var(--muted); font-style: italic; }
+  .env-desc { color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.6; }
+  .env-default { color: var(--muted); opacity: 0.6; word-break: break-all; }
+  .env-edit-input {
+    width: 80px;
+    padding: 4px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .env-edit-input:focus { outline: none; border-color: var(--accent); }
+  .env-edit-input.saved { border-color: var(--success); }
   .env-dot {
     display: inline-block;
     width: 6px;
@@ -60,6 +117,175 @@
   }
   .env-dot.set { background: var(--success); }
   .env-dot.unset { background: var(--muted); }
+
+  /* ── Reveal dialog ── */
+  #revealDialog { max-width: 380px; }
+  #revealDialog .reveal-error {
+    color: var(--error);
+    font-size: 12px;
+    font-family: var(--mono);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #revealDialog input[type="password"] {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #revealDialog input[type="password"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* ── Accordion ── */
+  .settings-accordion {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .accordion-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .accordion-toggle:hover { background: #1a1a2a; }
+  .accordion-arrow {
+    font-size: 10px;
+    transition: transform 0.3s ease;
+    color: var(--muted);
+  }
+  .accordion-toggle.open .accordion-arrow { transform: rotate(180deg); }
+  .accordion-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
+  }
+  .accordion-body.open { grid-template-rows: 1fr; }
+  .accordion-body-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .accordion-body-inner .group-title:first-of-type { margin-top: 16px; }
+  .accordion-body-inner .group-title { margin-left: 20px; margin-right: 20px; }
+  .accordion-body-inner .env-table { margin-left: 0; margin-right: 0; border-radius: 0; border-left: none; border-right: none; }
+  .accordion-body-inner .env-table:last-child { margin-bottom: 0; border-bottom: none; }
+
+  /* ── Action Cards ── */
+  .settings-section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .action-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    margin-bottom: 12px;
+  }
+  .action-card-icon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    background-color: #4dabf7;
+  }
+  .action-card-text { flex: 1; min-width: 0; }
+  .action-card-text h3 {
+    font-family: var(--display);
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .action-card-text p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .action-card .btn { flex-shrink: 0; }
+  .action-card .btn.success { border-color: var(--success); color: var(--success); }
+  .action-card .btn.success:hover { background: var(--success); color: #0a0a0f; }
+
+  /* ── Info button ── */
+  .info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--muted);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: var(--mono);
+    cursor: pointer;
+    margin-left: 8px;
+    vertical-align: middle;
+    transition: all 0.15s;
+  }
+  .info-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Flush status indicator ── */
+  .flush-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 10px;
+  }
+  .flush-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .flush-status-dot.safe { background: var(--success); }
+  .flush-status-dot.busy { background: var(--warning, #f0a050); }
+
+  /* ── Flush info dialog ── */
+  #flushInfoDialog .studio-dialog-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    white-space: normal;
+  }
+  #flushInfoDialog .studio-dialog-body::-webkit-scrollbar { width: 6px; }
+  #flushInfoDialog .studio-dialog-body::-webkit-scrollbar-track { background: transparent; }
+  #flushInfoDialog .studio-dialog-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #flushInfoDialog .studio-dialog-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  #flushInfoDialog h4 { margin: 10px 0 4px; font-family: var(--display); font-size: 13px; font-weight: 700; }
+  #flushInfoDialog h4:first-child { margin-top: 0; }
+  #flushInfoDialog p, #flushInfoDialog ul { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; margin: 0 0 2px; }
+  #flushInfoDialog ul { padding-left: 18px; margin: 0; }
+  #flushInfoDialog li { margin-bottom: 2px; }
+  #flushInfoDialog code { color: var(--accent); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -74,9 +300,9 @@
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
   <a href="/admin/llm" class="nav-link">LLM</a>
-  <a href="/admin/settings" class="nav-link active"><span class="icon icon-gear icon-md"></span></a>
+  <a href="/admin/settings" class="nav-link active"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
-  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 
 <header>
@@ -84,48 +310,363 @@
 </header>
 
 <main>
-  <div class="section-title">Environment Variables</div>
-  <table class="env-table" id="envTable">
-    <thead>
-      <tr>
-        <th>Variable</th>
-        <th>Value</th>
-      </tr>
-    </thead>
-    <tbody id="envBody">
-      <tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>
-    </tbody>
-  </table>
+  <!-- Actions -->
+  <div class="settings-section-title">Actions</div>
+  <div class="action-card" id="flushDbCard">
+    <span class="icon icon-database action-card-icon"></span>
+    <div class="action-card-text">
+      <h3>Prepare Safe Shutdown <button class="info-btn" id="flushInfoBtn">?</button></h3>
+      <p>Flush SQLite WAL files to disk and stop gallery downloads. Wait for the green light before flushing.</p>
+      <div class="flush-status" id="flushStatus"></div>
+    </div>
+    <button class="btn" id="flushDbBtn">Flush DB</button>
+  </div>
+
+  <!-- Environment Variables (accordion) -->
+  <div class="settings-accordion">
+    <button class="accordion-toggle" id="envAccordionToggle">
+      <span class="accordion-arrow">&#9660;</span>
+      Environment Variables
+    </button>
+    <div class="accordion-body" id="envAccordionBody">
+      <div class="accordion-body-inner">
+        <div class="unlock-bar" id="unlockBar" style="margin: 16px 20px;">
+          <span class="status-text" id="unlockStatus">Sensitive values are masked</span>
+          <button class="btn btn-sm" id="unlockBtn">Reveal secrets</button>
+        </div>
+        <div id="envGroups"><p style="color:var(--muted); padding: 16px 20px;">Loading...</p></div>
+      </div>
+    </div>
+  </div>
 </main>
+
+<dialog class="studio-dialog" id="flushInfoDialog" style="max-width:560px;">
+  <div class="studio-dialog-body">
+    <h4>What it does</h4>
+    <ul>
+      <li>Runs <code>PRAGMA wal_checkpoint(TRUNCATE)</code> on both SQLite databases (jobs and gallery), merging WAL files into the main <code>.db</code> files</li>
+      <li>Stops any running gallery image downloads</li>
+    </ul>
+
+    <h4>Why it matters</h4>
+    <p>SQLite in WAL mode keeps recent writes in a separate <code>-wal</code> file. If the process is killed before this file is merged back, those writes are lost or the database can become corrupted.</p>
+
+    <h4>Automatic shutdown</h4>
+    <p>The backend registers a SIGTERM handler that performs this same flush. Docker sends SIGTERM before SIGKILL with a 10-second grace period, so a normal <code>docker stop</code> flushes correctly. On RunPod, pod termination may not deliver SIGTERM reliably or allow enough time.</p>
+
+    <h4>What can go wrong without flushing</h4>
+    <ul>
+      <li><strong>Jobs &amp; events database</strong> (<code>db/studio.db</code>) — No recovery mechanism. Contains job records (prompt_id, status, params, timestamps) and the activity event log. Recent entries can be permanently lost. In the worst case the DB file becomes unreadable.</li>
+      <li><strong>Gallery database</strong> (<code>db/gallery.db</code>) — Has built-in recovery: at startup, if corruption is detected, it deletes the DB and rebuilds from the image files on disk. No real data loss, but the rebuild takes time.</li>
+      <li><strong>Downloads in progress</strong> — Interrupted gallery downloads leave partial files. They can be retried.</li>
+      <li><strong>Job output markers</strong> (<code>.incomplete</code> files) — If a job was running, the marker stays. Assets page will show an ".incomplete" badge until manually cleaned.</li>
+      <li><strong>Anything else using the DB</strong> — Any backend component that writes to SQLite (e.g. model download state tracking) follows the same WAL logic. Unmerged writes in the WAL file are lost if the process dies before checkpoint.</li>
+    </ul>
+
+    <h4>Why timing matters</h4>
+    <p><code>wal_checkpoint(TRUNCATE)</code> takes an exclusive lock on the database. While it holds the lock, all other writers are blocked. If a write can't complete within <code>busy_timeout</code> (5 seconds), it fails with <code>SQLITE_BUSY</code>.</p>
+    <p>This means: if a job is being saved, an event emitted, or a gallery image inserted at the exact moment of the checkpoint, that write can fail. The job could end up marked as stalled, an event lost, etc.</p>
+    <p>Gallery downloads are explicitly stopped by this endpoint. Best to flush when nothing is actively writing: no running jobs, no model/LoRA downloads, no gallery downloads.</p>
+
+    <h4>When to use</h4>
+    <p>Before stopping or terminating a pod from the RunPod dashboard. Wait for all active operations to finish first.</p>
+  </div>
+  <div class="studio-dialog-actions">
+    <button class="studio-dialog-btn primary" id="flushInfoClose">Got it</button>
+  </div>
+</dialog>
+
+<dialog class="studio-dialog" id="revealDialog">
+  <div class="studio-dialog-body">
+    Enter your API key to reveal masked values for 30 seconds.
+    <input type="password" id="revealInput" placeholder="API key" autocomplete="off">
+    <div class="reveal-error" id="revealError"></div>
+  </div>
+  <div class="studio-dialog-actions">
+    <button class="studio-dialog-btn" id="revealCancel">Cancel</button>
+    <button class="studio-dialog-btn primary" id="revealSubmit">Reveal</button>
+  </div>
+</dialog>
 
 <script src="/static/js/shared.js"></script>
 <script>
 (function() {
   'use strict';
 
-  // ── Load env vars ──
-  var $envBody = document.getElementById('envBody');
+  var $groups = document.getElementById('envGroups');
+  var $unlockBar = document.getElementById('unlockBar');
+  var $unlockStatus = document.getElementById('unlockStatus');
+  var $unlockBtn = document.getElementById('unlockBtn');
+  var $dialog = document.getElementById('revealDialog');
+  var $revealInput = document.getElementById('revealInput');
+  var $revealError = document.getElementById('revealError');
+  var $revealSubmit = document.getElementById('revealSubmit');
+  var $revealCancel = document.getElementById('revealCancel');
+
+  var groupsData = null;
+  var revealedValues = null;
+  var countdownTimer = null;
+  var countdownSeconds = 0;
+
+  // ── Render ──
+
+  function render() {
+    if (!groupsData) return;
+    $groups.innerHTML = '';
+    groupsData.forEach(function(g) {
+      var title = document.createElement('div');
+      title.className = 'group-title';
+      title.textContent = g.label;
+      $groups.appendChild(title);
+
+      var table = document.createElement('table');
+      table.className = 'env-table';
+      table.innerHTML = '<thead><tr><th>Variable</th><th>Value</th><th>Description</th></tr></thead>';
+      var tbody = document.createElement('tbody');
+
+      g.vars.forEach(function(v) {
+        var row = document.createElement('tr');
+        var dotClass = v.set ? 'env-dot set' : 'env-dot unset';
+
+        // Value logic
+        var valText, valClass;
+        if (!v.set) {
+          valText = '(not set)';
+          valClass = 'env-value not-set';
+        } else if (v.sensitive && revealedValues && revealedValues[v.key] !== undefined) {
+          valText = revealedValues[v.key] || '(empty)';
+          valClass = 'env-value revealed';
+        } else if (v.sensitive) {
+          valText = v.value;
+          valClass = 'env-value masked';
+        } else {
+          valText = v.value;
+          valClass = 'env-value';
+        }
+
+        var descHtml = escHtml(v.description);
+        if (v.default) descHtml += '<br><span class="env-default">Default: ' + escHtml(v.default) + '</span>';
+
+        var valHtml;
+        if (v.editable) {
+          valHtml = '<input type="text" class="env-edit-input" data-key="' + escHtml(v.key) + '" value="' + escHtml(v.value) + '">';
+        } else {
+          valHtml = '<span class="' + valClass + '">' + escHtml(valText) + '</span>';
+        }
+
+        row.innerHTML =
+          '<td><span class="' + dotClass + '"></span><span class="env-key">' + escHtml(v.key) + '</span></td>' +
+          '<td>' + valHtml + '</td>' +
+          '<td class="env-desc">' + descHtml + '</td>';
+        tbody.appendChild(row);
+      });
+
+      table.appendChild(tbody);
+      $groups.appendChild(table);
+    });
+  }
+
+  // ── Editable env vars ──
+  $groups.addEventListener('change', function(e) {
+    var input = e.target;
+    if (!input.classList.contains('env-edit-input')) return;
+    var key = input.dataset.key;
+    var value = input.value.trim();
+    apiFetch('/api/admin/settings/env', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key: key, value: value}),
+    }).then(function(r) {
+      if (r.ok) {
+        input.classList.add('saved');
+        setTimeout(function() { input.classList.remove('saved'); }, 1500);
+      } else {
+        r.json().then(function(err) { showToast(err.detail || 'Save failed', 3000, 'error'); });
+      }
+    }).catch(function(err) {
+      if (err.message !== 'auth') showToast('Save failed', 3000, 'error');
+    });
+  });
+
+  // ── Load ──
 
   async function loadEnv() {
     try {
       var resp = await apiFetch('/api/admin/settings/env');
       if (!resp.ok) return;
-      var vars = await resp.json();
-      $envBody.innerHTML = '';
-      vars.forEach(function(v) {
-        var row = document.createElement('tr');
-        var valClass = !v.set ? 'env-value not-set' : (v.sensitive ? 'env-value masked' : 'env-value');
-        var valText = !v.set ? '(not set)' : v.value;
-        var dotClass = v.set ? 'env-dot set' : 'env-dot unset';
-        row.innerHTML =
-          '<td><span class="' + dotClass + '"></span><span class="env-key">' + escHtml(v.key) + '</span></td>' +
-          '<td class="' + valClass + '">' + escHtml(valText) + '</td>';
-        $envBody.appendChild(row);
-      });
+      var data = await resp.json();
+      groupsData = data.groups;
+      render();
     } catch (e) {
-      if (e.message !== 'auth') $envBody.innerHTML = '<tr><td colspan="2" style="color:var(--error);">Failed to load</td></tr>';
+      if (e.message !== 'auth') $groups.innerHTML = '<p style="color:var(--error);">Failed to load</p>';
     }
   }
+
+  // ── Unlock flow ──
+
+  function hideSecrets() {
+    revealedValues = null;
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    $unlockStatus.textContent = 'Sensitive values are masked';
+    $unlockStatus.className = 'status-text';
+    $unlockBtn.textContent = 'Reveal secrets';
+    $unlockBtn.onclick = openDialog;
+    // Remove countdown bar if present
+    var cw = $unlockBar.querySelector('.countdown-wrap');
+    if (cw) cw.remove();
+    render();
+  }
+
+  function startCountdown() {
+    countdownSeconds = 30;
+    $unlockStatus.className = 'status-text revealed';
+    $unlockBtn.textContent = 'Hide now';
+    $unlockBtn.onclick = hideSecrets;
+
+    // Add countdown bar
+    var existing = $unlockBar.querySelector('.countdown-wrap');
+    if (existing) existing.remove();
+    var wrap = document.createElement('span');
+    wrap.className = 'countdown-wrap';
+    wrap.innerHTML = '<span class="countdown-fill"></span>';
+    $unlockBar.insertBefore(wrap, $unlockBtn);
+
+    updateCountdownText();
+    countdownTimer = setInterval(function() {
+      countdownSeconds--;
+      if (countdownSeconds <= 0) {
+        hideSecrets();
+      } else {
+        updateCountdownText();
+      }
+    }, 1000);
+  }
+
+  function updateCountdownText() {
+    $unlockStatus.textContent = 'Secrets visible — auto-hiding in ' + countdownSeconds + 's';
+  }
+
+  // ── Dialog ──
+
+  function openDialog() {
+    $revealInput.value = '';
+    $revealError.textContent = '';
+    $dialog.showModal();
+    $revealInput.focus();
+  }
+
+  $unlockBtn.onclick = openDialog;
+
+  $revealCancel.onclick = function() { $dialog.close(); };
+  $dialog.addEventListener('click', function(e) {
+    if (e.target === $dialog) $dialog.close();
+  });
+
+  $revealInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doReveal();
+  });
+
+  $revealSubmit.onclick = doReveal;
+
+  async function doReveal() {
+    var key = $revealInput.value.trim();
+    if (!key) { $revealError.textContent = 'Enter your API key'; return; }
+    $revealSubmit.disabled = true;
+    $revealError.textContent = '';
+    try {
+      var resp = await apiFetch('/api/admin/settings/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key }),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        $revealError.textContent = err.detail || 'Invalid API key';
+        return;
+      }
+      revealedValues = await resp.json();
+      $dialog.close();
+      render();
+      startCountdown();
+    } catch (e) {
+      if (e.message !== 'auth') $revealError.textContent = 'Request failed';
+    } finally {
+      $revealSubmit.disabled = false;
+    }
+  }
+
+  // ── Accordion ──
+
+  var $accToggle = document.getElementById('envAccordionToggle');
+  var $accBody = document.getElementById('envAccordionBody');
+  $accToggle.addEventListener('click', function() {
+    var isOpen = $accBody.classList.toggle('open');
+    $accToggle.classList.toggle('open', isOpen);
+  });
+
+  // ── Flush Info Dialog ──
+
+  var $flushInfoBtn = document.getElementById('flushInfoBtn');
+  var $flushInfoDialog = document.getElementById('flushInfoDialog');
+  var $flushInfoClose = document.getElementById('flushInfoClose');
+  $flushInfoBtn.addEventListener('click', function() { $flushInfoDialog.showModal(); });
+  $flushInfoClose.addEventListener('click', function() { $flushInfoDialog.close(); });
+  $flushInfoDialog.addEventListener('click', function(e) {
+    if (e.target === $flushInfoDialog) $flushInfoDialog.close();
+  });
+
+  // ── Flush Status ──
+
+  var $flushStatus = document.getElementById('flushStatus');
+  var flushSafe = null;
+
+  function pollFlushStatus() {
+    apiFetch('/api/admin/system/flush-status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        flushSafe = data.safe;
+        $flushStatus.innerHTML = '<span class="flush-status-dot ' + (data.safe ? 'safe' : 'busy') + '"></span>' +
+          (data.safe ? 'Ready — no active writes' : 'Active writes — wait before flushing');
+      })
+      .catch(function() {});
+  }
+  pollFlushStatus();
+  setInterval(pollFlushStatus, 3000);
+
+  // ── Flush DB ──
+
+  var $flushBtn = document.getElementById('flushDbBtn');
+  function doFlush() {
+    $flushBtn.disabled = true;
+    $flushBtn.textContent = 'Flushing...';
+    apiFetch('/api/admin/system/prepare-shutdown', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function() {
+        $flushBtn.textContent = 'Done — safe to power off';
+        $flushBtn.className = 'btn success';
+        showToast('DB flushed — safe to power off', 5000, 'success');
+        pollFlushStatus();
+      })
+      .catch(function(err) {
+        $flushBtn.textContent = 'Failed';
+        $flushBtn.className = 'btn btn--danger';
+        if (err.message !== 'auth') showToast('Flush failed: ' + err.message, 5000, 'error');
+      })
+      .finally(function() {
+        $flushBtn.disabled = false;
+        setTimeout(function() {
+          $flushBtn.textContent = 'Flush DB';
+          $flushBtn.className = 'btn';
+        }, 10000);
+      });
+  }
+  $flushBtn.addEventListener('click', function() {
+    if (flushSafe === false) {
+      studioConfirm('There are active database writes. Flushing now may cause write failures. Continue anyway?', doFlush);
+    } else {
+      doFlush();
+    }
+  });
 
   // ── Boot ──
   loadEnv();

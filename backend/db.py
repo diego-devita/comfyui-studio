@@ -1,6 +1,6 @@
 """ComfyUI Studio — SQLite database layer.
 
-Single DB file at STUDIO_DIR/db/studio.db.
+Single DB file at STUDIO_DIR/database/studio.db.
 Thread-safe via WAL mode + serialized access.
 All timestamps stored as ISO 8601 strings (Italian timezone).
 """
@@ -8,11 +8,12 @@ All timestamps stored as ISO 8601 strings (Italian timezone).
 import json
 import sqlite3
 import threading
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from config import STUDIO_DIR
 
-DB_PATH = STUDIO_DIR / "db" / "studio.db"
+DB_PATH = STUDIO_DIR / "database" / "studio.db"
 _local = threading.local()
 
 
@@ -55,6 +56,56 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
         CREATE INDEX IF NOT EXISTS idx_jobs_queued_at ON jobs(queued_at);
         CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
+
+        -- Events log. Ring buffer behavior enforced by periodic cleanup, not DB constraint.
+        CREATE TABLE IF NOT EXISTS events (
+            id          TEXT PRIMARY KEY,
+            type        TEXT NOT NULL,
+            timestamp   TEXT NOT NULL,
+            severity    TEXT NOT NULL DEFAULT 'info',
+            message     TEXT NOT NULL DEFAULT '',
+            data        TEXT DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+        CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity);
+
+        -- Download tracking: persists lifecycle across page navigations and restarts.
+        -- Real-time byte progress stays in memory (_download_state dict).
+        CREATE TABLE IF NOT EXISTS downloads (
+            filename     TEXT PRIMARY KEY,
+            dest         TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued', 'downloading', 'done', 'error')),
+            total_bytes  INTEGER DEFAULT 0,
+            error        TEXT,
+            source       TEXT,
+            queued_at    TEXT NOT NULL,
+            started_at   TEXT,
+            completed_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+
+        -- Workflow index: cache of manifest.yaml metadata.
+        -- Source of truth is the manifest files on disk.
+        -- Synced at boot and after OTA updates.
+        CREATE TABLE IF NOT EXISTS workflows (
+            id              TEXT PRIMARY KEY,
+            name            TEXT NOT NULL,
+            category        TEXT DEFAULT '',
+            type            TEXT DEFAULT 'static',
+            version         INTEGER DEFAULT 0,
+            date            TEXT DEFAULT '',
+            description     TEXT DEFAULT '',
+            author          TEXT DEFAULT '',
+            inputs          TEXT DEFAULT '[]',
+            outputs         TEXT DEFAULT '[]',
+            required_models TEXT DEFAULT '[]',
+            required_nodes  TEXT DEFAULT '[]',
+            synced_at       TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -89,7 +140,7 @@ def save_job(job: dict):
         "status": job.get("status", "queued"),
         "params": json.dumps(job.get("params", {}), ensure_ascii=False),
         "seeds": json.dumps(job.get("seeds", {}), ensure_ascii=False),
-        "output": job.get("output"),
+        "output": json.dumps(job.get("output")) if isinstance(job.get("output"), (dict, list)) else job.get("output"),
         "outputs": json.dumps(job.get("outputs")) if job.get("outputs") else None,
         "output_dir": job.get("output_dir"),
         "input_image": job.get("input_image"),
@@ -183,6 +234,69 @@ def mark_stalled_jobs():
     return cursor.rowcount
 
 
+# ── Event CRUD ───────────────────────────────────────────────
+
+
+def save_event(event: dict):
+    """Insert an event into the database."""
+    conn = _get_conn()
+    conn.execute("""
+        INSERT OR IGNORE INTO events (id, type, timestamp, severity, message, data)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        event.get("id"),
+        event.get("type", ""),
+        event.get("timestamp", ""),
+        event.get("severity", "info"),
+        event.get("message", ""),
+        json.dumps(event.get("data", {}), ensure_ascii=False),
+    ))
+    conn.commit()
+
+
+def list_events(limit: int = 100, types: list[str] = None,
+                severity: str = None) -> list[dict]:
+    """List events from DB, newest first."""
+    conn = _get_conn()
+    wheres = []
+    params = []
+    if types:
+        placeholders = ",".join("?" * len(types))
+        wheres.append(f"type IN ({placeholders})")
+        params.extend(types)
+    if severity:
+        wheres.append("severity = ?")
+        params.append(severity)
+    where_sql = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+    rows = conn.execute(
+        f"SELECT * FROM events {where_sql} ORDER BY timestamp DESC LIMIT ?",
+        params + [limit]
+    ).fetchall()
+    result = []
+    for row in rows:
+        d = dict(row)
+        if d.get("data"):
+            try:
+                d["data"] = json.loads(d["data"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        result.append(d)
+    # Return in chronological order (oldest first) for the UI
+    result.reverse()
+    return result
+
+
+def trim_events(max_count: int = 1000):
+    """Keep only the most recent max_count events. Called periodically."""
+    conn = _get_conn()
+    conn.execute("""
+        DELETE FROM events WHERE id NOT IN (
+            SELECT id FROM events ORDER BY timestamp DESC LIMIT ?
+        )
+    """, (max_count,))
+    conn.commit()
+
+
 def count_jobs_by_workflow() -> list[dict]:
     """Count jobs per workflow (for stats)."""
     conn = _get_conn()
@@ -197,23 +311,171 @@ def count_jobs_by_workflow() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ── Migration ────────────────────────────────────────────────
+# ── Workflow index ───────────────────────────────────────────
 
 
-def migrate_json_jobs(jobs_dir: Path) -> int:
-    """Import existing JSON job files into the database. Returns count imported."""
-    if not jobs_dir.exists():
-        return 0
-    count = 0
-    for f in jobs_dir.glob("*.json"):
-        try:
-            job = json.loads(f.read_text())
-            if job.get("prompt_id"):
-                save_job(job)
-                count += 1
-        except Exception:
-            pass
-    return count
+def sync_workflows_from_disk():
+    """Scan workflows dir, read each manifest.yaml, upsert into DB.
+    Remove DB rows for workflows whose dir no longer exists."""
+    import yaml
+    from config import WORKFLOWS_DIR
+
+    conn = _get_conn()
+    now = _now_italian()
+    found_ids = set()
+
+    if WORKFLOWS_DIR.exists():
+        for d in sorted(WORKFLOWS_DIR.iterdir()):
+            manifest_path = d / "manifest.yaml"
+            if not d.is_dir() or not manifest_path.exists():
+                continue
+            try:
+                with open(manifest_path) as f:
+                    m = yaml.safe_load(f)
+                wf_id = m.get("id", d.name)
+                found_ids.add(wf_id)
+                conn.execute("""
+                    INSERT INTO workflows (id, name, category, type, version, date,
+                                           description, author, inputs, outputs,
+                                           required_models, required_nodes, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name=excluded.name, category=excluded.category, type=excluded.type,
+                        version=excluded.version, date=excluded.date,
+                        description=excluded.description, author=excluded.author,
+                        inputs=excluded.inputs, outputs=excluded.outputs,
+                        required_models=excluded.required_models,
+                        required_nodes=excluded.required_nodes,
+                        synced_at=excluded.synced_at
+                """, (
+                    wf_id, m.get("name", wf_id), m.get("category", ""),
+                    m.get("type", "static"), m.get("version", 0), m.get("date", ""),
+                    m.get("description", ""), m.get("author", ""),
+                    json.dumps(m.get("inputs", []), ensure_ascii=False),
+                    json.dumps(m.get("outputs", []), ensure_ascii=False),
+                    json.dumps(m.get("required_models", []), ensure_ascii=False),
+                    json.dumps(m.get("required_nodes", []), ensure_ascii=False),
+                    now,
+                ))
+            except Exception as e:
+                print(f"[db] Failed to sync workflow {d.name}: {e}", flush=True)
+
+    # Remove workflows no longer on disk
+    existing = {r[0] for r in conn.execute("SELECT id FROM workflows").fetchall()}
+    removed = existing - found_ids
+    for wf_id in removed:
+        conn.execute("DELETE FROM workflows WHERE id = ?", (wf_id,))
+
+    conn.commit()
+    return len(found_ids)
+
+
+def list_workflows() -> list[dict]:
+    """All workflows from DB, ordered by name."""
+    conn = _get_conn()
+    rows = conn.execute("SELECT * FROM workflows ORDER BY name").fetchall()
+    return [_row_to_workflow(r) for r in rows]
+
+
+def get_workflow(workflow_id: str) -> dict | None:
+    """Single workflow by id from DB."""
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+    return _row_to_workflow(row) if row else None
+
+
+def _row_to_workflow(row: sqlite3.Row) -> dict:
+    """Convert a DB row to workflow dict with parsed JSON fields."""
+    d = dict(row)
+    for field in ("inputs", "outputs", "required_models", "required_nodes"):
+        if d.get(field):
+            try:
+                d[field] = json.loads(d[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return d
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+
+# ── Download tracking ────────────────────────────────────────
+
+
+def _now_italian() -> str:
+    return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def upsert_download(filename: str, dest: str, status: str, source: str = None, error: str = None):
+    """Insert or update a download record."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        INSERT INTO downloads (filename, dest, status, source, error, queued_at, started_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(filename) DO UPDATE SET
+            status=excluded.status,
+            error=excluded.error,
+            started_at=CASE WHEN excluded.status='downloading' THEN ? ELSE downloads.started_at END,
+            completed_at=CASE WHEN excluded.status IN ('done','error') THEN ? ELSE downloads.completed_at END
+    """, (filename, dest, status, source, error, now, None, None, now, now))
+    conn.commit()
+
+
+def complete_download(filename: str, total_bytes: int = 0):
+    """Mark download as done."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        UPDATE downloads SET status='done', total_bytes=?, completed_at=?, error=NULL
+        WHERE filename=?
+    """, (total_bytes, now, filename))
+    conn.commit()
+
+
+def fail_download(filename: str, error: str):
+    """Mark download as error."""
+    conn = _get_conn()
+    now = _now_italian()
+    conn.execute("""
+        UPDATE downloads SET status='error', error=?, completed_at=?
+        WHERE filename=?
+    """, (error, now, filename))
+    conn.commit()
+
+
+def get_downloads_for_files(filenames: list[str]) -> dict:
+    """Get download records for a list of filenames. Returns {filename: {status, ...}}."""
+    if not filenames:
+        return {}
+    conn = _get_conn()
+    placeholders = ",".join("?" * len(filenames))
+    rows = conn.execute(
+        f"SELECT * FROM downloads WHERE filename IN ({placeholders})", filenames
+    ).fetchall()
+    return {r["filename"]: dict(r) for r in rows}
+
+
+def get_active_downloads() -> list[dict]:
+    """Get all queued/downloading records."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT * FROM downloads WHERE status IN ('queued', 'downloading') ORDER BY queued_at"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def cleanup_stale_downloads() -> int:
+    """On boot: mark 'downloading' records as 'error' (process died mid-download).
+    Returns number of records cleaned up."""
+    conn = _get_conn()
+    now = _now_italian()
+    cursor = conn.execute("""
+        UPDATE downloads SET status='error', error='Process restarted during download', completed_at=?
+        WHERE status='downloading'
+    """, (now,))
+    conn.commit()
+    return cursor.rowcount
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -229,9 +491,10 @@ def _row_to_job(row: sqlite3.Row) -> dict:
                 d[field] = json.loads(d[field])
             except (json.JSONDecodeError, TypeError):
                 pass
-    if d.get("outputs"):
-        try:
-            d["outputs"] = json.loads(d["outputs"])
-        except (json.JSONDecodeError, TypeError):
-            pass
+    for field in ("output", "outputs"):
+        if d.get(field) and isinstance(d[field], str) and d[field].startswith(("{", "[")):
+            try:
+                d[field] = json.loads(d[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
     return d

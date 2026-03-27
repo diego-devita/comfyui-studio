@@ -4,8 +4,23 @@
 # no ComfyUI, no custom nodes. Just Python + backend deps +
 # a ComfyUI stub server for fake responses.
 #
-# Build:  docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
-# Run:    docker run -p 8000:8000 -v $(pwd):/workspace/studio -e API_KEY=test comfyui-studio-dev
+# Host repo is mounted for live code editing (backend, frontend, tools).
+# Runtime data (catalogs, database, assets, llm) lives in a persistent
+# volume (~/.studio-dev) that survives container rebuilds.
+#
+# Build:
+#   docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
+#
+# Run:
+#   docker run -d --name studio-dev \
+#     -p 8000:8000 -p 8188:8188 -p 8002:8002 \
+#     -v $(pwd)/backend:/workspace/studio/backend \
+#     -v $(pwd)/frontend:/workspace/studio/frontend \
+#     -v $(pwd)/tools:/workspace/studio/tools \
+#     -v $(pwd)/workflows:/workspace/studio/workflows \
+#     -v $(pwd)/version.json:/workspace/studio/version.json \
+#     -v ~/.studio-dev:/workspace/studio/data \
+#     comfyui-studio-dev
 # ============================================================
 
 FROM python:3.12-slim
@@ -14,6 +29,7 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Backend Python dependencies (same as production, minus PyTorch/ML)
@@ -26,10 +42,17 @@ RUN pip install --no-cache-dir \
     aiofiles \
     requests \
     pyyaml \
-    aiohttp
+    aiohttp \
+    Pillow
+
+# sqlite-web (dev database browser)
+RUN pip install --no-cache-dir sqlite-web
 
 # ComfyUI stub server
 COPY docker/development/comfyui_stub.py /app/comfyui_stub.py
+
+# Seed catalogs (copied to data dir on first boot by start.sh)
+COPY catalogs/models.json catalogs/loras.json catalogs/llm.json /repo-catalogs/
 
 # Entrypoint
 COPY docker/development/start.sh /start.sh
@@ -39,8 +62,10 @@ ENV STUDIO_DIR=/workspace/studio
 ENV API_KEY=changeme
 ENV COMFYUI_PORT=8188
 ENV STUDIO_PORT=8000
+ENV DEV_MODE=true
+ENV DEV_DOWNLOAD_DELAY=5
 
-EXPOSE 8000 8188
+EXPOSE 8000 8188 8002
 
 WORKDIR /workspace/studio
 

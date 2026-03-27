@@ -4,12 +4,13 @@ import json
 import subprocess
 import threading
 
-from config import LLM_MODELS_DIR, LLM_CONFIG_PATH, LLAMA_SERVER_PATH, LLAMA_SERVER_PORT
+from config import LLM_MODELS_DIR, LLM_CONFIG_PATH, LLAMA_SERVER_PATH, LLAMA_SERVER_PORT, DEV_MODE
 
 # ── LLM Server Process Manager ──────────────────────────────────────────────
 
 _llama_process: subprocess.Popen | None = None
 _llama_process_lock = threading.Lock()
+_dev_mode_running = False  # fake running state for DEV_MODE
 
 
 def _load_llm_config() -> dict:
@@ -40,7 +41,9 @@ def _save_llm_config(config: dict) -> None:
 
 def _llama_server_running() -> bool:
     """Check if the llama-server subprocess is alive."""
-    global _llama_process
+    global _llama_process, _dev_mode_running
+    if DEV_MODE:
+        return _dev_mode_running
     if _llama_process is None:
         return False
     return _llama_process.poll() is None
@@ -50,7 +53,7 @@ def _start_llama_server(model_file: str, config: dict) -> None:
     """Start llama-server subprocess with the given model and config."""
     from events import _events
 
-    global _llama_process
+    global _llama_process, _dev_mode_running
     with _llama_process_lock:
         if _llama_server_running():
             _stop_llama_server()
@@ -58,6 +61,15 @@ def _start_llama_server(model_file: str, config: dict) -> None:
         model_path = LLM_MODELS_DIR / model_file
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        if DEV_MODE:
+            _dev_mode_running = True
+            config["_active_model"] = model_file
+            _save_llm_config(config)
+            _events.emit("llm.server.started", f"LLM server started (dev stub) with {model_file}",
+                          data={"model": model_file, "port": LLAMA_SERVER_PORT})
+            return
+
         if not LLAMA_SERVER_PATH.exists():
             raise FileNotFoundError(f"llama-server binary not found: {LLAMA_SERVER_PATH}")
 
@@ -85,8 +97,17 @@ def _stop_llama_server() -> None:
     """Terminate the llama-server subprocess."""
     from events import _events
 
-    global _llama_process
+    global _llama_process, _dev_mode_running
     with _llama_process_lock:
+        if DEV_MODE:
+            if _dev_mode_running:
+                _dev_mode_running = False
+                config = _load_llm_config()
+                config.pop("_active_model", None)
+                _save_llm_config(config)
+                _events.emit("llm.server.stopped", "LLM server stopped (dev stub)")
+            return
+
         if _llama_process is not None:
             try:
                 _llama_process.terminate()

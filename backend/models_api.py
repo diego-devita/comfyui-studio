@@ -36,34 +36,11 @@ class BatchDownloadRequest(BaseModel):
 
 # ── Disk usage helpers ───────────────────────────────────────────────────────
 
-_cached_volume_size = 0
-_cached_disk_used = 0
-
-
-async def _get_volume_size_gb() -> int:
-    """Get network volume size from RunPod API (cached)."""
-    global _cached_volume_size
-    if _cached_volume_size > 0:
-        return _cached_volume_size
-    try:
-        pod_id = os.environ.get("RUNPOD_POD_ID", "")
-        api_key = os.environ.get("RUNPOD_API_KEY", "")
-        if not pod_id or not api_key:
-            return 0
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.post(
-                "https://api.runpod.io/graphql",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"query": f'{{ pod(input: {{ podId: "{pod_id}" }}) {{ networkVolume {{ size }} }} }}'},
-            )
-            if r.status_code == 200:
-                size = r.json().get("data", {}).get("pod", {}).get("networkVolume", {}).get("size", 0)
-                if size:
-                    _cached_volume_size = size
-                    return size
-    except Exception:
-        pass
-    return 0
+async def _get_disk_free_bytes() -> int:
+    """Get free disk space in bytes. Uses system_api's centralized disk stats."""
+    from system_api import _get_disk_stats
+    _total, _used, free = await _get_disk_stats()
+    return free
 
 
 # ── Civitai Metadata Fetcher ──────────────────────────────────────────────────
@@ -315,10 +292,8 @@ async def models_list():
     global_speed = sum(s.get("speed", 0) for s in _download_state.values() if s.get("status") == "downloading")
 
     try:
-        vol_gb = await _get_volume_size_gb()
-        vol_size = vol_gb * 1024 * 1024 * 1024 if vol_gb > 0 else 0
         models_bytes = sum(m.get("on_disk_bytes", 0) for cat in result_categories for m in cat["models"])
-        free_bytes = max(0, vol_size - _cached_disk_used) if vol_size > 0 else 0
+        free_bytes = await _get_disk_free_bytes()
     except Exception:
         models_bytes = 0
         free_bytes = 0
@@ -359,10 +334,8 @@ async def loras_list():
     global_speed = sum(s.get("speed", 0) for fn, s in _download_state.items() if fn in lora_filenames and s.get("status") == "downloading")
 
     try:
-        vol_gb = await _get_volume_size_gb()
-        vol_size = vol_gb * 1024 * 1024 * 1024 if vol_gb > 0 else 0
         models_bytes = sum(m.get("on_disk_bytes", 0) for cat in result_categories for m in cat["models"])
-        free_bytes = max(0, vol_size - _cached_disk_used) if vol_size > 0 else 0
+        free_bytes = await _get_disk_free_bytes()
     except Exception:
         models_bytes = 0
         free_bytes = 0
@@ -394,7 +367,7 @@ async def models_download(filename: str):
     if state.get("status") in ("downloading", "queued"):
         return JSONResponse({"status": state["status"], "file": filename})
 
-    _enqueue_download(model)
+    _enqueue_download(model, source="manual")
     return JSONResponse({"status": "queued", "file": filename})
 
 
@@ -415,7 +388,7 @@ async def models_download_batch(body: BatchDownloadRequest):
             skipped.append(filename)
             continue
 
-        _enqueue_download(model)
+        _enqueue_download(model, source="batch")
         queued.append(filename)
 
     return JSONResponse({"queued": queued, "skipped": skipped})

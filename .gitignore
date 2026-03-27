@@ -4,3 +4,8 @@ tools/
 workflows/.reference/
 catalogs/.drafts/
 __pycache__/
+
+# Runtime data (never tracked)
+.repo/
+.session_secret
+events.jsonl

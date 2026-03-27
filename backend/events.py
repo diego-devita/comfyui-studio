@@ -3,8 +3,8 @@
 import asyncio
 import json
 import queue
+import signal
 import uuid
-from pathlib import Path
 
 from fastapi import WebSocket
 
@@ -26,23 +26,28 @@ class EventSubscriber:
 
 
 class EventBus:
-    """Central event dispatcher with in-memory log and async subscriber dispatch."""
+    """Central event dispatcher with SQLite persistence and async subscriber dispatch.
 
-    def __init__(self, max_log: int = 1000, log_file: str = None):
+    Events are persisted to the studio SQLite database (db/studio.db).
+    The in-memory ring buffer is kept for fast access by the WebSocket
+    pusher and activity panel.
+    """
+
+    def __init__(self, max_log: int = 1000):
         self._log: list[dict] = []
         self._max_log = max_log
         self._queue: queue.Queue = queue.Queue()
         self._subscribers: list[EventSubscriber] = []
-        self._log_file = Path(log_file) if log_file else None
-        # Load persisted events on startup
-        if self._log_file and self._log_file.exists():
-            try:
-                for line in self._log_file.read_text().strip().split("\n"):
-                    if line:
-                        self._log.append(json.loads(line))
-                self._log = self._log[-self._max_log:]
-            except Exception:
-                pass
+        self._db_ready = False
+
+    def init_from_db(self):
+        """Load recent events from SQLite into memory. Called after DB init."""
+        try:
+            import db as _db
+            self._log = _db.list_events(limit=self._max_log)
+            self._db_ready = True
+        except Exception:
+            pass
 
     def subscribe(self, subscriber: EventSubscriber):
         self._subscribers.append(subscriber)
@@ -58,26 +63,29 @@ class EventBus:
             "message": message,
             "data": data or {},
         }
-        # Ring buffer
+        # Ring buffer (in-memory, for fast WS push)
         self._log.append(event)
         if len(self._log) > self._max_log:
             self._log = self._log[-self._max_log:]
-        # Persist to disk
-        if self._log_file:
+        # Persist to SQLite
+        if self._db_ready:
             try:
-                self._log_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(self._log_file, "a") as f:
-                    f.write(json.dumps(event, ensure_ascii=False) + "\n")
-                # Rotate if too large (>5MB)
-                if self._log_file.stat().st_size > 5_000_000:
-                    lines = self._log_file.read_text().strip().split("\n")
-                    self._log_file.write_text("\n".join(lines[-self._max_log:]) + "\n")
+                import db as _db
+                _db.save_event(event)
             except Exception:
                 pass
-        # Queue for async dispatch
+        # Queue for async dispatch to WS subscribers
         self._queue.put(event)
 
     def get_log(self, limit: int = 100, types: list[str] = None, severity: str = None) -> list[dict]:
+        # Read from DB if available (more complete than in-memory)
+        if self._db_ready:
+            try:
+                import db as _db
+                return _db.list_events(limit=limit, types=types, severity=severity)
+            except Exception:
+                pass
+        # Fallback to in-memory
         log = self._log
         if types:
             type_set = set(types)
@@ -87,10 +95,7 @@ class EventBus:
         return log[-limit:]
 
 
-_events = EventBus(
-    max_log=1000,
-    log_file=str(STUDIO_DIR / "events.jsonl"),
-)
+_events = EventBus(max_log=1000)
 
 
 class _WebSocketPusher(EventSubscriber):
@@ -159,22 +164,73 @@ async def _start_event_consumer():
             _events.emit("system.migration", f"Copied {src_name} from .repo/ to working dir",
                          severity="info")
 
-    # Migrate JSON job files to SQLite (one-time, on first run with DB)
-    from config import JOBS_DIR
     import db as _db
-    if JOBS_DIR.exists() and list(JOBS_DIR.glob("*.json")):
-        count = _db.migrate_json_jobs(JOBS_DIR)
-        if count > 0:
-            _events.emit("system.migration", f"Migrated {count} jobs from JSON to SQLite",
-                         severity="info")
-            # Rename old jobs dir so we don't migrate again
-            import shutil
-            shutil.move(str(JOBS_DIR), str(JOBS_DIR.parent / "jobs_old"))
+
+    # Load persisted events from SQLite into memory, trim old ones
+    _events.init_from_db()
+    _db.trim_events(1000)
+
+    # Remove legacy files/dirs from pre-SQLite era
+    import shutil as _shutil
+    for legacy in ["events.jsonl"]:
+        p = STUDIO_DIR / legacy
+        if p.exists():
+            p.unlink()
+    for legacy_dir in ["jobs", "jobs_old"]:
+        p = STUDIO_DIR / legacy_dir
+        if p.is_symlink():
+            p.unlink()
+        elif p.is_dir():
+            _shutil.rmtree(p)
+
+    # Initialize gallery image store (SQLite)
+    import gallery_db as _gdb
+    _gdb.init_gallery_db()
+
+    # Background sync CivitAI tags — non-blocking, runs after startup completes.
+    # Resolves tag IDs from downloaded gallery metadata into human-readable names.
+    import threading as _threading
+    def _bg_tag_sync():
+        import time; time.sleep(5)  # wait for server to fully start
+        try:
+            from loras_api import _sync_civitai_tags_bg
+            count = _sync_civitai_tags_bg()
+            if count > 0:
+                _events.emit("system.startup", f"Synced {count} CivitAI tags", severity="info")
+        except Exception as e:
+            print(f"[startup] Tag sync failed: {e}", flush=True)
+    _threading.Thread(target=_bg_tag_sync, daemon=True).start()
 
     # Mark any jobs that were running/queued as stalled
     stalled = _db.mark_stalled_jobs()
     if stalled > 0:
         _events.emit("system.startup", f"Marked {stalled} stalled jobs", severity="warning")
+
+    # Mark any downloads that were in-progress as failed (process died mid-download)
+    stale_dl = _db.cleanup_stale_downloads()
+    if stale_dl > 0:
+        _events.emit("system.startup", f"Marked {stale_dl} stale downloads as failed", severity="warning")
+
+    # Sync workflow index from manifest files on disk
+    wf_count = _db.sync_workflows_from_disk()
+    _events.emit("system.startup", f"Synced {wf_count} workflows from disk", severity="info")
+
+    # Register SIGTERM handler for graceful shutdown.
+    # Docker sends SIGTERM before SIGKILL (10s grace period).
+    # This flushes SQLite WAL files to prevent corruption.
+    def _sigterm_handler(signum, frame):
+        print("[shutdown] SIGTERM received, flushing databases...", flush=True)
+        try:
+            _gdb._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        try:
+            _db._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        print("[shutdown] DB flush complete, exiting.", flush=True)
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     _events.emit("system.backend.started", "Backend started", severity="info",
                  data={"version": _load_version().get("app_version", "?")})

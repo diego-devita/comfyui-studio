@@ -45,9 +45,9 @@
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
   <a href="/admin/llm" class="nav-link">LLM</a>
-  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
-  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 
 <!-- Header -->
@@ -67,9 +67,6 @@
   <span class="stat stat--queued" id="statQueued">0 queued</span>
   <span class="stat stat--present" id="statPresent">0 / 0 present</span>
   <span class="stat stat--disk" id="statDisk">--</span>
-  <span class="stat stat--concurrent">
-    Parallel: <select id="maxConcurrent"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
-  </span>
 </div>
 
 <!-- Filter panel -->
@@ -155,7 +152,6 @@
   const $statQueued   = document.getElementById('statQueued');
   const $statPresent  = document.getElementById('statPresent');
   const $statDisk     = document.getElementById('statDisk');
-  const $maxConcurrent = document.getElementById('maxConcurrent');
 
   // ── Page-specific utilities ──
   function fmtSize(gb) {
@@ -349,21 +345,6 @@
     applyFiltersAndSort();
   });
 
-  // Concurrent downloads handler
-  $maxConcurrent.addEventListener('change', async () => {
-    const val = parseInt($maxConcurrent.value, 10);
-    try {
-      await apiFetch('/api/admin/settings', {
-        method: 'PUT',
-        body: { max_concurrent_downloads: val }
-      });
-    } catch (e) {
-      if (e.message !== 'auth') {
-        console.error('Failed to update concurrent setting:', e);
-      }
-    }
-  });
-
   // ── Data handling ──
   function handleModelData(data) {
     const cats = data.categories || [];
@@ -387,9 +368,6 @@
     });
 
     if (data.stats) updateStatusBar(data.stats);
-    if (data.settings && data.settings.max_concurrent_downloads != null) {
-      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
-    }
 
     applyFiltersAndSort();
     _autoPoll(data.stats);
@@ -418,9 +396,6 @@
     });
 
     if (data.stats) updateStatusBar(data.stats);
-    if (data.settings && data.settings.max_concurrent_downloads != null) {
-      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
-    }
 
     applyFiltersAndSort();
 
@@ -627,7 +602,7 @@
     });
 
     // Set static content
-    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye icon-sm"></span></span>';
+    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye json-eye"></span></span>';
 
     const sizeStr = fmtSize(m.size_gb);
     const sourceClass = (m.source || '').toLowerCase();
@@ -975,8 +950,10 @@
   $jsonOverlay.className = 'json-viewer-overlay';
   $jsonOverlay.innerHTML = '<div class="json-viewer-box">' +
     '<div class="json-viewer-header">' +
-      '<span class="json-viewer-title">Model JSON</span>' +
-      '<span style="cursor:pointer;opacity:0.4;font-size:12px;margin-left:8px;position:relative;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="var el=this;var text=document.getElementById(\'modelJsonContent\').textContent;navigator.clipboard.writeText(text).then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" title="Copy JSON"><span class="icon icon-copy icon-sm"></span></span>' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span class="json-viewer-title">Model JSON</span>' +
+        '<span style="cursor:pointer;opacity:0.4;font-size:12px;position:relative;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="var el=this;var ot=el.querySelector(\'.copy-tip\');if(ot)ot.remove();var text=document.getElementById(\'modelJsonContent\').textContent;navigator.clipboard.writeText(text).then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.className=\'copy-tip\';tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" title="Copy JSON"><span class="icon icon-copy icon-sm"></span></span>' +
+      '</div>' +
       '<button onclick="this.closest(\'div\').parentElement.parentElement.style.display=\'\'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>' +
     '</div>' +
     '<pre id="modelJsonContent" class="json-viewer-pre"></pre>' +

@@ -21,6 +21,11 @@ router = APIRouter()
 
 IMAGES_DIR = CATALOGS_DIR / ".images"
 
+# Gallery store: flat sharded media + SQLite index
+# Imported here so download workers can use it.
+# The actual DB init happens at startup via events.py.
+import gallery_db as _gdb
+
 _gallery_state: dict = {}
 
 
@@ -45,6 +50,19 @@ class AddCivitaiRequest(BaseModel):
 
 class GalleryActionRequest(BaseModel):
     action: str
+    mode: str = "fixed"  # fixed | trpc | rest
+    # REST filters
+    nsfw: str = "X"
+    # Shared
+    sort: str = "Newest"
+    period: str = "AllTime"
+    version_id: int | None = None
+    # tRPC filters
+    types: list[str] | None = None  # ["image"], ["video"], or None=all
+    with_meta: bool = False
+    from_platform: bool = False
+    is_remix: bool | None = None  # None=all, False=originals, True=remixes
+    workers: int = 6
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -82,6 +100,12 @@ def _category_for_base_model(bm: str) -> tuple[str, str]:
     if "sd 1" in bl or "sd1" in bl: return ("sd15_loras", "SD 1.5 LoRAs")
     if "illustrious" in bl: return ("illustrious_loras", "Illustrious LoRAs")
     return ("other_loras", "Other LoRAs")
+
+
+def _url_to_id(url: str) -> str:
+    """Extract UUID from CivitAI CDN URL as fallback when id is null."""
+    m = re.search(r'/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/', url)
+    return m.group(1) if m else ""
 
 
 def _parse_civitai_url(url: str) -> tuple[int, int | None]:
@@ -125,6 +149,39 @@ def _extract_image_meta(meta: dict | None) -> dict:
             except ValueError:
                 pass
     return r
+
+
+def _fetch_generation_data(image_id: int) -> dict | None:
+    """Fetch generation data from CivitAI tRPC endpoint."""
+    if not image_id or not CIVITAI_API_KEY:
+        return None
+    try:
+        params = json.dumps({"json": {"id": image_id, "authed": True}})
+        r = httpx.get(f"https://civitai.com/api/trpc/image.getGenerationData?input={params}",
+                      headers={"Authorization": f"Bearer {CIVITAI_API_KEY}",
+                               "Content-Type": "application/json"},
+                      timeout=15)
+        if r.status_code == 200:
+            return r.json().get("result", {}).get("data", {}).get("json", {})
+    except Exception:
+        pass
+    return None
+
+
+def _extract_thumbnail(video_path: Path) -> bool:
+    """Extract first frame from video as thumbnail using ffmpeg."""
+    thumb = video_path.with_suffix(".thumb.jpg")
+    if thumb.exists():
+        return True
+    try:
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_path), "-vframes", "1",
+             "-vf", "scale=300:-1", "-q:v", "5", "-f", "image2", str(thumb)],
+            capture_output=True, timeout=15)
+        return thumb.exists() and thumb.stat().st_size > 0
+    except Exception:
+        return False
 
 
 def _download_image(url: str, dest: Path, timeout: int = 30) -> bool:
@@ -183,11 +240,12 @@ async def lookup_civitai(body: LookupRequest):
             for f in v.get("files", [])
         ]
         v_images = [
-            {"id": img.get("id"), "url": img.get("url", ""),
+            {"id": img.get("id") or _url_to_id(img.get("url", "")),
+             "url": img.get("url", ""),
              "width": img.get("width"), "height": img.get("height"),
              "type": img.get("type", "image"),
              "nsfw": _nsfw_level(img.get("nsfwLevel"))}
-            for img in v.get("images", [])
+            for img in v.get("images", []) if img.get("url")
         ]
         versions.append({
             "version_id": v.get("id"),
@@ -264,7 +322,8 @@ async def add_civitai(body: AddCivitaiRequest):
         size_gb = round(f.get("size_kb", 0) / 1_000_000, 3)
         name = _clean_civitai_name(body.model_name, ver.get("name", ""), base_model, fp)
 
-        img_ids = [str(img["id"]) + ".jpeg" for img in ver.get("images", []) if img.get("id")]
+        img_ids = [str(img.get("id") or _url_to_id(img.get("url", ""))) + ".jpeg"
+                   for img in ver.get("images", []) if img.get("url")]
 
         entry = {
             "name": name,
@@ -292,12 +351,14 @@ async def add_civitai(body: AddCivitaiRequest):
         cat_map[cat_id]["models"].append(entry)
         existing.add(filename)
         added.append(filename)
-        _enqueue_download(entry)
+        _enqueue_download(entry, source="civitai-add")
 
         for img in ver.get("images", []):
-            if img.get("id") and img.get("url"):
-                meta = meta_lookup.get(img["id"], {})
-                images_to_dl.append((body.model_id, img["id"], img["url"], meta))
+            url = img.get("url", "")
+            if url:
+                iid = img.get("id") or _url_to_id(url)
+                meta = meta_lookup.get(img.get("id"), meta_lookup.get(iid, {}))
+                images_to_dl.append((body.model_id, iid, url, meta))
 
     if added:
         loras_data["version"] = loras_data.get("version", 0) + 1
@@ -338,7 +399,7 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
             st["status"] = "stopping"
         return JSONResponse({"status": "stopping"})
 
-    if body.action != "start":
+    if not body.action.startswith("start"):
         raise HTTPException(400, "action must be 'start' or 'stop'")
     if not CIVITAI_API_KEY:
         raise HTTPException(403, "CIVITAI_API_KEY not configured")
@@ -356,26 +417,238 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
+    api_params = {
+        "mode": body.mode, "nsfw": body.nsfw, "sort": body.sort, "period": body.period,
+        "version_id": body.version_id, "types": body.types,
+        "with_meta": body.with_meta, "from_platform": body.from_platform,
+        "is_remix": body.is_remix, "workers": max(1, min(body.workers, 20)),
+    }
     _gallery_state[model_id] = {
         "status": "downloading", "downloaded": 0, "skipped": 0,
         "total": 0, "_stop": stop, "max_images": max_images,
     }
-    threading.Thread(target=_gallery_thread, args=(model_id, stop), daemon=True).start()
+    threading.Thread(target=_gallery_thread, args=(model_id, stop, api_params),
+                     daemon=True).start()
     return JSONResponse({"status": "downloading"})
 
 
 _GALLERY_MAX_IMAGES = 1000
 
 
-def _gallery_thread(model_id: int, stop: threading.Event):
-    """Download model card images (from all versions) for a CivitAI model."""
-    state = _gallery_state[model_id]
-    gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
-    gallery_dir.mkdir(parents=True, exist_ok=True)
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
-    max_images = state.get("max_images", 200)
+def _gallery_download_one(iid: str, url: str, meta: dict,
+                          model_id: int, version_id: int | None,
+                          fetch_gen_data: bool, stop: threading.Event,
+                          search_mode: str = "fixed") -> str:
+    """Download a single gallery image/video to the flat store.
 
-    # Fetch model info to get version images
+    This is the per-item worker function called by the ThreadPoolExecutor.
+    Each call is independent and thread-safe:
+    1. Check if already downloaded (DB lookup, faster than filesystem)
+    2. Download with retry (5 attempts, 200ms stop-checks)
+    3. Extract thumbnail for videos (ffmpeg)
+    4. Fetch generation data from CivitAI tRPC
+    5. Save metadata JSON to sharded meta/ directory
+    6. Insert into SQLite gallery_images + link to version
+
+    Returns 'ok', 'skipped', or 'failed'.
+    """
+    ext = ".mp4" if ".mp4" in url else ".jpeg"
+
+    # Skip if already in the database — faster than checking filesystem
+    if _gdb.image_exists(iid):
+        # Still link to this version (image may exist from another version's download)
+        if version_id:
+            _gdb.link_version(iid, version_id)
+        return "skipped"
+
+    # Compute file paths based on source type:
+    # 'original' → models/{model_id}/{id}.ext (grouped by model)
+    # 'community' → media/NNN/NNN/{id}.ext (sharded flat store)
+    source = meta.get("_source", "community")
+    rel_file = _gdb.file_path_for(source, model_id, iid, ext)
+    rel_thumb = _gdb.thumb_path_for(source, model_id, iid) if ext == ".mp4" else None
+    rel_meta = _gdb.meta_path_for(source, model_id, iid)
+    dest = _gdb.abs_path(rel_file)
+
+    # File on disk but not in DB — register it and skip download.
+    # This happens when files exist from a previous session.
+    if dest.exists() and dest.stat().st_size > 0:
+        has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
+        stats = meta.get("stats") or {}
+        raw_meta = meta.get("raw_meta") or {}
+        prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
+        try:
+            _gdb.insert_image({
+                "civitai_id": iid, "file_uuid": _url_to_id(url),
+                "type": meta.get("type", "video" if ext == ".mp4" else "image"),
+                "ext": ext, "file_path": rel_file,
+                "thumb_path": rel_thumb if has_thumb else None,
+                "meta_path": rel_meta if _gdb.abs_path(rel_meta).exists() else None,
+                "model_id": model_id, "source": source,
+                "post_id": meta.get("postId"), "post_title": meta.get("postTitle", ""),
+                "username": meta.get("username", ""), "base_model": meta.get("baseModel", ""),
+                "width": meta.get("width"), "height": meta.get("height"),
+                "duration": meta.get("duration"), "audio": meta.get("audio"),
+                "file_size": dest.stat().st_size, "created_at": meta.get("createdAt"),
+                "reactions": stats.get("heartCount", 0) + stats.get("likeCount", 0),
+                "has_meta": _gdb.abs_path(rel_meta).exists() if rel_meta else False,
+                "search_mode": search_mode, "prompt": prompt,
+            })
+            if version_id:
+                _gdb.link_version(iid, version_id)
+        except Exception as e:
+            print(f"[gallery] DB insert (existing file) failed for {iid}: {e}", flush=True)
+        return "skipped"
+
+    # Retry up to 5 times with 2s delay between attempts.
+    # Check stop event every 200ms to allow fast cancellation
+    # instead of blocking for the full 2s sleep.
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(5):
+        if stop.is_set():
+            return "failed"
+        if _download_image(url, dest):
+            break
+        for _ in range(10):
+            if stop.is_set():
+                return "failed"
+            time.sleep(0.2)
+    else:
+        return "failed"
+
+    # Extract thumbnail from first video frame for gallery display.
+    # Videos in the gallery are shown as static <img> thumbnails to avoid
+    # loading heavy <video> elements in the DOM.
+    has_thumb = False
+    if ext == ".mp4":
+        _extract_thumbnail(dest)
+        has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
+
+    # Fetch generation data (resources, tools, techniques) from CivitAI tRPC.
+    # This gives us the list of LoRAs/checkpoints used, which the REST API
+    # doesn't include in the meta field.
+    if fetch_gen_data and meta.get("civitai_id"):
+        gen = _fetch_generation_data(meta["civitai_id"])
+        if gen:
+            meta["generation_data"] = gen
+
+    # Save full metadata JSON to the sharded meta/ directory.
+    # This includes raw_item, generation_data, and everything else.
+    # The DB only stores light fields; heavy data lives in JSON on disk.
+    meta_dest = _gdb.abs_path(rel_meta)
+    meta_dest.parent.mkdir(parents=True, exist_ok=True)
+    if meta:
+        meta_dest.write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+
+    # Extract stats for DB storage
+    stats = meta.get("stats") or {}
+    raw_meta = meta.get("raw_meta") or {}
+    prompt = raw_meta.get("prompt", "") if isinstance(raw_meta, dict) else ""
+
+    # Insert into gallery database
+    try:
+        _gdb.insert_image({
+        "civitai_id": iid,
+        "file_uuid": _url_to_id(url),
+        "type": meta.get("type", "video" if ext == ".mp4" else "image"),
+        "ext": ext,
+        "file_path": rel_file,
+        "thumb_path": rel_thumb if has_thumb else None,
+        "meta_path": rel_meta if meta else None,
+        "model_id": model_id,
+        "post_id": meta.get("postId"),
+        "post_title": meta.get("postTitle", ""),
+        "username": meta.get("username", ""),
+        "base_model": meta.get("baseModel", ""),
+        "width": meta.get("width"),
+        "height": meta.get("height"),
+        "duration": meta.get("duration"),
+        "audio": meta.get("audio"),
+        "file_size": dest.stat().st_size if dest.exists() else 0,
+        "created_at": meta.get("createdAt"),
+        "reactions": stats.get("heartCount", 0) + stats.get("likeCount", 0),
+        "comments": stats.get("commentCount", 0),
+        "collected": stats.get("collectedCount", 0) if "collectedCount" in stats else 0,
+        "has_meta": bool(meta),
+        "has_gen_data": bool(meta.get("generation_data")),
+        "source": meta.get("_source", "community"),
+        "search_mode": search_mode,
+        "prompt": prompt,
+    })
+    except Exception as e:
+        print(f"[gallery] DB insert failed for {iid}: {e}", flush=True)
+
+    # Link this image to the specific version it was found under.
+    # The same image can be linked to multiple versions.
+    if version_id:
+        try:
+            _gdb.link_version(iid, version_id)
+        except Exception as e:
+            print(f"[gallery] DB link_version failed for {iid}: {e}", flush=True)
+
+    return "ok"
+
+
+def _gallery_download_batch(items: list[tuple],
+                            model_id: int, version_id: int | None,
+                            state: dict, stop: threading.Event,
+                            seen: set, fetch_gen_data: bool = False,
+                            workers: int = 6,
+                            search_mode: str = "fixed") -> bool:
+    """Download a batch of (id, url, meta) items with parallel workers.
+
+    Orchestrates the download of multiple gallery items concurrently.
+    Deduplicates by URL-derived UUID within the current download session
+    (the 'seen' set). Cross-session dedup happens in _gallery_download_one
+    via the SQLite database.
+
+    Returns False if stopped (so the caller can break out of the pagination loop).
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # Filter duplicates within this session using URL UUIDs.
+    # This prevents downloading the same image twice if it appears
+    # in both card and community results, or across paginated pages.
+    todo = []
+    for iid, url, meta in items:
+        url_key = _url_to_id(url) or iid
+        if url_key in seen:
+            continue
+        seen.add(url_key)
+        todo.append((iid, url, meta))
+
+    if not todo:
+        return True
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_gallery_download_one, iid, url, meta,
+                        model_id, version_id, fetch_gen_data, stop,
+                        search_mode): iid
+            for iid, url, meta in todo
+        }
+        for fut in as_completed(futures):
+            if stop.is_set():
+                pool.shutdown(wait=False, cancel_futures=True)
+                return False
+            result = fut.result()
+            if result == "ok":
+                state["downloaded"] += 1
+            elif result == "skipped":
+                state["skipped"] += 1
+    return True
+
+
+def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
+    """Download model card images + community images for a CivitAI model."""
+    state = _gallery_state[model_id]
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
+    max_community = state.get("max_images", 200)
+    num_workers = api_params.get("workers", 6)
+    mode = api_params.get("mode", "fixed")
+    version_id = api_params.get("version_id")
+
+    # ── Phase 1: model card images (always all of them) ──
     try:
         r = httpx.get(f"https://civitai.com/api/v1/models/{model_id}",
                       timeout=30, headers=headers)
@@ -387,57 +660,247 @@ def _gallery_thread(model_id: int, stop: threading.Event):
         state["status"] = "done"
         return
 
-    # Collect all version images (model card images)
-    all_imgs = []
+    card_imgs = []
     for v in model_data.get("modelVersions", []):
         for img in v.get("images", []):
-            iid, url = img.get("id"), img.get("url", "")
-            if iid and url:
-                all_imgs.append((iid, url))
-    all_imgs = all_imgs[:max_images]
-    state["total"] = len(all_imgs)
+            url = img.get("url", "")
+            if not url:
+                continue
+            iid = img.get("id") or _url_to_id(url)
+            if not iid:
+                continue
+            meta = {"civitai_id": img.get("id"), "url": url,
+                    "type": img.get("type", "image"),
+                    "width": img.get("width"), "height": img.get("height"),
+                    "_source": "original"}
+            if img.get("id"):
+                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}"
+            card_imgs.append((str(iid), url, meta))
 
-    # Download
-    for iid, url in all_imgs:
+    state["total"] = len(card_imgs) + max_community
+    seen: set[str] = set()
+
+    if not _gallery_download_batch(card_imgs, model_id, version_id, state, stop, seen,
+                                   workers=num_workers, search_mode=mode):
+        state["status"] = "stopped"
+        return
+
+    # ── Resolve creator ID for tRPC prioritizedUserIds ──
+    creator_id = None
+    creator_username = (model_data.get("creator") or {}).get("username")
+    if creator_username:
+        try:
+            inp = json.dumps({"json": {"username": creator_username}})
+            cr = httpx.get(f"https://civitai.com/api/trpc/user.getCreator?input={inp}",
+                           headers=headers, timeout=10)
+            if cr.status_code == 200:
+                creator_id = cr.json().get("result", {}).get("data", {}).get("json", {}).get("id")
+        except Exception:
+            pass
+
+    # ── Phase 2: community images (capped by max_community) ──
+    community_downloaded = 0
+    cursor = None
+    state["pages_fetched"] = 0
+    print(f"[gallery] {model_id}: mode={mode}, max={max_community}, seen={len(seen)}, creator={creator_id}", flush=True)
+
+    while community_downloaded < max_community:
         if stop.is_set():
             state["status"] = "stopped"
             return
-        # Detect extension from URL
-        ext = ".mp4" if ".mp4" in url else ".jpeg"
-        dest = gallery_dir / f"{iid}{ext}"
-        if dest.exists():
-            state["skipped"] += 1
-            continue
-        if _download_image(url, dest):
-            state["downloaded"] += 1
 
+        # Fetch page
+        try:
+            if mode in ("fixed", "trpc"):
+                # Build tRPC input — base matches CivitAI site call
+                inp = {
+                    "modelVersionId": api_params.get("version_id") or model_id,
+                    "period": "AllTime",
+                    "sort": "Most Reactions",
+                    "limit": 200,
+                    "pending": True,
+                    "include": [],
+                    "withMeta": False,
+                    "excludedTagIds": [],
+                    "disablePoi": True,
+                    "disableMinor": True,
+                    "cursor": cursor,
+                    "authed": True,
+                }
+                # In tRPC mode, apply user filters
+                if mode == "trpc":
+                    inp["sort"] = api_params.get("sort", "Newest")
+                    inp["period"] = api_params.get("period", "AllTime")
+                    if api_params.get("types"):
+                        inp["types"] = api_params["types"]
+                    if api_params.get("with_meta"):
+                        inp["withMeta"] = True
+                    if api_params.get("from_platform"):
+                        inp["fromPlatform"] = True
+                    if api_params.get("is_remix") is not None:
+                        inp["isRemix"] = api_params["is_remix"]
+
+                trpc_input = json.dumps({"json": inp, "meta": {"values": {"cursor": ["undefined"]}}})
+                print(f"[gallery] tRPC input: {trpc_input[:300]}", flush=True)
+                # Use params= so httpx URL-encodes the input properly.
+                # Passing raw JSON in f-string URL breaks on special chars.
+                r = httpx.get("https://civitai.com/api/trpc/image.getInfinite",
+                              params={"input": trpc_input},
+                              headers=headers, timeout=30)
+                print(f"[gallery] tRPC status: {r.status_code}, body size: {len(r.content)}", flush=True)
+                if r.status_code != 200:
+                    break
+                rdata = r.json().get("result", {}).get("data", {}).get("json", {})
+                page_items = rdata.get("items", [])
+                next_cursor = rdata.get("nextCursor")
+            else:
+                # REST mode
+                params: dict = {"modelId": model_id, "limit": 200,
+                                "nsfw": api_params.get("nsfw", "X"),
+                                "sort": api_params.get("sort", "Newest"),
+                                "period": api_params.get("period", "AllTime")}
+                if api_params.get("version_id"):
+                    params["modelVersionId"] = api_params["version_id"]
+                if cursor:
+                    params["cursor"] = cursor
+                r = httpx.get("https://civitai.com/api/v1/images",
+                              params=params, timeout=30, headers=headers)
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                page_items = data.get("items", [])
+                next_cursor = (data.get("metadata") or {}).get("nextCursor")
+        except Exception:
+            break
+        state["pages_fetched"] = state.get("pages_fetched", 0) + 1
+
+        print(f"[gallery] {model_id}: page {state['pages_fetched']}, items={len(page_items)}, cd={community_downloaded}", flush=True)
+        if not page_items:
+            break
+
+        # Build batch from page items
+        _CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
+        batch = []
+        for img in page_items:
+            if community_downloaded >= max_community:
+                break
+            # tRPC returns short url (UUID only), REST returns full URL
+            raw_url = img.get("url", "")
+            if mode in ("fixed", "trpc") and raw_url and not raw_url.startswith("http"):
+                ext_hint = ".mp4" if img.get("type") == "video" else ".jpeg"
+                full_url = f"{_CDN}{raw_url}/original=true/{raw_url}{ext_hint}"
+            else:
+                full_url = raw_url
+            if not full_url:
+                continue
+            url_key = _url_to_id(full_url) or raw_url
+            if url_key and url_key in seen:
+                continue
+            iid = str(img.get("id") or url_key)
+            if not iid:
+                continue
+            meta = {
+                "civitai_id": img.get("id"),
+                "civitai_page": f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}" if img.get("id") else None,
+                "url": full_url,
+                "type": img.get("type", "image"),
+                "width": img.get("width"), "height": img.get("height"),
+                "username": (img.get("user") or {}).get("username") if mode in ("fixed", "trpc") else img.get("username"),
+                "postId": img.get("postId"),
+                "postTitle": img.get("postTitle", ""),
+                "duration": (img.get("metadata") or {}).get("duration"),
+                "audio": (img.get("metadata") or {}).get("audio"),
+                "baseModel": img.get("baseModel"),
+                "createdAt": img.get("createdAt"),
+                "stats": img.get("stats"),
+                "raw_meta": img.get("meta"),
+                "raw_item": img,
+                "_source": "community",
+            }
+            batch.append((iid, full_url, meta))
+            community_downloaded += 1
+
+        if not _gallery_download_batch(batch, model_id, version_id, state, stop, seen,
+                                              fetch_gen_data=True, workers=num_workers,
+                                              search_mode=mode):
+            state["status"] = "stopped"
+            return
+
+        print(f"[gallery] {model_id}: batch done, cd={community_downloaded}, dl={state['downloaded']} skip={state['skipped']}", flush=True)
+        cursor = next_cursor
+        print(f"[gallery] {model_id}: nextCursor={'yes' if cursor else 'NO'}", flush=True)
+        if not cursor:
+            break
+
+    # Mark as done, then clear state after a short delay so the frontend
+    # can show the "Completed" message before it disappears.
+    state["total"] = len(seen)
     state["status"] = "done"
+    # Clean up state after 10s so reopening gallery doesn't show stale progress
+    def _cleanup():
+        time.sleep(10)
+        if _gallery_state.get(model_id, {}).get("status") == "done":
+            _gallery_state.pop(model_id, None)
+    threading.Thread(target=_cleanup, daemon=True).start()
     _events.emit("lora.gallery.done",
                  f"Gallery done for {model_id}: {state['downloaded']} new, {state['skipped']} skipped",
                  severity="success", data={"model_id": model_id})
 
 
 @router.get("/api/admin/loras/{model_id}/gallery")
-async def gallery_status(model_id: int):
-    """Get gallery download status and list of images."""
+async def gallery_status(model_id: int, version_id: int | None = None,
+                         starred: bool = False):
+    """Get gallery download status and image listing from SQLite.
+
+    This replaces the old filesystem-scanning approach. The DB query is
+    instant regardless of how many images exist — no more reading hundreds
+    of JSON files on every poll request.
+
+    The version_id query param is optional. If provided, only images linked
+    to that version are returned. Otherwise, all images for the model.
+    """
     state = _gallery_state.get(model_id, {})
 
-    def _list_images(dirpath: Path) -> list:
-        if not dirpath.is_dir():
-            return []
-        result = []
-        for f in sorted(dirpath.iterdir()):
-            if f.suffix not in (".jpeg", ".mp4"):
-                continue
-            meta = {}
-            mf = f.with_suffix(".json")
-            if mf.exists():
-                try:
-                    meta = json.loads(mf.read_text())
-                except Exception:
-                    pass
-            result.append({"id": f.stem, "ext": f.suffix, "meta": meta})
-        return result
+    # Query images from SQLite, split by source (card vs community)
+    if version_id:
+        # Original images belong to model, not version — always query by model_id
+        card_list = _gdb.list_images_by_model(model_id, source="original", starred_only=starred)
+        comm_list = _gdb.list_images_by_version(version_id, source="community", starred_only=starred)
+    else:
+        card_list = _gdb.list_images_by_model(model_id, source="original", starred_only=starred)
+        comm_list = _gdb.list_images_by_model(model_id, source="community", starred_only=starred)
+
+    # Convert DB rows to the format the frontend expects.
+    # Each item needs: id, ext, meta (light), createdAt, has_thumb
+    def _format(row: dict) -> dict:
+        return {
+            "id": row["civitai_id"],
+            "ext": row["ext"],
+            "has_thumb": bool(row.get("thumb_path")),
+            "starred": bool(row.get("starred")),
+            "createdAt": row.get("created_at", ""),
+            "meta": {
+                "civitai_id": row.get("civitai_id"),
+                "civitai_page": f"https://civitai.com/images/{row['civitai_id']}?token={CIVITAI_API_KEY}" if row.get("civitai_id", "").isdigit() else None,
+                "url": None,  # not needed for listing — loaded on detail view
+                "type": row.get("type", "image"),
+                "width": row.get("width"),
+                "height": row.get("height"),
+                "username": row.get("username", ""),
+                "postId": row.get("post_id"),
+                "postTitle": row.get("post_title", ""),
+                "duration": row.get("duration"),
+                "audio": bool(row.get("audio")),
+                "baseModel": row.get("base_model", ""),
+                "createdAt": row.get("created_at", ""),
+            },
+        }
+
+    formatted_card = [_format(r) for r in card_list]
+    formatted_comm = [_format(r) for r in comm_list]
+
+    # Get aggregate sizes from DB
+    stats = _gdb.count_and_size(model_id=model_id, version_id=version_id)
 
     return JSONResponse({
         "status": state.get("status", "idle"),
@@ -446,35 +909,286 @@ async def gallery_status(model_id: int):
         "total": state.get("total"),
         "pages_fetched": state.get("pages_fetched", 0),
         "counted": state.get("counted", 0),
-        "previews": _list_images(IMAGES_DIR / str(model_id) / "previews"),
-        "gallery": _list_images(IMAGES_DIR / str(model_id) / "gallery"),
+        "gallery_card": formatted_card,
+        "gallery_card_bytes": stats.get("original_bytes", 0),
+        "gallery_community": formatted_comm,
+        "gallery_community_bytes": stats.get("community_bytes", 0),
     })
 
 
+@router.get("/api/admin/loras/gallery/{item_id}/meta")
+async def gallery_item_meta(item_id: str):
+    """Get full metadata (including generation_data) for a single gallery item.
+
+    Looks up the item in SQLite to find its meta_path, then reads the full
+    JSON from disk. This is the on-demand detail endpoint — called when the
+    user clicks 'Details' on a gallery item. The heavy fields (raw_item,
+    generation_data) are only in the JSON file, not in the DB.
+    """
+    row = _gdb.get_image(item_id)
+    if not row or not row.get("meta_path"):
+        raise HTTPException(404, "Metadata not found")
+    mf = _gdb.abs_path(row["meta_path"])
+    if not mf.exists():
+        raise HTTPException(404, "Metadata file missing")
+    try:
+        return JSONResponse(json.loads(mf.read_text()))
+    except Exception:
+        raise HTTPException(500, "Failed to read metadata")
+
+
 @router.delete("/api/admin/loras/{model_id}/gallery")
-async def gallery_delete(model_id: int):
-    """Delete all gallery images for a model."""
-    import shutil
-    gallery_dir = IMAGES_DIR / str(model_id) / "gallery"
-    count = 0
-    if gallery_dir.is_dir():
-        count = sum(1 for f in gallery_dir.iterdir() if f.suffix in (".jpeg", ".mp4"))
-        shutil.rmtree(gallery_dir)
+async def gallery_delete(model_id: int, version_id: int | None = None):
+    """Unlink gallery images from a version (or all versions of a model).
+
+    Community images are GLOBAL — they are never deleted from disk or DB.
+    This only removes the image_versions links so the images stop appearing
+    in this version's gallery. The files and DB records stay for future use.
+    Original/card images for this model ARE deleted (files + DB records)
+    since they belong to the model, not the global store.
+    """
+    # Remove version links
+    if version_id:
+        count = _gdb.delete_by_version(version_id)
+    else:
+        # Remove all version links for all versions of this model
+        # by finding all versions that have links
+        conn = _gdb._get_conn()
+        rows = conn.execute("""
+            SELECT DISTINCT iv.version_id FROM image_versions iv
+            JOIN gallery_images g ON iv.civitai_id = g.civitai_id
+            WHERE g.model_id = ?
+        """, (model_id,)).fetchall()
+        count = 0
+        for row in rows:
+            count += _gdb.delete_by_version(row["version_id"])
+
+    # Delete original/card images (these belong to the model)
+    originals = _gdb.list_images_by_model(model_id, source="original")
+    for img in originals:
+        for field in ("file_path", "thumb_path", "meta_path"):
+            if img.get(field):
+                full = _gdb.abs_path(img[field])
+                if full.exists():
+                    full.unlink()
+    if originals:
+        conn = _gdb._get_conn()
+        conn.execute("DELETE FROM gallery_images WHERE model_id = ? AND source = 'original'", (model_id,))
+        conn.commit()
+
     if model_id in _gallery_state:
         del _gallery_state[model_id]
-    return JSONResponse({"deleted": count})
+    return JSONResponse({"deleted": count + len(originals)})
 
 
-@router.get("/api/admin/loras/images/{model_id}/{img_type}/{filename}")
-async def serve_image(model_id: str, img_type: str, filename: str):
-    """Serve a preview or gallery image with path traversal protection."""
-    if img_type not in ("previews", "gallery"):
-        raise HTTPException(400, "Invalid image type")
-    for part in (model_id, img_type, filename):
-        if ".." in part or "/" in part or "\\" in part:
-            raise HTTPException(400, "Invalid path")
-    path = IMAGES_DIR / model_id / img_type / filename
-    if not path.exists():
+
+@router.post("/api/admin/loras/gallery/{item_id}/star")
+async def toggle_star(item_id: str):
+    """Toggle the starred flag on a gallery image.
+
+    Returns the new starred state. Used by the star button in the UI.
+    """
+    new_state = _gdb.toggle_starred(item_id)
+    return JSONResponse({"starred": new_state})
+
+
+# ── CivitAI Tags ────────────────────────────────────────────────────────────
+# Endpoints for syncing and querying the local CivitAI tag dictionary.
+# Tags are resolved from CivitAI's tRPC batch API and cached in SQLite.
+
+
+def _sync_civitai_tags_bg() -> int:
+    """Background (sync) version of tag sync. Called from startup thread.
+
+    Collects tagIds from gallery metadata, resolves unknown ones via
+    CivitAI tRPC batch, stores in DB. Returns count of newly resolved tags.
+    """
+    if not CIVITAI_API_KEY:
+        return 0
+
+    # Collect all unique tagIds from gallery images' raw metadata
+    all_tag_ids = set()
+    conn = _gdb._get_conn()
+    rows = conn.execute("SELECT meta_path FROM gallery_images WHERE meta_path IS NOT NULL").fetchall()
+    for row in rows:
+        meta_file = _gdb.abs_path(row["meta_path"])
+        if not meta_file.exists():
+            continue
+        try:
+            meta = json.loads(meta_file.read_text())
+            raw_item = meta.get("raw_item") or {}
+            tag_ids = raw_item.get("tagIds") or []
+            all_tag_ids.update(tag_ids)
+        except Exception:
+            pass
+
+    unknown = _gdb.get_unknown_tag_ids(list(all_tag_ids))
+    if not unknown:
+        return 0
+
+    # Resolve via tRPC batch (sync httpx, not async)
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+               "Content-Type": "application/json"}
+    resolved = []
+    chunk_size = 50
+    for i in range(0, len(unknown), chunk_size):
+        chunk = unknown[i:i + chunk_size]
+        batch_input = {str(j): {"json": {"id": tid}} for j, tid in enumerate(chunk)}
+        procedure = ",".join(["tag.getById"] * len(chunk))
+        try:
+            r = httpx.get(f"https://civitai.com/api/trpc/{procedure}",
+                          params={"batch": "1", "input": json.dumps(batch_input)},
+                          headers=headers, timeout=15)
+            if r.status_code == 200:
+                results = r.json()
+                if isinstance(results, list):
+                    for item in results:
+                        tag = item.get("result", {}).get("data", {}).get("json", {})
+                        if tag.get("id"):
+                            resolved.append(tag)
+        except Exception:
+            pass
+
+    if resolved:
+        _gdb.upsert_tags(resolved)
+    return len(resolved)
+
+
+@router.post("/api/admin/civitai/tags/sync")
+async def sync_civitai_tags():
+    """Sync CivitAI tags: collect all tag IDs from downloaded gallery images,
+    resolve unknown ones via CivitAI tRPC batch API, store in local DB.
+
+    Each call is incremental — only resolves tags not already cached.
+    Safe to call repeatedly.
+    """
+    if not CIVITAI_API_KEY:
+        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+
+    # Collect all unique tagIds from gallery images' raw metadata
+    all_tag_ids = set()
+    conn = _gdb._get_conn()
+    rows = conn.execute("SELECT meta_path FROM gallery_images WHERE meta_path IS NOT NULL").fetchall()
+    for row in rows:
+        meta_file = _gdb.abs_path(row["meta_path"])
+        if not meta_file.exists():
+            continue
+        try:
+            meta = json.loads(meta_file.read_text())
+            raw_item = meta.get("raw_item") or {}
+            tag_ids = raw_item.get("tagIds") or []
+            all_tag_ids.update(tag_ids)
+        except Exception:
+            pass
+
+    # Find which ones we don't have yet
+    unknown = _gdb.get_unknown_tag_ids(list(all_tag_ids))
+    if not unknown:
+        return JSONResponse({
+            "synced": 0, "total_known": _gdb.tag_count(),
+            "message": "All tags already cached"
+        })
+
+    # Resolve via tRPC batch API.
+    # tRPC batch: repeat procedure name N times, input keyed by index.
+    # Process in chunks of 50 to avoid URL length limits.
+    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+               "Content-Type": "application/json"}
+    resolved = []
+    chunk_size = 50
+    for i in range(0, len(unknown), chunk_size):
+        chunk = unknown[i:i + chunk_size]
+        # Build batch input: {"0": {"json": {"id": N}}, "1": {"json": {"id": M}}, ...}
+        batch_input = {str(j): {"json": {"id": tid}} for j, tid in enumerate(chunk)}
+        procedure = ",".join(["tag.getById"] * len(chunk))
+        async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+            try:
+                r = await client.get(
+                    f"https://civitai.com/api/trpc/{procedure}",
+                    params={"batch": "1", "input": json.dumps(batch_input)})
+                if r.status_code == 200:
+                    results = r.json()
+                    # Response is an array of {result: {data: {json: {id, name, type}}}}
+                    if isinstance(results, list):
+                        for item in results:
+                            tag = item.get("result", {}).get("data", {}).get("json", {})
+                            if tag.get("id"):
+                                resolved.append(tag)
+            except Exception:
+                pass
+
+    # Store resolved tags
+    if resolved:
+        _gdb.upsert_tags(resolved)
+
+    return JSONResponse({
+        "synced": len(resolved),
+        "total_known": _gdb.tag_count(),
+        "unknown_remaining": len(unknown) - len(resolved)
+    })
+
+
+@router.get("/api/admin/civitai/tags")
+async def list_civitai_tags():
+    """Return all cached CivitAI tags from local database.
+
+    Returns list of {id, name, type, synced_at}, sorted by name.
+    Call POST /api/admin/civitai/tags/sync first to populate.
+    """
+    tags = _gdb.get_all_tags()
+    return JSONResponse({"tags": tags, "count": len(tags)})
+
+
+@router.get("/api/admin/loras/gallery/media/{item_id}")
+async def serve_gallery_media(item_id: str):
+    """Serve a gallery media file (image or video) from the flat store.
+
+    Looks up the item in SQLite to find its file_path, then serves it.
+    The item_id can include an extension (e.g. '123456.mp4') which we strip,
+    or it can be just the ID (e.g. '123456').
+    """
+    # Strip extension if present (frontend may append .mp4 or .jpeg)
+    clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
+    if ".." in clean_id or "/" in clean_id:
+        raise HTTPException(400, "Invalid id")
+    row = _gdb.get_image(clean_id)
+    if not row:
         raise HTTPException(404, "Image not found")
+    path = _gdb.abs_path(row["file_path"])
+    if not path.exists():
+        raise HTTPException(404, "File missing from disk")
+    media = "video/mp4" if row["ext"] == ".mp4" else "image/jpeg"
+    return FileResponse(path, media_type=media)
+
+
+@router.get("/api/admin/loras/gallery/thumb/{item_id}")
+async def serve_gallery_thumb(item_id: str):
+    """Serve a video thumbnail from the flat store.
+
+    Returns the .thumb.jpg extracted by ffmpeg during download.
+    If no thumbnail exists, returns 404 (frontend shows a grey placeholder).
+    """
+    clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
+    if ".." in clean_id or "/" in clean_id:
+        raise HTTPException(400, "Invalid id")
+    row = _gdb.get_image(clean_id)
+    if not row or not row.get("thumb_path"):
+        raise HTTPException(404, "Thumbnail not found")
+    path = _gdb.abs_path(row["thumb_path"])
+    if not path.exists():
+        raise HTTPException(404, "Thumbnail file missing")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+# Legacy route: serves preview images (model card thumbnails in catalog list).
+# These are NOT part of the gallery store — they stay in the old per-model directory.
+@router.get("/api/admin/loras/images/{model_id}/previews/{filename}")
+async def serve_preview(model_id: str, filename: str):
+    """Serve a preview image (used by the LoRA catalog cards, not gallery)."""
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid path")
+    path = IMAGES_DIR / model_id / "previews" / filename
+    if not path.exists():
+        raise HTTPException(404, "Preview not found")
     media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"
     return FileResponse(path, media_type=media)

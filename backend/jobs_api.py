@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import COMFY_URL, COMFYUI_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR
+from config import COMFY_URL, COMFYUI_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR, DEV_MODE
 from events import _events
 from runner import _exec_progress, _save_job, _pick_best_output, _start_ws_listener
 from workflows import _make_input_filename
@@ -528,6 +528,11 @@ async def install_node(body: dict):
 
     if dest.exists():
         return {"status": "already_installed", "name": name}
+
+    # DEV_MODE: create empty directory to simulate installed node
+    if DEV_MODE:
+        dest.mkdir(parents=True, exist_ok=True)
+        return {"status": "installed", "name": name, "restart_required": True}
 
     try:
         subprocess.run(

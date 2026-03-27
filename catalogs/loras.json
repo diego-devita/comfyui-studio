@@ -1,5 +1,43 @@
 {
-  "version": 3,
-  "date": "2026-03-24 17:00",
-  "categories": []
+  "version": 4,
+  "date": "2026-03-26 18:24",
+  "categories": [
+    {
+      "id": "other_loras",
+      "name": "Other LoRAs",
+      "models": [
+        {
+          "name": "WAN2.1 Facefuck v1.0 [Wan Video]",
+          "file": "WAN-facefuck-epoch110, fast speed full insertion, man has sex with womans mouth.safetensors",
+          "dest": "loras",
+          "source": "civitai",
+          "civitai_version_id": 1652726,
+          "civitai_model_id": 1461476,
+          "size_gb": 0.351,
+          "base_model": "Wan Video",
+          "tags": [
+            "concept",
+            "fellatio",
+            "blowjob",
+            "nsfw",
+            "brutal",
+            "facefuck"
+          ],
+          "trigger_words": [
+            "facefuck fast speed full insertion, man has sex with womans mouth, he thrusts his cock in and out of her mouth"
+          ],
+          "description": "<p>My first LORA and entirely self trained. Just try it and see, initial emphasis was on the hip thrusting action!</p><pre><code>facefuck fast speed full insertion, man has sex with womans mouth, he thrusts his cock in and out of her mouth</code></pre><p>Also describe the position:</p><ul><li><p>eg; woman on right, POV / Side profile / Underneath Mouse's view etc</p></li></ul><p><br />strength_model</p><ul><li><p>1.0 - 2.0</p><p></p></li></ul><p>Variations (v1.1 to be improved)</p><pre><code>fac",
+          "author": "deathfact",
+          "rating": 0.0,
+          "downloads": 10413,
+          "images": [
+            "8d8bbed2-f7fb-4b9a-aee8-b19d4c999b71.jpeg",
+            "c2d7ea67-9a1a-42b8-bcda-d30ae7fd7ad0.jpeg",
+            "d53b3b2f-e8c2-4838-adb5-8dd3af5225eb.jpeg",
+            "8aa48c71-692d-4a5e-b98c-1fbcf544b72b.jpeg"
+          ]
+        }
+      ]
+    }
+  ]
 }

@@ -227,7 +227,7 @@ _events.emit(
 
 1. `emit()` is thread-safe (uses a `queue.Queue`) -- safe to call from download threads.
 2. Events are appended to an in-memory ring buffer (1000 events max).
-3. Events are persisted to `STUDIO_DIR/events.jsonl` with automatic rotation at 5MB.
+3. Events are persisted to `db/studio.db` (SQLite events table, trimmed to 1000).
 4. A background asyncio task consumes the queue and dispatches to subscribers.
 5. The `_WebSocketPusher` subscriber pushes events to all connected WebSocket clients in real-time.
 
@@ -276,9 +276,8 @@ STUDIO_DIR (/workspace/studio)
 ├── llm/
 │   ├── models/          LLM_MODELS_DIR     — downloaded LLM GGUF files
 │   └── config.json      LLM_CONFIG_PATH    — llama-server config
-├── db/                  DB_DIR             — database files
+├── database/            DB_DIR             — SQLite databases (studio.db)
 ├── version.json         VERSION_JSON       — component versions
-├── events.jsonl                            — persisted event log
 └── .session_secret      SESSION_SECRET_PATH — HMAC signing key
 ```
 

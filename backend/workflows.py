@@ -67,19 +67,6 @@ def _load_workflow_json(workflow_id: str) -> dict:
     return json.loads(p.read_text())
 
 
-def _load_workflows_index_raw() -> dict:
-    """Load the full workflows index.json including version/date."""
-    p = _workflows_path("index.json")
-    if not p.exists():
-        return {"version": 0, "date": "", "workflows": []}
-    return json.loads(p.read_text())
-
-
-def _load_workflows_index() -> list:
-    """Load just the workflows list from index.json."""
-    return _load_workflows_index_raw().get("workflows", [])
-
-
 # ── Readiness checks ────────────────────────────────────────────────────────
 
 

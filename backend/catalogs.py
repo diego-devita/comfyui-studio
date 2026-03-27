@@ -60,11 +60,21 @@ def _all_categories() -> list:
 
 
 def _find_model(filename: str) -> dict | None:
-    """Find a model entry by filename across models + loras catalogs."""
+    """Find a model entry by filename across models + loras catalogs.
+
+    Matches exact filename first, then falls back to basename match
+    (manifest may use 'subfolder/file.safetensors' while catalog has just 'file.safetensors').
+    """
+    basename = filename.rsplit("/", 1)[-1] if "/" in filename else None
     for cat in _all_categories():
         for m in cat.get("models", []):
             if m["file"] == filename:
                 return m
+    if basename:
+        for cat in _all_categories():
+            for m in cat.get("models", []):
+                if m["file"] == basename:
+                    return m
     return None
 
 

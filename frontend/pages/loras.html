@@ -69,14 +69,12 @@
   }
   .lookup-pill.trigger:hover { background: rgba(121, 80, 242, 0.25); }
   .lookup-images {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 4px; margin-bottom: 16px; max-height: 280px; overflow-y: auto;
+    display: flex; flex-wrap: wrap;
+    gap: 4px; margin-bottom: 16px; max-height: 320px; overflow-y: auto;
   }
-  .lookup-images img {
-    width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  .lookup-images img:hover { opacity: 0.8; }
+  .lookup-images .gallery-thumb { width: 100px; height: 100px; }
+  .lookup-images .gallery-thumb img, .lookup-images .gallery-thumb video { width: 100px; height: 100px; }
+  .lookup-images .gallery-thumb .thumb-img { width: 100px; height: 100px; }
   .lookup-versions { margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
   .lookup-version {
     display: flex; align-items: center; gap: 8px; padding: 8px 4px;
@@ -105,23 +103,73 @@
   /* ── Gallery ── */
   .gallery-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
   .gallery-header h3 { margin: 0; font-size: 18px; }
-  .gallery-count { color: var(--muted); font-size: 13px; }
+  .gallery-count { background: #ff8f47; padding: 0 5px 2px 5px; border-radius: 5px; font-weight: 600; color: black; font-size: 13px; }
   .gallery-progress { margin-bottom: 10px; }
   .gallery-progress .progress-bar { height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
   .gallery-progress .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .gallery-progress .progress-fill.indeterminate { width: 30% !important; animation: indeterminate 1.5s infinite ease-in-out; }
+  @keyframes indeterminate { 0% { margin-left: 0 } 50% { margin-left: 70% } 100% { margin-left: 0 } }
   .gallery-progress .progress-text { font-size: 12px; color: var(--muted); }
-  .gallery-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
-  .gallery-controls input[type=range] { width: 120px; }
-  .gallery-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 150px), 1fr));
-    gap: 4px; max-height: calc(100vh - 280px); overflow-y: auto;
+  .gallery-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .gallery-filters select { padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 12px; }
+  .gallery-urls { font-size: 11px; color: var(--muted); margin-bottom: 10px; word-break: break-all; line-height: 1.8; }
+  .gallery-urls code { background: var(--bg); padding: 2px 5px; border-radius: 3px; }
+  .gallery-urls .copy-btn { background: none; border: none; cursor: pointer; padding: 2px 4px; vertical-align: middle; opacity: 0.5; }
+  .gallery-urls .copy-btn:hover { opacity: 1; }
+  .gallery-urls .copy-btn svg { width: 14px; height: 14px; fill: var(--muted); vertical-align: middle; }
+  .gallery-urls .copied-flash { color: var(--accent); font-size: 11px; margin-left: 4px; }
+  #galleryGrid { max-height: calc(100vh - 400px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  #galleryGrid::-webkit-scrollbar { width: 6px; }
+  #galleryGrid::-webkit-scrollbar-track { background: transparent; }
+  #galleryGrid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #galleryGrid::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  .gallery-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+  .gallery-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .gallery-section { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .gallery-thumb { position: relative; width: 150px; height: 150px; cursor: pointer; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+  .gallery-thumb img, .gallery-thumb video { width: 150px; height: 150px; object-fit: cover; display: block; }
+  .gallery-thumb .play-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.15); opacity: 1; transition: opacity 0.15s; pointer-events: none;
   }
-  .gallery-grid img {
-    width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
-    transition: opacity 0.15s;
+  .gallery-thumb .play-overlay svg { width: 32px; height: 32px; fill: rgba(255,255,255,0.85); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+  .gallery-thumb.playing .play-overlay { opacity: 0; }
+  .gallery-thumb:hover .play-overlay { opacity: 1 !important; }
+  .gallery-thumb .expand-btn {
+    position: absolute; top: 4px; right: 4px; width: 26px; height: 26px;
+    background: rgba(0,0,0,0.5); border: none; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
   }
-  .gallery-grid img:hover { opacity: 0.85; }
-  .gallery-empty { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+  .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
+  .gallery-thumb:hover .expand-btn { opacity: 1; }
+  .gallery-thumb .thumb-img { width: 150px; height: 150px; object-fit: cover; display: block; border-radius: 4px; background: var(--bg); }
+  .gallery-thumb .thumb-idx {
+    position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.7); font-size: 10px; padding: 1px 5px;
+    border-radius: 3px; pointer-events: none; line-height: 1.4;
+  }
+  .gallery-thumb .thumb-star {
+    position: absolute; top: 4px; left: 4px; width: 18px; height: 18px;
+    background: none; border: none; cursor: pointer; padding: 0; z-index: 2;
+    opacity: 0.3; transition: opacity 0.15s;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+  }
+  .gallery-thumb .thumb-star .icon { width: 14px; height: 14px; background-color: #fff; }
+  .gallery-thumb .thumb-star.starred { opacity: 1; }
+  .gallery-thumb .thumb-star.starred .icon { background-color: #f5c518; }
+  .gallery-thumb:hover .thumb-star { opacity: 0.8; }
+  .detail-star {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    color: var(--muted); font-size: 12px; transition: all 0.15s;
+  }
+  .detail-star .icon { width: 14px; height: 14px; background-color: var(--muted); }
+  .detail-star.starred { color: #f5c518; border-color: #f5c518; }
+  .detail-star.starred .icon { background-color: #f5c518; }
+  .gallery-empty { color: var(--muted); padding: 30px; text-align: center; }
+  #detailsMetaContent::-webkit-scrollbar { display: none; }
+  .detail-meta p { white-space: pre-wrap; word-break: break-word; max-height: none; overflow: visible; }
 
   /* ── Detail view ── */
   .detail-overlay {
@@ -168,9 +216,9 @@
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
   <a href="/admin/llm" class="nav-link">LLM</a>
-  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-md"></span></a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
-  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')">Logout</a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 
 <!-- Header -->
@@ -185,9 +233,6 @@
   <span class="stat stat--queued" id="statQueued">0 queued</span>
   <span class="stat stat--present" id="statPresent">0 / 0 present</span>
   <span class="stat stat--disk" id="statDisk">--</span>
-  <span class="stat stat--concurrent">
-    Parallel: <select id="maxConcurrent"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
-  </span>
 </div>
 
 <!-- Filter panel -->
@@ -246,7 +291,7 @@
     <button class="civitai-close" id="lookupClose">&times;</button>
     <h2 style="margin:0 0 16px">Add LoRA from CivitAI</h2>
     <div class="lookup-url-row">
-      <input type="text" id="lookupUrl" placeholder="Paste CivitAI URL... (e.g. https://civitai.com/models/12345)">
+      <input type="text" id="lookupUrl" placeholder="URL, model ID, or comma-separated IDs">
       <button class="btn" id="lookupBtn">Lookup</button>
     </div>
     <div id="lookupSpinner" style="display:none"><span class="spinner"></span> Looking up model...</div>
@@ -265,26 +310,88 @@
 
 <!-- Gallery Overlay -->
 <div class="civitai-overlay" id="galleryOverlay" style="display:none">
-  <div class="civitai-dialog" style="max-width:1200px">
+  <div class="civitai-dialog" style="max-width:1200px;padding:20px 40px">
     <button class="civitai-close" id="galleryClose">&times;</button>
+
+    <!-- Title row: name + badge + count + links + Delete All -->
     <div class="gallery-header">
       <h3 id="galleryTitle"></h3>
       <span class="gallery-count" id="galleryCount"></span>
-      <select id="galleryCap" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
-        <option value="10">10</option><option value="50">50</option><option value="100">100</option>
-        <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
-      </select>
-      <button class="btn btn--sm" id="galleryDlBtn">Download</button>
+      <span id="galleryCardLinks" style="display:flex;gap:8px;font-size:12px"></span>
+      <span style="flex:1"></span>
       <button class="btn btn--sm btn--danger" id="galleryDeleteBtn">Delete All</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:8px 0 12px">
+
+    <!-- Two panels side by side: CivitAI filters | Download controls -->
+    <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:stretch">
+      <!-- CivitAI Filters panel -->
+      <div style="flex:1;min-width:280px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column">
+        <div class="gallery-filters" style="margin-bottom:0">
+          <label title="CivitAI API mode: tRPC (internal, more reliable) or REST (public)">Mode <select id="galleryMode">
+            <!-- Fixed mode hidden from UI but code preserved -->
+            <!--<option value="fixed">Fixed</option>-->
+            <option value="trpc" selected>tRPC</option><option value="rest">REST API</option>
+          </select></label>
+          <!-- REST filters -->
+          <span id="filtersRest" style="display:none">
+            <label title="NSFW content level filter">NSFW <select id="galleryNsfw">
+              <option value="X" selected>X</option><option value="Mature">Mature</option><option value="Soft">Soft</option><option value="None">None</option>
+            </select></label>
+            <label title="Sort order for results">Sort <select id="gallerySortRest">
+              <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option>
+            </select></label>
+            <label title="Time period filter">Period <select id="galleryPeriodRest">
+              <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+            </select></label>
+          </span>
+          <!-- tRPC filters -->
+          <span id="filtersTrpc" style="display:contents">
+            <label title="Sort order for results">Sort <select id="gallerySortTrpc">
+              <option value="Newest" selected>Newest</option><option value="Most Reactions">Most Reactions</option><option value="Most Comments">Most Comments</option><option value="Most Collected">Most Collected</option><option value="Oldest">Oldest</option>
+            </select></label>
+            <label title="Time period filter">Period <select id="galleryPeriodTrpc">
+              <option value="AllTime" selected>All Time</option><option value="Year">Year</option><option value="Month">Month</option><option value="Week">Week</option><option value="Day">Day</option>
+            </select></label>
+            <label title="Filter by media type">Type <select id="galleryType">
+              <option value="" selected>All</option><option value="image">Image</option><option value="video">Video</option>
+            </select></label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Only show items with generation metadata (prompt, params)"><input type="checkbox" id="galleryWithMeta"> Metadata only</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Only show items created on CivitAI platform"><input type="checkbox" id="galleryFromPlatform"> Made on-site</label>
+            <label title="Filter originals vs remixes">Remix <select id="galleryRemix">
+              <option value="" selected>All</option><option value="false">Originals</option><option value="true">Remixes</option>
+            </select></label>
+          </span>
+        </div>
+        <!-- Community search URL (truncated to fit panel) -->
+        <div id="galleryCommunityUrl" style="margin-top:auto;padding-top:8px;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
+        </div>
+      </div>
+
+      <!-- Download controls panel -->
+      <div style="min-width:200px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;align-content:center">
+        <select id="galleryCap" title="Maximum number of community images to download" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <option value="10">10</option><option value="50">50</option><option value="100">100</option>
+          <option value="200" selected>200</option><option value="400">400</option><option value="500">500</option><option value="1000">1000</option>
+        </select>
+        <select id="galleryWorkers" title="Number of parallel download workers" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
+          <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
+        </select>
+        <button class="btn btn--sm" id="galleryDlBtn">Download</button>
+      </div>
+    </div>
+
+    <!-- Local filters row (search + starred) -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <input type="text" id="gallerySearch" title="Filter thumbnails by CivitAI image ID" placeholder="Search by ID..." style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;width:160px;font-family:var(--mono)">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--muted)" title="Show only images you have starred"><input type="checkbox" id="galleryStarredOnly"> Starred only</label>
     </div>
     <div class="gallery-progress" id="galleryProgress" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="galleryProgressFill"></div></div>
       <div class="progress-text" id="galleryProgressText"></div>
     </div>
-    <div class="gallery-controls">
-      <label style="display:flex;align-items:center;gap:8px">Size <input type="range" id="galleryThumbSize" min="80" max="300" value="150"></label>
-    </div>
-    <div class="gallery-grid" id="galleryGrid"></div>
+    <div id="galleryGrid"></div>
   </div>
 </div>
 
@@ -299,10 +406,29 @@
   </div>
 </div>
 
+<!-- Details Dialog -->
+<div id="detailsMetaOverlay" class="json-viewer-overlay" style="display:none">
+  <div class="json-viewer-box" style="max-width:800px">
+    <div class="json-viewer-header">
+      <span class="json-viewer-title" id="detailsMetaTitle">Generation Data</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn--sm" id="detailsMetaCopy">Copy JSON</button>
+        <button onclick="document.getElementById('detailsMetaOverlay').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">&times;</button>
+      </div>
+    </div>
+    <pre id="detailsMetaContent" class="json-viewer-pre" style="max-height:70vh;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none"></pre>
+  </div>
+</div>
+
 <script src="/static/js/shared.js"></script>
 <script>
 (function() {
   'use strict';
+
+  // ── Constants ──
+  var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+  var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
 
   // ── State ──
   let categories = [];
@@ -332,7 +458,6 @@
   const $statQueued   = document.getElementById('statQueued');
   const $statPresent  = document.getElementById('statPresent');
   const $statDisk     = document.getElementById('statDisk');
-  const $maxConcurrent = document.getElementById('maxConcurrent');
 
   // ── Page-specific utilities ──
   function fmtSize(gb) {
@@ -529,21 +654,6 @@
     applyFiltersAndSort();
   });
 
-  // Concurrent downloads handler
-  $maxConcurrent.addEventListener('change', async () => {
-    const val = parseInt($maxConcurrent.value, 10);
-    try {
-      await apiFetch('/api/admin/settings', {
-        method: 'PUT',
-        body: { max_concurrent_downloads: val }
-      });
-    } catch (e) {
-      if (e.message !== 'auth') {
-        console.error('Failed to update concurrent setting:', e);
-      }
-    }
-  });
-
   // ── Data handling ──
   function handleModelData(data) {
     const cats = data.categories || [];
@@ -567,9 +677,6 @@
     });
 
     if (data.stats) updateStatusBar(data.stats);
-    if (data.settings && data.settings.max_concurrent_downloads != null) {
-      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
-    }
 
     applyFiltersAndSort();
     _autoPoll(data.stats);
@@ -598,9 +705,6 @@
     });
 
     if (data.stats) updateStatusBar(data.stats);
-    if (data.settings && data.settings.max_concurrent_downloads != null) {
-      $maxConcurrent.value = String(data.settings.max_concurrent_downloads);
-    }
 
     applyFiltersAndSort();
 
@@ -808,7 +912,9 @@
     });
 
     // Set static content
-    refs.name.innerHTML = escHtml(m.name) + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye icon-sm"></span></span>';
+    // Highlight [bracket] suffix in card name — typically contains base model info
+    var displayName = escHtml(m.name).replace(/\[([^\]]+)\]$/, '<span class="name-bracket-tag">[$1]</span>');
+    refs.name.innerHTML = displayName + ' <span style="cursor:pointer;opacity:0.4;font-size:11px;margin-left:0.5em;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="event.stopPropagation();showModelJson(this)" data-model=\'' + escHtml(JSON.stringify(m)).replace(/'/g, '&#39;') + '\' title="View JSON"><span class="icon icon-eye json-eye"></span></span>';
 
     const sizeStr = fmtSize(m.size_gb);
     const sourceClass = (m.source || '').toLowerCase();
@@ -864,7 +970,7 @@
       refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
       refs.galleryBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        openGallery(m.civitai_model_id, m.name);
+        openGallery(m.civitai_model_id, m.civitai_version_id, m.name, m.base_model || '');
       });
     }
 
@@ -1085,8 +1191,8 @@
   $jsonOverlay.className = 'json-viewer-overlay';
   $jsonOverlay.innerHTML = '<div class="json-viewer-box">' +
     '<div class="json-viewer-header">' +
-      '<span class="json-viewer-title">Model JSON</span>' +
-      '<span style="cursor:pointer;opacity:0.4;font-size:12px;margin-left:8px;position:relative;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="var el=this;var text=document.getElementById(\'modelJsonContent\').textContent;navigator.clipboard.writeText(text).then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" title="Copy JSON"><span class="icon icon-copy icon-sm"></span></span>' +
+      '<div style="display:flex;align-items:center;gap:8px;"><span class="json-viewer-title">Model JSON</span>' +
+      '<span style="cursor:pointer;opacity:0.4;font-size:12px;position:relative;" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=0.4" onclick="var el=this;var ot=el.querySelector(\'.copy-tip\');if(ot)ot.remove();var text=document.getElementById(\'modelJsonContent\').textContent;navigator.clipboard.writeText(text).then(function(){el.style.opacity=1;var tip=document.createElement(\'span\');tip.className=\'copy-tip\';tip.textContent=\'Copied!\';tip.style.cssText=\'margin-left:6px;font-size:10px;color:var(--accent);opacity:1;transition:opacity 0.3s;\';el.appendChild(tip);setTimeout(function(){tip.style.opacity=0;setTimeout(function(){tip.remove();el.style.opacity=0.4;},300);},3000);})" title="Copy JSON"><span class="icon icon-copy icon-sm"></span></span></div>' +
       '<button onclick="this.closest(\'div\').parentElement.parentElement.style.display=\'\'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>' +
     '</div>' +
     '<pre id="modelJsonContent" class="json-viewer-pre"></pre>' +
@@ -1110,24 +1216,96 @@
     if (!meta || Object.keys(meta).length === 0)
       return '<p style="color:var(--muted)">No generation data available</p>';
     var h = '';
-    if (meta.prompt) h += '<h4>Positive Prompt</h4><p>' + escHtml(meta.prompt) + '</p>';
-    if (meta.negativePrompt) h += '<h4>Negative Prompt</h4><p>' + escHtml(meta.negativePrompt) + '</p>';
-    if (meta.model) h += '<div class="meta-row"><span>Checkpoint</span><span>' + escHtml(meta.model) + '</span></div>';
-    if (meta.loras && meta.loras.length) {
+    // ID and date first — use _item_id (file stem) as fallback
+    var displayId = meta.civitai_id || meta._item_id || '';
+    if (displayId) h += '<div class="meta-row"><span>ID</span><span>' + escHtml(String(displayId)) + '</span></div>';
+    if (meta.createdAt) h += '<div class="meta-row"><span>Created</span><span>' + escHtml(meta.createdAt) + '</span></div>';
+    // CivitAI links — always show URL if available
+    if (meta.civitai_page) h += '<div class="meta-row"><span>CivitAI</span><span><a href="' + escHtml(meta.civitai_page) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
+    if (meta.url) h += '<div class="meta-row"><span>Asset</span><span><a href="' + escHtml(meta.url) + '" target="_blank" style="color:var(--accent)">Open page <i class="icon icon-external-link" style="width:11px;height:11px;vertical-align:middle;margin-left:2px"></i></a></span></div>';
+    if (meta.username) h += '<div class="meta-row"><span>Author</span><span>' + escHtml(meta.username) + '</span></div>';
+    if (meta.baseModel) h += '<div class="meta-row"><span>Base Model</span><span>' + escHtml(meta.baseModel) + '</span></div>';
+    if (meta.width && meta.height) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.width + 'x' + meta.height + '</span></div>';
+    if (meta.type) h += '<div class="meta-row"><span>Type</span><span>' + escHtml(meta.type) + '</span></div>';
+    // Generation params from raw_meta
+    var rm = meta.raw_meta || meta;
+    if (rm.prompt) h += '<h4>Positive Prompt</h4><p>' + escHtml(rm.prompt) + '</p>';
+    if (rm.negativePrompt) h += '<h4>Negative Prompt</h4><p>' + escHtml(rm.negativePrompt) + '</p>';
+    if (rm.Model || rm.model) h += '<div class="meta-row"><span>Checkpoint</span><span>' + escHtml(rm.Model || rm.model) + '</span></div>';
+    var loras = rm.loras || (rm.resources || []).filter(function(r) { return (r.type || '').toLowerCase() === 'lora'; });
+    if (loras.length) {
       h += '<h4>LoRAs Used</h4><div class="meta-loras">';
-      meta.loras.forEach(function(l) {
-        h += '<span>' + escHtml(l.name) + (l.weight != null ? ' (' + l.weight + ')' : '') + '</span>';
-      });
+      loras.forEach(function(l) { h += '<span>' + escHtml(l.name || '') + (l.weight != null ? ' (' + l.weight + ')' : '') + '</span>'; });
       h += '</div>';
     }
-    if (meta.seed != null) h += '<div class="meta-row"><span>Seed</span><span>' + meta.seed + '</span></div>';
-    if (meta.steps != null) h += '<div class="meta-row"><span>Steps</span><span>' + meta.steps + '</span></div>';
-    if (meta.cfgScale != null) h += '<div class="meta-row"><span>CFG</span><span>' + meta.cfgScale + '</span></div>';
-    if (meta.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(meta.sampler) + '</span></div>';
-    if (meta.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + meta.clipSkip + '</span></div>';
-    if (meta.size) h += '<div class="meta-row"><span>Resolution</span><span>' + meta.size + '</span></div>';
+    if (rm.seed != null) h += '<div class="meta-row"><span>Seed</span><span>' + rm.seed + '</span></div>';
+    if (rm.steps != null) h += '<div class="meta-row"><span>Steps</span><span>' + rm.steps + '</span></div>';
+    if (rm.cfgScale != null) h += '<div class="meta-row"><span>CFG</span><span>' + rm.cfgScale + '</span></div>';
+    if (rm.sampler) h += '<div class="meta-row"><span>Sampler</span><span>' + escHtml(rm.sampler) + '</span></div>';
+    if (rm.clipSkip != null) h += '<div class="meta-row"><span>Clip Skip</span><span>' + rm.clipSkip + '</span></div>';
+    if (rm.Size || rm.size) h += '<div class="meta-row"><span>Size</span><span>' + (rm.Size || rm.size) + '</span></div>';
+    // Raw metadata copy button
+    if (meta.raw_item || meta.raw_meta) {
+      h += '<div class="meta-row" style="margin-top:8px"><span>Raw Metadata</span><span>' +
+        '<button class="copy-meta-btn" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:11px">Copy JSON</button></span></div>';
+    }
+    // Details button (fetches full metadata on demand)
+    if (meta.civitai_id) {
+      h += '<div style="margin-top:12px;text-align:center">' +
+        '<button class="btn btn--sm details-meta-btn">Details</button></div>';
+    }
     return h;
   }
+
+  var _lastRenderedMeta = null;
+  var _extractMetaJson = '';
+
+  document.addEventListener('click', function(e) {
+    // Copy raw metadata
+    var copyBtn = e.target.closest('.copy-meta-btn');
+    if (copyBtn) {
+      var raw = _lastRenderedMeta ? (_lastRenderedMeta.raw_item || _lastRenderedMeta.raw_meta || _lastRenderedMeta) : {};
+      navigator.clipboard.writeText(JSON.stringify(raw, null, 2));
+      var orig = copyBtn.textContent;
+      copyBtn.textContent = 'Copied'; copyBtn.style.color = 'var(--accent)';
+      setTimeout(function() { copyBtn.textContent = orig; copyBtn.style.color = ''; }, 3000);
+      return;
+    }
+    // Details button — fetch full metadata on demand
+    var detailsBtn = e.target.closest('.details-meta-btn');
+    if (detailsBtn) {
+      if (!_lastRenderedMeta || !galleryModelId) return;
+      var img = galleryImages[detailIdx];
+      if (!img) return;
+      detailsBtn.disabled = true; detailsBtn.textContent = 'Loading...';
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/meta').then(function(resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      }).then(function(fullMeta) {
+        var gen = fullMeta.generation_data || fullMeta;
+        _extractMetaJson = JSON.stringify(gen, null, 2);
+        var cid = fullMeta.civitai_id || img.id;
+        document.getElementById('detailsMetaTitle').textContent = 'Generation Data — Image #' + cid;
+        document.getElementById('detailsMetaContent').textContent = _extractMetaJson;
+        document.getElementById('detailsMetaOverlay').style.display = 'block';
+      }).catch(function(err) {
+        if (err.message !== 'auth') showToast('Error: ' + err.message, 5000, 'error');
+      }).finally(function() {
+        detailsBtn.disabled = false; detailsBtn.textContent = 'Details';
+      });
+      return;
+    }
+  });
+
+  // Details dialog handlers
+  document.getElementById('detailsMetaOverlay').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+  document.getElementById('detailsMetaCopy').addEventListener('click', function() {
+    navigator.clipboard.writeText(_extractMetaJson);
+    var btn = this; var orig = btn.textContent;
+    btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = orig; }, 3000);
+  });
 
   // ── Lookup Dialog ──
   var lookupData = null;
@@ -1147,12 +1325,20 @@
     document.getElementById('lookupOverlay').style.display = 'none';
   }
 
-  async function doLookup() {
-    var url = document.getElementById('lookupUrl').value.trim();
-    if (!url) return;
-    document.getElementById('lookupSpinner').style.display = '';
-    document.getElementById('lookupError').style.display = 'none';
-    document.getElementById('lookupCard').innerHTML = '';
+  function parseInput(raw) {
+    // URL → pass as-is
+    if (raw.match(/https?:\/\//)) return { type: 'url', urls: [raw] };
+    // Split by comma, space, newline → extract numeric IDs
+    var ids = raw.split(/[\s,]+/).map(function(s) { return s.trim(); }).filter(function(s) { return /^\d+$/.test(s); });
+    if (ids.length === 0) return null;
+    if (ids.length === 1) return { type: 'url', urls: ['https://civitai.com/models/' + ids[0]] };
+    return { type: 'batch', ids: ids };
+  }
+
+  async function doSingleLookup(url, card, spinner, errorEl) {
+    spinner.style.display = '';
+    errorEl.style.display = 'none';
+    card.innerHTML = '';
     try {
       var resp = await apiFetch('/api/admin/loras/lookup-civitai', {
         method: 'POST', body: { url: url }
@@ -1162,15 +1348,127 @@
         throw new Error(err.detail || 'Lookup failed (HTTP ' + resp.status + ')');
       }
       lookupData = await resp.json();
-      document.getElementById('lookupSpinner').style.display = 'none';
+      spinner.style.display = 'none';
       renderLookupResult(lookupData);
     } catch (e) {
-      document.getElementById('lookupSpinner').style.display = 'none';
-      if (e.message !== 'auth') {
-        var errEl = document.getElementById('lookupError');
-        errEl.textContent = e.message;
-        errEl.style.display = '';
+      spinner.style.display = 'none';
+      if (e.message !== 'auth') { errorEl.textContent = e.message; errorEl.style.display = ''; }
+    }
+  }
+
+  async function doBatchLookup(ids) {
+    var spinner = document.getElementById('lookupSpinner');
+    var errorEl = document.getElementById('lookupError');
+    var card = document.getElementById('lookupCard');
+    spinner.style.display = '';
+    errorEl.style.display = 'none';
+    card.innerHTML = '';
+
+    var results = [];
+    for (var i = 0; i < ids.length; i++) {
+      spinner.innerHTML = '<span class="spinner"></span> Looking up ' + (i+1) + '/' + ids.length + '...';
+      try {
+        var resp = await apiFetch('/api/admin/loras/lookup-civitai', {
+          method: 'POST', body: { url: 'https://civitai.com/models/' + ids[i] }
+        });
+        if (resp.ok) results.push(await resp.json());
+      } catch(e) {}
+    }
+    spinner.style.display = 'none';
+    spinner.innerHTML = '<span class="spinner"></span> Looking up model...';
+    if (results.length === 0) { errorEl.textContent = 'No models found'; errorEl.style.display = ''; return; }
+    renderBatchResults(results);
+  }
+
+  function renderBatchResults(results) {
+    var card = document.getElementById('lookupCard');
+    card.innerHTML = '<div class="batch-results"></div>';
+    var container = card.querySelector('.batch-results');
+
+    results.forEach(function(d) {
+      var rating = d.stats.rating || 0;
+      var stars = '';
+      for (var i = 1; i <= 5; i++) stars += i <= Math.round(rating) ? '\u2605' : '\u2606';
+
+      var row = document.createElement('div');
+      row.className = 'batch-row';
+      row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px';
+
+      // Preview thumb
+      var thumbUrl = '';
+      for (var vi = 0; vi < d.versions.length && !thumbUrl; vi++) {
+        var imgs = d.versions[vi].images || [];
+        if (imgs.length) thumbUrl = imgs[0].url;
       }
+      var thumbHtml = thumbUrl ? '<img src="' + escHtml(thumbUrl) + '" style="width:60px;height:60px;object-fit:cover;border-radius:4px;flex-shrink:0">' : '<div style="width:60px;height:60px;background:var(--bg);border-radius:4px;flex-shrink:0"></div>';
+
+      var versCount = d.versions.length;
+      var baseModels = d.versions.map(function(v) { return v.base_model; }).filter(Boolean);
+      var baseStr = [...new Set(baseModels)].join(', ');
+
+      row.innerHTML = thumbHtml +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(d.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted)">' +
+            escHtml(d.author) + ' · ' + stars + ' · ' + (d.stats.download_count || 0).toLocaleString() + ' dl · ' + versCount + ' ver' +
+            (baseStr ? ' · ' + escHtml(baseStr) : '') +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn--sm batch-view-btn" style="flex-shrink:0">View</button>' +
+        '<button class="btn btn--sm batch-add-btn" style="flex-shrink:0">Add</button>';
+
+      row.querySelector('.batch-view-btn').addEventListener('click', function() {
+        lookupData = d;
+        renderLookupResult(d);
+      });
+      row.querySelector('.batch-add-btn').addEventListener('click', async function() {
+        var btn = this;
+        // Auto-select all versions and add
+        btn.disabled = true; btn.innerHTML = '<span class="spinner sm"></span>';
+        try {
+          var resp = await apiFetch('/api/admin/loras/add-civitai', {
+            method: 'POST',
+            body: {
+              model_id: d.model_id, model_name: d.name, author: d.author,
+              description: d.description, tags: d.tags,
+              rating: d.stats.rating, downloads: d.stats.download_count,
+              versions: d.versions, preview_images: d.preview_images
+            }
+          });
+          if (resp.ok) {
+            var result = await resp.json();
+            btn.textContent = result.added.length ? 'Added ' + result.added.length : 'Skipped';
+            btn.style.color = 'var(--accent)';
+            showToast('Added ' + result.added.length + ' version(s) of ' + d.name);
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+          }
+        } catch(e) {
+          btn.textContent = 'Error'; btn.disabled = false;
+        }
+      });
+
+      container.appendChild(row);
+    });
+  }
+
+  async function doLookup() {
+    var raw = document.getElementById('lookupUrl').value.trim();
+    if (!raw) return;
+    var parsed = parseInput(raw);
+    if (!parsed) {
+      var errorEl = document.getElementById('lookupError');
+      errorEl.textContent = 'Enter a CivitAI URL, model ID, or comma-separated IDs';
+      errorEl.style.display = '';
+      return;
+    }
+    if (parsed.type === 'batch') {
+      doBatchLookup(parsed.ids);
+    } else {
+      doSingleLookup(parsed.urls[0],
+        document.getElementById('lookupCard'),
+        document.getElementById('lookupSpinner'),
+        document.getElementById('lookupError'));
     }
   }
 
@@ -1210,19 +1508,50 @@
         if (img.url) allImages.push({ url: img.url, id: img.id, type: 'image', meta: img.meta || {} });
       });
     }
-    var imgsHtml = '';
+    // Build image thumbnails using gallery-thumb pattern
+    var imgsContainer = null;
     if (allImages.length) {
-      imgsHtml = '<div class="lookup-images">';
-      allImages.forEach(function(img) {
-        var metaAttr = ' data-meta="' + escHtml(JSON.stringify(img.meta)) + '" data-url="' + escHtml(img.url) + '"';
-        if (img.type === 'video' || img.url.match(/\.(mp4|webm)(\?|$)/i)) {
-          imgsHtml += '<video src="' + escHtml(img.url) + '"' + metaAttr + ' muted autoplay loop playsinline preload="metadata" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer"></video>';
+      imgsContainer = document.createElement('div');
+      imgsContainer.className = 'lookup-images';
+      allImages.forEach(function(img, idx) {
+        var isVideo = img.type === 'video' || (img.url && img.url.match(/\.(mp4|webm)(\?|$)/i));
+        var thumb = document.createElement('div');
+        thumb.className = 'gallery-thumb';
+        thumb.dataset.meta = JSON.stringify(img.meta || {});
+        thumb.dataset.url = img.url;
+
+        // Expand button → fullscreen
+        var expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-btn';
+        expandBtn.innerHTML = EXPAND_SVG;
+        expandBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          showLookupImage(thumb);
+        });
+
+        if (isVideo) {
+          thumb.dataset.videoSrc = img.url;
+          thumb.innerHTML = '<video class="thumb-img" src="' + escHtml(img.url) + '" preload="metadata" muted playsinline></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+          thumb.appendChild(expandBtn);
+          thumb.addEventListener('click', function(e) {
+            if (e.target.closest('.expand-btn')) return;
+            toggleLookupVideo(thumb);
+          });
         } else {
-          imgsHtml += '<img src="' + escHtml(img.url) + '"' + metaAttr + ' loading="lazy">';
+          thumb.innerHTML = '<img class="thumb-img" src="' + escHtml(img.url) + '" loading="lazy">';
+          thumb.appendChild(expandBtn);
         }
+
+        // Index badge
+        var badge = document.createElement('span');
+        badge.className = 'thumb-idx';
+        badge.textContent = idx + 1;
+        thumb.appendChild(badge);
+
+        imgsContainer.appendChild(thumb);
       });
-      imgsHtml += '</div>';
     }
+    var imgsHtml = '';
 
     // Versions
     var versHtml = '<div class="lookup-versions">';
@@ -1253,13 +1582,19 @@
         '<div class="lookup-pills">' + tagsHtml + '</div>' +
         triggerHtml +
       '</div>' +
-      imgsHtml +
+      '<div id="lookupImagesSlot"></div>' +
       '<h4 style="margin:12px 0 8px;font-size:14px">Versions</h4>' +
       versHtml +
       '<div class="lookup-actions">' +
         '<button class="btn" id="lookupDownloadBtn" disabled>Download Selected</button>' +
         '<button class="btn btn--muted lookup-cancel">Cancel</button>' +
       '</div>';
+
+    // Insert image thumbnails
+    if (imgsContainer) {
+      var slot = card.querySelector('#lookupImagesSlot');
+      if (slot) slot.replaceWith(imgsContainer);
+    }
 
     // Update download button on checkbox change
     card.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
@@ -1332,9 +1667,24 @@
     var btn = e.target.closest('#lookupDownloadBtn');
     if (btn) { addSelectedVersions(); return; }
     if (e.target.classList.contains('lookup-cancel')) { closeLookup(); return; }
-    var img = e.target.closest('.lookup-images img') || e.target.closest('.lookup-images video');
-    if (img) { showLookupImage(img); }
   });
+
+  function toggleLookupVideo(thumb) {
+    var video = thumb.querySelector('video');
+    var overlay = thumb.querySelector('.play-overlay');
+    if (thumb.classList.contains('playing')) {
+      if (video) video.pause();
+      thumb.classList.remove('playing');
+      if (overlay) overlay.innerHTML = PLAY_SVG;
+    } else {
+      if (video) {
+        video.loop = true;
+        video.play();
+      }
+      thumb.classList.add('playing');
+      if (overlay) overlay.innerHTML = PAUSE_SVG;
+    }
+  }
 
   // Lookup button handlers
   document.getElementById('addLoraBtn').addEventListener('click', openLookup);
@@ -1347,12 +1697,12 @@
 
   function showLookupImage(el) {
     var modal = document.getElementById('imgModal');
-    var url = el.dataset.url;
-    var isVideo = url.match(/\.(mp4|webm)(\?|$)/i) || el.tagName === 'VIDEO';
+    var url = el.dataset.url || el.dataset.videoSrc;
+    var isVideo = (url && url.match(/\.(mp4|webm)(\?|$)/i)) || !!el.dataset.videoSrc;
     var mediaEl = document.getElementById('imgModalImg');
     if (isVideo) {
       var vid = document.createElement('video');
-      vid.id = 'imgModalImg'; vid.src = url; vid.controls = true; vid.autoplay = true;
+      vid.id = 'imgModalImg'; vid.src = url; vid.controls = true; vid.autoplay = true; vid.muted = true;
       vid.style.cssText = mediaEl.style.cssText || 'max-width:60%;max-height:calc(100vh - 80px);border-radius:8px';
       mediaEl.replaceWith(vid);
     } else {
@@ -1367,6 +1717,7 @@
     }
     var meta = {};
     try { meta = JSON.parse(el.dataset.meta); } catch(ex) {}
+    _lastRenderedMeta = meta;
     document.getElementById('imgModalMeta').innerHTML = renderMeta(meta);
     modal.style.display = 'flex';
   }
@@ -1382,25 +1733,140 @@
   // ── Gallery Viewer ──
 
   var galleryModelId = null;
-  var galleryModelName = '';
+  var galleryVersionId = null;
   var galleryPollTimer = null;
   var galleryImages = [];
+  var galleryImageIds = new Set();
   var galleryDownloading = false;
+  var galleryPlayingVideo = null;
+  var galleryDlStartTime = 0;
+  var galleryLastDone = 0;
+  var COPY_SVG = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 
-  function openGallery(modelId, name) {
+  function getGalleryFilters() {
+    var mode = document.getElementById('galleryMode').value;
+    var mid = galleryModelId, vid = galleryVersionId;
+    var cap = document.getElementById('galleryCap').value;
+    if (mode === 'fixed') {
+      return { mode: 'fixed', modelId: mid, limit: cap, version_id: vid };
+    }
+    if (mode === 'rest') {
+      return { mode: 'rest', modelId: mid, limit: cap, nsfw: document.getElementById('galleryNsfw').value,
+        sort: document.getElementById('gallerySortRest').value, period: document.getElementById('galleryPeriodRest').value,
+        version_id: vid };
+    }
+    // tRPC
+    var f = { mode: 'trpc', modelId: mid, limit: cap, version_id: vid,
+      sort: document.getElementById('gallerySortTrpc').value,
+      period: document.getElementById('galleryPeriodTrpc').value };
+    var typeVal = document.getElementById('galleryType').value;
+    if (typeVal) f.types = [typeVal];
+    if (document.getElementById('galleryWithMeta').checked) f.with_meta = true;
+    if (document.getElementById('galleryFromPlatform').checked) f.from_platform = true;
+    var remixVal = document.getElementById('galleryRemix').value;
+    if (remixVal !== '') f.is_remix = remixVal === 'true';
+    return f;
+  }
+
+  function getGalleryUrls() {
+    var f = getGalleryFilters();
+    var cardUrl = 'https://civitai.com/api/v1/models/' + f.modelId;
+    var communityUrl;
+    if (f.mode === 'rest') {
+      communityUrl = 'https://civitai.com/api/v1/images?modelId=' + f.modelId +
+        '&limit=' + f.limit + '&nsfw=' + f.nsfw +
+        '&sort=' + encodeURIComponent(f.sort) + '&period=' + f.period;
+      if (f.version_id) communityUrl += '&modelVersionId=' + f.version_id;
+    } else if (f.mode === 'fixed') {
+      communityUrl = '(exact captured query — no customization)';
+    } else {
+      var inp = {modelVersionId: f.version_id, period: f.period, sort: f.sort,
+        limit: parseInt(f.limit), pending: true, authed: true, cursor: null};
+      if (f.types) inp.types = f.types;
+      if (f.with_meta) inp.withMeta = true;
+      if (f.from_platform) inp.fromPlatform = true;
+      if (f.is_remix !== undefined) inp.isRemix = f.is_remix;
+      communityUrl = 'https://civitai.com/api/trpc/image.getInfinite?input=' +
+        encodeURIComponent(JSON.stringify({json: inp}));
+    }
+    return { card: cardUrl, community: communityUrl };
+  }
+
+  function copyUrlFlash(btn, url) {
+    navigator.clipboard.writeText(url);
+    var flash = document.createElement('span');
+    flash.className = 'copied-flash';
+    flash.textContent = 'Copied';
+    btn.parentNode.insertBefore(flash, btn.nextSibling);
+    setTimeout(function() { flash.remove(); }, 3000);
+  }
+
+  function _makeUrlLine(url) {
+    // Helper: creates a truncated URL code + copy button
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:6px;min-width:0;flex:1';
+    var code = document.createElement('code');
+    code.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--bg);padding:2px 6px;border-radius:3px;font-size:10px;min-width:0;flex:1';
+    code.textContent = url;
+    code.title = url;
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = COPY_SVG;
+    btn.style.cssText = 'flex-shrink:0;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center';
+    btn.addEventListener('click', function() { copyUrlFlash(btn, url); });
+    wrap.appendChild(code);
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  function _makeIconLink(url, label) {
+    // Helper: creates a compact link with external-link icon + label
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.title = url;
+    a.style.cssText = 'display:inline-flex;align-items:center;gap:3px;color:var(--accent);font-size:11px;text-decoration:none;white-space:nowrap';
+    a.innerHTML = '<i class="icon icon-external-link" style="width:10px;height:10px;vertical-align:middle"></i>' + label;
+    return a;
+  }
+
+  function updateGalleryUrls() {
+    if (!galleryModelId) return;
+    var urls = getGalleryUrls();
+
+    // Card links in title row: API (JSON) + Page
+    var linksEl = document.getElementById('galleryCardLinks');
+    linksEl.innerHTML = '';
+    var apiUrl = 'https://civitai.com/api/v1/models/' + galleryModelId;
+    var pageUrl = 'https://civitai.com/models/' + galleryModelId + (galleryVersionId ? '?modelVersionId=' + galleryVersionId : '');
+    linksEl.appendChild(_makeIconLink(apiUrl, 'API'));
+    linksEl.appendChild(_makeIconLink(pageUrl, 'Card'));
+
+    // Community URL: inside the filters panel, truncated
+    var commEl = document.getElementById('galleryCommunityUrl');
+    commEl.innerHTML = '';
+    commEl.appendChild(_makeUrlLine(urls.community));
+  }
+
+  function openGallery(modelId, versionId, name, baseModel) {
     galleryModelId = modelId;
-    galleryModelName = name;
+    galleryVersionId = versionId;
     galleryImages = [];
+    galleryImageIds = new Set();
     galleryDownloading = false;
+    galleryPlayingVideo = null;
 
     document.getElementById('galleryOverlay').style.display = 'flex';
-    document.getElementById('galleryTitle').textContent = name;
+    var titleEl = document.getElementById('galleryTitle');
+    titleEl.innerHTML = escHtml(name) + (baseModel ? ' <span class="base-model-pill" style="vertical-align:middle;margin-left:6px">' + escHtml(baseModel) + '</span>' : '');
     document.getElementById('galleryCount').textContent = '';
     document.getElementById('galleryProgress').style.display = 'none';
-    document.getElementById('galleryDlBtn').textContent = 'Download Images';
+    document.getElementById('galleryDlBtn').textContent = 'Download';
     document.getElementById('galleryDlBtn').disabled = false;
-    renderGalleryGrid();
-
+    document.getElementById('galleryDeleteBtn').disabled = false;
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty"><span class="spinner sm" style="vertical-align:middle;margin-right:8px"></span>Loading...</div>';
+    document.getElementById('gallerySearch').value = '';
+    updateGalleryUrls();
     pollGallery();
   }
 
@@ -1408,127 +1874,311 @@
     document.getElementById('galleryOverlay').style.display = 'none';
     if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
     galleryModelId = null;
+    galleryVersionId = null;
+    galleryPlayingVideo = null;
   }
 
   async function toggleGalleryDl() {
     if (!galleryModelId) return;
     var btn = document.getElementById('galleryDlBtn');
+    var delBtn = document.getElementById('galleryDeleteBtn');
 
     if (galleryDownloading) {
-      btn.disabled = true;
-      btn.textContent = 'Stopping...';
-      try {
-        await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-          method: 'POST', body: { action: 'stop' }
-        });
-      } catch(ex) {}
+      btn.disabled = true; btn.textContent = 'Stopping...';
+      try { await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', { method: 'POST', body: { action: 'stop' } }); } catch(ex) {}
       return;
     }
 
     btn.textContent = 'Stop';
+    delBtn.disabled = true;
     galleryDownloading = true;
+    var progress = document.getElementById('galleryProgress');
+    var progressFill = document.getElementById('galleryProgressFill');
+    progress.style.display = '';
+    progressFill.classList.add('indeterminate');
+    document.getElementById('galleryProgressText').textContent = 'Starting download...';
+    galleryDlStartTime = Date.now();
+    galleryLastDone = 0;
+
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
-        method: 'POST', body: { action: 'start:' + document.getElementById('galleryCap').value }
+        method: 'POST', body: (function() {
+          var f = getGalleryFilters();
+          f.action = 'start:' + document.getElementById('galleryCap').value;
+          f.workers = parseInt(document.getElementById('galleryWorkers').value);
+          return f;
+        })()
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
         showToast('Error: ' + (err.detail || 'Failed'), 5000, 'error');
-        btn.textContent = 'Download Images';
-        galleryDownloading = false;
+        btn.textContent = 'Download'; delBtn.disabled = false; galleryDownloading = false;
+        progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
         return;
       }
-      if (!galleryPollTimer) {
-        galleryPollTimer = setInterval(pollGallery, 2000);
-      }
+      if (!galleryPollTimer) galleryPollTimer = setInterval(pollGallery, 2000);
     } catch(e) {
       if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
-      btn.textContent = 'Download Images';
-      galleryDownloading = false;
+      btn.textContent = 'Download'; delBtn.disabled = false; galleryDownloading = false;
+      progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
     }
   }
 
   async function pollGallery() {
     if (!galleryModelId) return;
     try {
-      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery');
+      var galleryUrl = '/api/admin/loras/' + galleryModelId + '/gallery';
+      var qs = [];
+      if (galleryVersionId) qs.push('version_id=' + galleryVersionId);
+      if (document.getElementById('galleryStarredOnly').checked) qs.push('starred=true');
+      if (qs.length) galleryUrl += '?' + qs.join('&');
+      var resp = await apiFetch(galleryUrl);
       if (!resp.ok) return;
       var data = await resp.json();
 
       var status = data.status;
       var btn = document.getElementById('galleryDlBtn');
+      var delBtn = document.getElementById('galleryDeleteBtn');
       var progress = document.getElementById('galleryProgress');
       var progressFill = document.getElementById('galleryProgressFill');
       var progressText = document.getElementById('galleryProgressText');
 
       if (status === 'downloading') {
-        btn.textContent = 'Stop';
-        btn.disabled = false;
-        galleryDownloading = true;
-        progress.style.display = '';
-        var total = data.total || 0;
-        var done = (data.downloaded || 0) + (data.skipped || 0);
-        var pct = total > 0 ? Math.round(done / total * 100) : 0;
-        progressFill.style.width = Math.min(pct, 100) + '%';
-        progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>Downloaded ' + (data.downloaded || 0) + (total > 0 ? ' of ' + total : '') + ' (' + (data.skipped || 0) + ' skipped)';
+        btn.textContent = 'Stop'; btn.disabled = false; delBtn.disabled = true;
+        galleryDownloading = true; progress.style.display = '';
+        var total = data.total || 0, done = (data.downloaded || 0) + (data.skipped || 0);
+        if (done > 0) {
+          progressFill.classList.remove('indeterminate');
+          progressFill.style.width = Math.min(total > 0 ? Math.round(done / total * 100) : 0, 100) + '%';
+        }
+        var dlText = 'Downloaded ' + done + (total > 0 ? ' / ' + total : '') + ((data.skipped || 0) > 0 ? ' (' + (data.skipped || 0) + ' cached)' : '');
+        var elapsed = (Date.now() - galleryDlStartTime) / 1000;
+        if (done > 0 && elapsed > 3) {
+          var rate = (done / elapsed * 60).toFixed(1);
+          dlText += ' — ' + rate + '/min';
+          if (total > done) {
+            var remaining = Math.round((total - done) / (done / elapsed));
+            var mins = Math.floor(remaining / 60);
+            var secs = remaining % 60;
+            dlText += ', ~' + (mins > 0 ? mins + 'm ' : '') + secs + 's left';
+          }
+        }
+        progressText.innerHTML = '<span class="spinner sm" style="vertical-align:middle;margin-right:6px"></span>' + dlText;
       } else if (status === 'stopping') {
-        btn.textContent = 'Stopping...';
-        btn.disabled = true;
+        btn.textContent = 'Stopping...'; btn.disabled = true;
       } else {
-        btn.textContent = 'Download Images';
-        btn.disabled = false;
-        galleryDownloading = false;
+        btn.textContent = 'Download'; btn.disabled = false; delBtn.disabled = false;
+        galleryDownloading = false; progressFill.classList.remove('indeterminate');
         if (status === 'done' || status === 'stopped') {
+          var elapsed = Math.round((Date.now() - galleryDlStartTime) / 1000);
+          var timeStr = elapsed >= 60 ? Math.floor(elapsed/60) + 'min ' + (elapsed%60) + 's' : elapsed + 's';
           progress.style.display = '';
           progressFill.style.width = '100%';
-          progressText.textContent = status === 'done'
-            ? 'Complete — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped'
-            : 'Stopped — ' + (data.downloaded || 0) + ' downloaded, ' + (data.skipped || 0) + ' skipped';
+          progressText.textContent = (status === 'done' ? 'Completed' : 'Stopped') + ' in ' + timeStr;
+          setTimeout(function() { progress.style.display = 'none'; }, 5000);
+        } else {
+          progress.style.display = 'none';
         }
-        if (galleryPollTimer) {
-          clearInterval(galleryPollTimer);
-          galleryPollTimer = null;
-        }
+        if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
       }
 
-      // Build image list (previews + gallery)
-      var all = (data.previews || []).map(function(img) {
-        return { id: img.id, type: 'previews', ext: img.ext || '.jpeg', meta: img.meta || {} };
-      }).concat((data.gallery || []).map(function(img) {
-        return { id: img.id, type: 'gallery', ext: img.ext || '.jpeg', meta: img.meta || {} };
-      }));
+      // Build deduplicated lists
+      function mapImg(img, type, source, prefix) {
+        var m = img.meta || {};
+        m._item_id = img.id;
+        return {
+          id: img.id, type: type, ext: img.ext || '.jpeg', meta: m,
+          source: source, key: prefix + img.id,
+          civitai_id: m.civitai_id || img.id,
+          createdAt: img.createdAt || m.createdAt || '',
+          username: m.username || '',
+          has_thumb: img.has_thumb || false,
+          starred: img.starred || false
+        };
+      }
+      var card = (data.gallery_card || []).map(function(img) { return mapImg(img, 'gallery-card', 'card', 'card-'); });
+      var community = (data.gallery_community || []).filter(function(img) {
+        return !card.some(function(c) { return c.id === img.id; });
+      }).map(function(img) { return mapImg(img, 'gallery-community', 'community', 'comm-'); });
+      var all = card.concat(community);
 
-      if (all.length !== galleryImages.length) {
-        galleryImages = all;
-        renderGalleryGrid();
+      // Incremental append — only add new items
+      var newItems = all.filter(function(img) { return !galleryImageIds.has(img.key); });
+      if (newItems.length > 0) {
+        newItems.forEach(function(img) { galleryImageIds.add(img.key); galleryImages.push(img); });
+        appendNewThumbs(newItems);
       }
 
-      document.getElementById('galleryCount').textContent = all.length + ' images';
+      function fmtSize(bytes) {
+        if (!bytes) return '';
+        if (bytes >= 100 * 1024 * 1024) return (bytes / (1024*1024*1024)).toFixed(1) + ' GB';
+        return (bytes / (1024*1024)).toFixed(0) + ' MB';
+      }
+      var totalBytes = (data.gallery_card_bytes || 0) + (data.gallery_community_bytes || 0);
+      var sizeStr = totalBytes ? ' (' + fmtSize(totalBytes) + ')' : '';
+      document.getElementById('galleryCount').textContent = card.length + ' card + ' + community.length + ' community' + sizeStr;
+      // Replace spinner with empty message if truly empty
+      if (all.length === 0 && status !== 'downloading') {
+        document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
+      }
     } catch(e) {
       if (e.message !== 'auth') console.error('Gallery poll error:', e);
     }
   }
 
-  function renderGalleryGrid() {
-    var grid = document.getElementById('galleryGrid');
-    grid.innerHTML = '';
-    if (galleryImages.length === 0) {
-      grid.innerHTML = '<div class="gallery-empty">No images yet. Click "Download Images" to fetch community images from CivitAI (max 1000).</div>';
+  function toggleVideoPlay(thumb) {
+    var videoSrc = thumb.dataset.videoSrc;
+    if (!videoSrc) return;
+    var video = thumb.querySelector('video');
+    var overlay = thumb.querySelector('.play-overlay');
+
+    if (video) {
+      // Already playing — stop and swap back to image
+      stopVideoThumb(thumb);
       return;
     }
-    galleryImages.forEach(function(img, idx) {
-      var ext = img.ext || '.jpeg';
-      var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
-      var el;
-      if (ext === '.mp4') {
-        el = document.createElement('video');
-        el.src = src; el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
+
+    // Stop any other playing video first
+    if (galleryPlayingVideo && galleryPlayingVideo !== thumb) {
+      stopVideoThumb(galleryPlayingVideo);
+    }
+
+    // Swap image to video
+    var img = thumb.querySelector('.thumb-img');
+    var v = document.createElement('video');
+    v.src = videoSrc; v.muted = true; v.loop = true; v.playsInline = true;
+    v.style.cssText = 'width:150px;height:150px;object-fit:cover;display:block;border-radius:4px';
+    v.autoplay = true;
+    if (img) img.replaceWith(v);
+    thumb.classList.add('playing');
+    if (overlay) overlay.innerHTML = PAUSE_SVG;
+    galleryPlayingVideo = thumb;
+  }
+
+  function stopVideoThumb(thumb) {
+    var video = thumb.querySelector('video');
+    if (!video) return;
+    video.pause();
+    // Swap video back to thumbnail image smoothly
+    var img = document.createElement('img');
+    img.className = 'thumb-img';
+    img.src = thumb.dataset.thumbSrc || '';
+    video.replaceWith(img);
+    thumb.classList.remove('playing');
+    var overlay = thumb.querySelector('.play-overlay');
+    if (overlay) overlay.innerHTML = PLAY_SVG;
+    if (galleryPlayingVideo === thumb) galleryPlayingVideo = null;
+  }
+
+  function makeThumb(img) {
+    var ext = img.ext || '.jpeg';
+    var src = '/api/admin/loras/gallery/media/' + img.id + ext;
+    var thumb = document.createElement('div');
+    thumb.className = 'gallery-thumb';
+    thumb.dataset.key = img.key;
+
+    // Expand button (top-right) → detail view
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'expand-btn';
+    expandBtn.innerHTML = EXPAND_SVG;
+    expandBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openDetail(galleryImages.indexOf(img));
+    });
+
+    if (ext === '.mp4') {
+      var thumbUrl = img.has_thumb
+        ? '/api/admin/loras/gallery/thumb/' + img.id
+        : '';
+      thumb.dataset.videoSrc = src;
+      thumb.dataset.thumbSrc = thumbUrl;
+      if (thumbUrl) {
+        thumb.innerHTML = '<img class="thumb-img" src="' + thumbUrl + '" loading="lazy"><div class="play-overlay">' + PLAY_SVG + '</div>';
       } else {
-        el = document.createElement('img');
-        el.src = src; el.loading = 'lazy';
+        thumb.innerHTML = '<div class="thumb-img" style="background:var(--bg)"></div><div class="play-overlay">' + PLAY_SVG + '</div>';
       }
-      el.addEventListener('click', function() { openDetail(idx); });
-      grid.appendChild(el);
+      thumb.appendChild(expandBtn);
+      thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
+    } else {
+      thumb.innerHTML = '<img class="thumb-img" src="' + src + '" loading="lazy">';
+      thumb.appendChild(expandBtn);
+      thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
+    }
+    var idx = galleryImages.indexOf(img) + 1;
+    var badge = document.createElement('span');
+    badge.className = 'thumb-idx';
+    badge.textContent = idx;
+    thumb.appendChild(badge);
+    // Star button on thumbnail — uses FA icon via CSS mask
+    var star = document.createElement('button');
+    function updateThumbStar(s) {
+      star.className = 'thumb-star' + (s ? ' starred' : '');
+      star.innerHTML = '<i class="icon ' + (s ? 'icon-star-solid' : 'icon-star-regular') + '"></i>';
+      star.title = s ? 'Starred' : 'Not starred';
+    }
+    updateThumbStar(img.starred);
+    star.addEventListener('click', function(e) {
+      e.stopPropagation();
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
+        return r.json();
+      }).then(function(d) {
+        img.starred = d.starred;
+        updateThumbStar(d.starred);
+      });
+    });
+    thumb.appendChild(star);
+    return thumb;
+  }
+
+  function getOrCreateSection(source) {
+    var grid = document.getElementById('galleryGrid');
+    var sectionId = 'gallerySection-' + source;
+    var section = document.getElementById(sectionId);
+    if (section) return section;
+
+    // Remove empty message if present
+    var empty = grid.querySelector('.gallery-empty');
+    if (empty) empty.remove();
+
+    // Ensure card section comes before community, with HR between
+    var cardSection = document.getElementById('gallerySection-card');
+    var commSection = document.getElementById('gallerySection-community');
+
+    var lbl = document.createElement('div');
+    lbl.className = 'gallery-section-label';
+    lbl.id = 'galleryLabel-' + source;
+    lbl.textContent = source === 'card' ? 'Model Card' : 'Community';
+
+    section = document.createElement('div');
+    section.className = 'gallery-section';
+    section.id = sectionId;
+
+    if (source === 'card') {
+      // Card always first
+      grid.insertBefore(section, grid.firstChild);
+      grid.insertBefore(lbl, grid.firstChild);
+    } else {
+      // Community: add HR if card exists, then append
+      if (cardSection) {
+        var hr = document.createElement('hr');
+        hr.className = 'gallery-hr';
+        hr.id = 'galleryHr';
+        if (!document.getElementById('galleryHr')) grid.appendChild(hr);
+      }
+      grid.appendChild(lbl);
+      grid.appendChild(section);
+    }
+    return section;
+  }
+
+  function appendNewThumbs(newItems) {
+    newItems.forEach(function(img) {
+      var section = getOrCreateSection(img.source);
+      section.appendChild(makeThumb(img));
+      // Update label count
+      var lbl = document.getElementById('galleryLabel-' + img.source);
+      var count = section.children.length;
+      lbl.textContent = (img.source === 'card' ? 'Model Card' : 'Community') + ' (' + count + ')';
     });
   }
 
@@ -1542,17 +2192,38 @@
     try {
       var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', { method: 'DELETE' });
       if (resp.ok) {
-        var data = await resp.json();
-        showToast('Deleted ' + data.deleted + ' images');
-        galleryImages = [];
-        renderGalleryGrid();
+        var d = await resp.json();
+        showToast('Deleted ' + d.deleted + ' images');
+        galleryImages = []; galleryImageIds = new Set();
+        document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty">No images yet. Click Download to fetch from CivitAI.</div>';
         document.getElementById('galleryProgress').style.display = 'none';
-        document.getElementById('galleryCount').textContent = '0 images';
+        document.getElementById('galleryCount').textContent = '';
       }
     } catch(e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
   });
-  document.getElementById('galleryThumbSize').addEventListener('input', function() {
-    document.getElementById('galleryGrid').style.setProperty('--thumb-size', this.value + 'px');
+  function toggleFilterMode() {
+    var mode = document.getElementById('galleryMode').value;
+    document.getElementById('filtersRest').style.display = mode === 'rest' ? 'contents' : 'none';
+    document.getElementById('filtersTrpc').style.display = mode === 'trpc' ? 'contents' : 'none';
+    updateGalleryUrls();
+  }
+  document.getElementById('galleryMode').addEventListener('change', toggleFilterMode);
+  ['galleryNsfw', 'gallerySortRest', 'galleryPeriodRest', 'gallerySortTrpc', 'galleryPeriodTrpc',
+   'galleryType', 'galleryWithMeta', 'galleryFromPlatform', 'galleryRemix', 'galleryCap'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', updateGalleryUrls);
+  });
+  document.getElementById('galleryStarredOnly').addEventListener('change', function() {
+    // Re-poll to get filtered list from server
+    galleryImages = []; galleryImageIds = new Set();
+    document.getElementById('galleryGrid').innerHTML = '<div class="gallery-empty"><span class="spinner sm" style="vertical-align:middle;margin-right:8px"></span>Loading...</div>';
+    pollGallery();
+  });
+  document.getElementById('gallerySearch').addEventListener('input', function() {
+    var q = this.value.trim();
+    document.querySelectorAll('#galleryGrid .gallery-thumb').forEach(function(thumb) {
+      var id = thumb.dataset.key.replace(/^(card|comm)-/, '');
+      thumb.style.display = (!q || id.indexOf(q) !== -1) ? '' : 'none';
+    });
   });
 
   // ── Detail View ──
@@ -1564,17 +2235,44 @@
     var img = galleryImages[idx];
     if (!img) return;
     var ext = img.ext || '.jpeg';
-    var src = '/api/admin/loras/images/' + galleryModelId + '/' + img.type + '/' + img.id + ext;
+    var src = '/api/admin/loras/gallery/media/' + img.id + ext;
 
     document.getElementById('detailOverlay').style.display = 'flex';
     var container = document.querySelector('.detail-image');
     var isVideo = ext === '.mp4';
     if (isVideo) {
-      container.innerHTML = '<video id="detailImg" src="' + src + '" controls autoplay style="max-width:100%;max-height:calc(100vh - 80px);border-radius:8px"></video>';
+      container.innerHTML = '<video id="detailImg" src="' + src + '" controls autoplay muted style="max-width:100%;max-height:calc(100vh - 80px);border-radius:8px"></video>';
     } else {
       container.innerHTML = '<img id="detailImg" src="' + src + '" style="max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px">';
     }
-    document.getElementById('detailMeta').innerHTML = renderMeta(img.meta);
+    _lastRenderedMeta = img.meta;
+    // Star button at top-right of detail panel — FA icon via CSS mask
+    function detailStarHtml(s) {
+      return '<div style="text-align:right;margin-bottom:8px"><button class="detail-star' +
+        (s ? ' starred' : '') + '" id="detailStarBtn" title="' +
+        (s ? 'Starred' : 'Not starred') + '"><i class="icon ' +
+        (s ? 'icon-star-solid' : 'icon-star-regular') + '"></i>' +
+        (s ? ' Starred' : ' Star') + '</button></div>';
+    }
+    document.getElementById('detailMeta').innerHTML = detailStarHtml(img.starred) + renderMeta(img.meta);
+    document.getElementById('detailStarBtn').addEventListener('click', function() {
+      apiFetch('/api/admin/loras/gallery/' + img.id + '/star', { method: 'POST' }).then(function(r) {
+        return r.json();
+      }).then(function(d) {
+        img.starred = d.starred;
+        var btn = document.getElementById('detailStarBtn');
+        btn.className = 'detail-star' + (d.starred ? ' starred' : '');
+        btn.innerHTML = '<i class="icon ' + (d.starred ? 'icon-star-solid' : 'icon-star-regular') + '"></i>' +
+          (d.starred ? ' Starred' : ' Star');
+        btn.title = d.starred ? 'Starred' : 'Not starred';
+        // Also update thumbnail star
+        var thumbStar = document.querySelector('[data-key="' + img.key + '"] .thumb-star');
+        if (thumbStar) {
+          thumbStar.className = 'thumb-star' + (d.starred ? ' starred' : '');
+          thumbStar.innerHTML = '<i class="icon ' + (d.starred ? 'icon-star-solid' : 'icon-star-regular') + '"></i>';
+        }
+      });
+    });
     document.getElementById('detailPrev').style.display = idx > 0 ? '' : 'none';
     document.getElementById('detailNext').style.display = idx < galleryImages.length - 1 ? '' : 'none';
   }
@@ -1598,6 +2296,7 @@
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+      if (document.getElementById('detailsMetaOverlay').style.display !== 'none') { document.getElementById('detailsMetaOverlay').style.display = 'none'; return; }
       if (document.getElementById('imgModal').style.display !== 'none') { closeImgModal(); return; }
       if (document.getElementById('detailOverlay').style.display !== 'none') { closeDetail(); return; }
       if (document.getElementById('galleryOverlay').style.display !== 'none') { closeGallery(); return; }

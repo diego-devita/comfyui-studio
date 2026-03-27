@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import LLM_MODELS_DIR, LLAMA_SERVER_PORT, LLAMA_SERVER_PATH
+from config import LLM_MODELS_DIR, LLAMA_SERVER_PORT, LLAMA_SERVER_PATH, DEV_MODE
 from catalogs import _llm_models_data, _reload_models, _find_llm_model, _build_catalog_response
 from download import _download_state, _enqueue_download
 from events import _events
@@ -52,7 +52,7 @@ async def llm_model_download(filename: str):
 
     item = dict(model)
     item["_base_dir"] = str(LLM_MODELS_DIR)
-    _enqueue_download(item)
+    _enqueue_download(item, source="manual")
     return JSONResponse({"status": "queued", "file": filename})
 
 
@@ -86,12 +86,15 @@ async def llm_status():
 
     health = None
     if running:
-        try:
-            async with httpx.AsyncClient(timeout=3) as client:
-                r = await client.get(f"http://127.0.0.1:{LLAMA_SERVER_PORT}/health")
-                health = r.json() if r.status_code == 200 else {"status": "error", "code": r.status_code}
-        except Exception:
-            health = {"status": "unreachable"}
+        if DEV_MODE:
+            health = {"status": "ok"}
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    r = await client.get(f"http://127.0.0.1:{LLAMA_SERVER_PORT}/health")
+                    health = r.json() if r.status_code == 200 else {"status": "error", "code": r.status_code}
+            except Exception:
+                health = {"status": "unreachable"}
 
     return JSONResponse({
         "running": running,
@@ -167,6 +170,22 @@ async def llm_chat(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(400, "Invalid JSON body")
+
+    # DEV_MODE: return a fake response without calling llama-server
+    if DEV_MODE:
+        return JSONResponse({
+            "id": "dev-stub",
+            "object": "chat.completion",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "[DEV MODE] This is a stub response. The LLM server is simulated in development mode.",
+                },
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        })
 
     config = _load_llm_config()
     payload = {
