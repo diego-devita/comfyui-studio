@@ -12,6 +12,7 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: true
   - block: generate
     file: "generate.json"
 

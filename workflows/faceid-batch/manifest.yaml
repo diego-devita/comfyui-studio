@@ -12,6 +12,9 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: true
+  - block: faceid_apply
+    file: "faceid_apply.json"
   - block: generate
     file: "generate.json"
 

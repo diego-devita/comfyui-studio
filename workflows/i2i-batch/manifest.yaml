@@ -12,9 +12,12 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: true
+  - block: i2i_encode
+    file: "i2i_encode.json"
   - block: generate
     file: "generate.json"
-    repeat_variable: "batch_count"
+    repeat: "batch_count"
 
 inputs:
   - id: image

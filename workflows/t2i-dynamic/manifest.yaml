@@ -12,16 +12,16 @@ blocks_dir: "blocks"
 pipeline:
   - block: setup
     file: "setup.json"
+    lora_injection: true
+    vae_override: true
   - block: generate
     file: "generate.json"
-    repeat_variable: "batch_count"
+    repeat: "batch_count"
   - block: hires
     file: "hires.json"
-    optional: true
     condition: "hires_enabled"
   - block: face_fix
     file: "face_fix.json"
-    optional: true
     condition: "facefix_enabled"
   - block: output
     file: "output.json"
