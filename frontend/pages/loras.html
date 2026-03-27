@@ -69,14 +69,12 @@
   }
   .lookup-pill.trigger:hover { background: rgba(121, 80, 242, 0.25); }
   .lookup-images {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 4px; margin-bottom: 16px; max-height: 280px; overflow-y: auto;
+    display: flex; flex-wrap: wrap;
+    gap: 4px; margin-bottom: 16px; max-height: 320px; overflow-y: auto;
   }
-  .lookup-images img {
-    width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  .lookup-images img:hover { opacity: 0.8; }
+  .lookup-images .gallery-thumb { width: 100px; height: 100px; }
+  .lookup-images .gallery-thumb img, .lookup-images .gallery-thumb video { width: 100px; height: 100px; }
+  .lookup-images .gallery-thumb .thumb-img { width: 100px; height: 100px; }
   .lookup-versions { margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
   .lookup-version {
     display: flex; align-items: center; gap: 8px; padding: 8px 4px;
@@ -426,6 +424,11 @@
 <script>
 (function() {
   'use strict';
+
+  // ── Constants ──
+  var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+  var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
 
   // ── State ──
   let categories = [];
@@ -1505,19 +1508,50 @@
         if (img.url) allImages.push({ url: img.url, id: img.id, type: 'image', meta: img.meta || {} });
       });
     }
-    var imgsHtml = '';
+    // Build image thumbnails using gallery-thumb pattern
+    var imgsContainer = null;
     if (allImages.length) {
-      imgsHtml = '<div class="lookup-images">';
-      allImages.forEach(function(img) {
-        var metaAttr = ' data-meta="' + escHtml(JSON.stringify(img.meta)) + '" data-url="' + escHtml(img.url) + '"';
-        if (img.type === 'video' || img.url.match(/\.(mp4|webm)(\?|$)/i)) {
-          imgsHtml += '<video src="' + escHtml(img.url) + '"' + metaAttr + ' muted autoplay loop playsinline preload="metadata" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer"></video>';
+      imgsContainer = document.createElement('div');
+      imgsContainer.className = 'lookup-images';
+      allImages.forEach(function(img, idx) {
+        var isVideo = img.type === 'video' || (img.url && img.url.match(/\.(mp4|webm)(\?|$)/i));
+        var thumb = document.createElement('div');
+        thumb.className = 'gallery-thumb';
+        thumb.dataset.meta = JSON.stringify(img.meta || {});
+        thumb.dataset.url = img.url;
+
+        // Expand button → fullscreen
+        var expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-btn';
+        expandBtn.innerHTML = EXPAND_SVG;
+        expandBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          showLookupImage(thumb);
+        });
+
+        if (isVideo) {
+          thumb.dataset.videoSrc = img.url;
+          thumb.innerHTML = '<video class="thumb-img" src="' + escHtml(img.url) + '" preload="metadata" muted playsinline></video><div class="play-overlay">' + PLAY_SVG + '</div>';
+          thumb.appendChild(expandBtn);
+          thumb.addEventListener('click', function(e) {
+            if (e.target.closest('.expand-btn')) return;
+            toggleLookupVideo(thumb);
+          });
         } else {
-          imgsHtml += '<img src="' + escHtml(img.url) + '"' + metaAttr + ' loading="lazy">';
+          thumb.innerHTML = '<img class="thumb-img" src="' + escHtml(img.url) + '" loading="lazy">';
+          thumb.appendChild(expandBtn);
         }
+
+        // Index badge
+        var badge = document.createElement('span');
+        badge.className = 'thumb-idx';
+        badge.textContent = idx + 1;
+        thumb.appendChild(badge);
+
+        imgsContainer.appendChild(thumb);
       });
-      imgsHtml += '</div>';
     }
+    var imgsHtml = '';
 
     // Versions
     var versHtml = '<div class="lookup-versions">';
@@ -1548,13 +1582,19 @@
         '<div class="lookup-pills">' + tagsHtml + '</div>' +
         triggerHtml +
       '</div>' +
-      imgsHtml +
+      '<div id="lookupImagesSlot"></div>' +
       '<h4 style="margin:12px 0 8px;font-size:14px">Versions</h4>' +
       versHtml +
       '<div class="lookup-actions">' +
         '<button class="btn" id="lookupDownloadBtn" disabled>Download Selected</button>' +
         '<button class="btn btn--muted lookup-cancel">Cancel</button>' +
       '</div>';
+
+    // Insert image thumbnails
+    if (imgsContainer) {
+      var slot = card.querySelector('#lookupImagesSlot');
+      if (slot) slot.replaceWith(imgsContainer);
+    }
 
     // Update download button on checkbox change
     card.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
@@ -1627,9 +1667,24 @@
     var btn = e.target.closest('#lookupDownloadBtn');
     if (btn) { addSelectedVersions(); return; }
     if (e.target.classList.contains('lookup-cancel')) { closeLookup(); return; }
-    var img = e.target.closest('.lookup-images img') || e.target.closest('.lookup-images video');
-    if (img) { showLookupImage(img); }
   });
+
+  function toggleLookupVideo(thumb) {
+    var video = thumb.querySelector('video');
+    var overlay = thumb.querySelector('.play-overlay');
+    if (thumb.classList.contains('playing')) {
+      if (video) video.pause();
+      thumb.classList.remove('playing');
+      if (overlay) overlay.innerHTML = PLAY_SVG;
+    } else {
+      if (video) {
+        video.loop = true;
+        video.play();
+      }
+      thumb.classList.add('playing');
+      if (overlay) overlay.innerHTML = PAUSE_SVG;
+    }
+  }
 
   // Lookup button handlers
   document.getElementById('addLoraBtn').addEventListener('click', openLookup);
@@ -1642,12 +1697,12 @@
 
   function showLookupImage(el) {
     var modal = document.getElementById('imgModal');
-    var url = el.dataset.url;
-    var isVideo = url.match(/\.(mp4|webm)(\?|$)/i) || el.tagName === 'VIDEO';
+    var url = el.dataset.url || el.dataset.videoSrc;
+    var isVideo = (url && url.match(/\.(mp4|webm)(\?|$)/i)) || !!el.dataset.videoSrc;
     var mediaEl = document.getElementById('imgModalImg');
     if (isVideo) {
       var vid = document.createElement('video');
-      vid.id = 'imgModalImg'; vid.src = url; vid.controls = true; vid.autoplay = true;
+      vid.id = 'imgModalImg'; vid.src = url; vid.controls = true; vid.autoplay = true; vid.muted = true;
       vid.style.cssText = mediaEl.style.cssText || 'max-width:60%;max-height:calc(100vh - 80px);border-radius:8px';
       mediaEl.replaceWith(vid);
     } else {
@@ -1686,10 +1741,6 @@
   var galleryPlayingVideo = null;
   var galleryDlStartTime = 0;
   var galleryLastDone = 0;
-
-  var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
-  var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
-  var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
   var COPY_SVG = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 
   function getGalleryFilters() {

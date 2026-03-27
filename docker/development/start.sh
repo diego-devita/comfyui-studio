@@ -75,24 +75,19 @@ for i in $(seq 1 10); do
     sleep 0.5
 done
 
-# ── Start Datasette (background, waits for DB to exist) ──
-DATASETTE_PORT="${DATASETTE_PORT:-8001}"
-echo "[2/3] Starting Datasette on port ${DATASETTE_PORT}..."
+# ── Start sqlite-web (background, waits for DB to exist) ──
+SQLITE_WEB_PORT="${SQLITE_WEB_PORT:-8002}"
+echo "[2/3] Starting sqlite-web on port ${SQLITE_WEB_PORT}..."
 (
     # Wait for studio.db to be created by the backend on first boot
     for i in $(seq 1 30); do
         [ -f "${DATA_DIR}/database/studio.db" ] && break
         sleep 1
     done
-    datasette "${DATA_DIR}/database/studio.db" \
-        --host 0.0.0.0 \
-        --port "${DATASETTE_PORT}" \
-        --setting base_url /admin/db/ \
-        --metadata /app/datasette/metadata.json \
-        --static static:/app/datasette/ \
-        --setting default_allow_sql true \
-        --setting allow_download false \
-        --setting sql_time_limit_ms 5000
+    sqlite_web "${DATA_DIR}/database/studio.db" \
+        -H 0.0.0.0 \
+        -p "${SQLITE_WEB_PORT}" \
+        -x
 ) &
 
 # ── Start Studio backend with hot reload ──

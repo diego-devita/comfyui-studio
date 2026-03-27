@@ -343,7 +343,7 @@ async def system_status():
         "disk": {"total_bytes": vol_size, "used_bytes": _cached_disk_used, "free_bytes": free_bytes},
         "database": {
             "tables": _get_db_counts(),
-            "datasette_url": "http://localhost:8001/admin/db/" if DEV_MODE else None,
+            "browser_url": "http://localhost:8002/" if DEV_MODE else None,
         },
     }
 

@@ -501,8 +501,8 @@
       if (t.downloads) parts.push(t.downloads + ' downloads');
       if (t.workflows) parts.push(t.workflows + ' workflows');
       var dbHtml = dotHtml('green', 'Database: ' + parts.join(', '));
-      if (db.datasette_url) {
-        dbHtml += ' <a href="' + db.datasette_url + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Explore database"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
+      if (db.browser_url) {
+        dbHtml += ' <a href="' + db.browser_url + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Explore database"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
       }
       $dbStatus.innerHTML = dbHtml;
     }

@@ -13,14 +13,13 @@
 #
 # Run:
 #   docker run -d --name studio-dev \
-#     -p 8000:8000 -p 8188:8188 \
+#     -p 8000:8000 -p 8188:8188 -p 8002:8002 \
 #     -v $(pwd)/backend:/workspace/studio/backend \
 #     -v $(pwd)/frontend:/workspace/studio/frontend \
 #     -v $(pwd)/tools:/workspace/studio/tools \
 #     -v $(pwd)/workflows:/workspace/studio/workflows \
 #     -v $(pwd)/version.json:/workspace/studio/version.json \
 #     -v ~/.studio-dev:/workspace/studio/data \
-#     -p 8001:8001 \
 #     comfyui-studio-dev
 # ============================================================
 
@@ -46,14 +45,11 @@ RUN pip install --no-cache-dir \
     aiohttp \
     Pillow
 
-# Datasette (dev database explorer)
-RUN pip install --no-cache-dir datasette datasette-pretty-json
+# sqlite-web (dev database browser)
+RUN pip install --no-cache-dir sqlite-web
 
 # ComfyUI stub server
 COPY docker/development/comfyui_stub.py /app/comfyui_stub.py
-
-# Datasette config and theme
-COPY docker/development/datasette/ /app/datasette/
 
 # Seed catalogs (copied to data dir on first boot by start.sh)
 COPY catalogs/models.json catalogs/loras.json catalogs/llm.json /repo-catalogs/
@@ -69,7 +65,7 @@ ENV STUDIO_PORT=8000
 ENV DEV_MODE=true
 ENV DEV_DOWNLOAD_DELAY=5
 
-EXPOSE 8000 8188 8001
+EXPOSE 8000 8188 8002
 
 WORKDIR /workspace/studio
 
