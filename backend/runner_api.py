@@ -19,18 +19,18 @@ from events import _events
 from runner import (
     _exec_progress, _pick_best_output, _start_ws_listener, _save_job, _build_workflow,
 )
-from workflows import _load_workflows_index, _load_manifest, _make_input_filename, _api_to_workflow_format
+import db as _db
+from workflows import _load_manifest, _make_input_filename, _api_to_workflow_format
 
 router = APIRouter()
 
 
 @router.get("/api/run/{workflow_id}")
 async def get_runner_manifest(workflow_id: str):
-    index = _load_workflows_index()
-    entry = next((e for e in index if e["id"] == workflow_id), None)
-    if not entry:
+    wf = _db.get_workflow(workflow_id)
+    if not wf:
         raise HTTPException(404)
-    manifest = _load_manifest(entry["id"])
+    manifest = _load_manifest(workflow_id)
     if not manifest:
         raise HTTPException(404)
     return manifest

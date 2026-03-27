@@ -10,8 +10,9 @@ from fastapi import HTTPException, UploadFile
 
 from config import COMFY_URL, ASSETS_OUTPUT_DIR
 from catalogs import _reload_models
+import db as _db
 from workflows import (
-    _load_workflows_index, _load_manifest, _load_workflow_json,
+    _load_manifest, _load_workflow_json,
     _make_input_filename,
     _assemble_dynamic_workflow, _assemble_t2i_workflow,
     _assemble_t2i_batch_workflow, _assemble_i2i_batch_workflow,
@@ -294,12 +295,11 @@ async def _build_workflow(
     Handles static and dynamic workflows, image upload, param application,
     seed resolution, and output directory patching.
     """
-    index = _load_workflows_index()
-    entry = next((e for e in index if e["id"] == workflow_id), None)
-    if not entry:
+    wf = _db.get_workflow(workflow_id)
+    if not wf:
         raise HTTPException(404)
 
-    manifest = _load_manifest(entry["id"])
+    manifest = _load_manifest(workflow_id)
     if not manifest:
         raise HTTPException(404)
 

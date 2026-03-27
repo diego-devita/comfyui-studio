@@ -87,6 +87,25 @@ def init_db():
         );
 
         CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+
+        -- Workflow index: cache of manifest.yaml metadata.
+        -- Source of truth is the manifest files on disk.
+        -- Synced at boot and after OTA updates.
+        CREATE TABLE IF NOT EXISTS workflows (
+            id              TEXT PRIMARY KEY,
+            name            TEXT NOT NULL,
+            category        TEXT DEFAULT '',
+            type            TEXT DEFAULT 'static',
+            version         INTEGER DEFAULT 0,
+            date            TEXT DEFAULT '',
+            description     TEXT DEFAULT '',
+            author          TEXT DEFAULT '',
+            inputs          TEXT DEFAULT '[]',
+            outputs         TEXT DEFAULT '[]',
+            required_models TEXT DEFAULT '[]',
+            required_nodes  TEXT DEFAULT '[]',
+            synced_at       TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -290,6 +309,91 @@ def count_jobs_by_workflow() -> list[dict]:
         ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Workflow index ───────────────────────────────────────────
+
+
+def sync_workflows_from_disk():
+    """Scan workflows dir, read each manifest.yaml, upsert into DB.
+    Remove DB rows for workflows whose dir no longer exists."""
+    import yaml
+    from config import WORKFLOWS_DIR
+
+    conn = _get_conn()
+    now = _now_italian()
+    found_ids = set()
+
+    if WORKFLOWS_DIR.exists():
+        for d in sorted(WORKFLOWS_DIR.iterdir()):
+            manifest_path = d / "manifest.yaml"
+            if not d.is_dir() or not manifest_path.exists():
+                continue
+            try:
+                with open(manifest_path) as f:
+                    m = yaml.safe_load(f)
+                wf_id = m.get("id", d.name)
+                found_ids.add(wf_id)
+                conn.execute("""
+                    INSERT INTO workflows (id, name, category, type, version, date,
+                                           description, author, inputs, outputs,
+                                           required_models, required_nodes, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name=excluded.name, category=excluded.category, type=excluded.type,
+                        version=excluded.version, date=excluded.date,
+                        description=excluded.description, author=excluded.author,
+                        inputs=excluded.inputs, outputs=excluded.outputs,
+                        required_models=excluded.required_models,
+                        required_nodes=excluded.required_nodes,
+                        synced_at=excluded.synced_at
+                """, (
+                    wf_id, m.get("name", wf_id), m.get("category", ""),
+                    m.get("type", "static"), m.get("version", 0), m.get("date", ""),
+                    m.get("description", ""), m.get("author", ""),
+                    json.dumps(m.get("inputs", []), ensure_ascii=False),
+                    json.dumps(m.get("outputs", []), ensure_ascii=False),
+                    json.dumps(m.get("required_models", []), ensure_ascii=False),
+                    json.dumps(m.get("required_nodes", []), ensure_ascii=False),
+                    now,
+                ))
+            except Exception as e:
+                print(f"[db] Failed to sync workflow {d.name}: {e}", flush=True)
+
+    # Remove workflows no longer on disk
+    existing = {r[0] for r in conn.execute("SELECT id FROM workflows").fetchall()}
+    removed = existing - found_ids
+    for wf_id in removed:
+        conn.execute("DELETE FROM workflows WHERE id = ?", (wf_id,))
+
+    conn.commit()
+    return len(found_ids)
+
+
+def list_workflows() -> list[dict]:
+    """All workflows from DB, ordered by name."""
+    conn = _get_conn()
+    rows = conn.execute("SELECT * FROM workflows ORDER BY name").fetchall()
+    return [_row_to_workflow(r) for r in rows]
+
+
+def get_workflow(workflow_id: str) -> dict | None:
+    """Single workflow by id from DB."""
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+    return _row_to_workflow(row) if row else None
+
+
+def _row_to_workflow(row: sqlite3.Row) -> dict:
+    """Convert a DB row to workflow dict with parsed JSON fields."""
+    d = dict(row)
+    for field in ("inputs", "outputs", "required_models", "required_nodes"):
+        if d.get(field):
+            try:
+                d[field] = json.loads(d[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return d
 
 
 # ── Helpers ──────────────────────────────────────────────────

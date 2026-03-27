@@ -22,8 +22,8 @@ from config import (
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
 from download import _download_state, _max_concurrent, _queue_lock, _schedule_downloads
 from events import _events
-from workflows import _load_workflows_index, _load_workflows_index_raw
 import auth
+import db as _db
 import download
 
 router = APIRouter()
@@ -244,8 +244,7 @@ async def system_status():
             if dest_path.exists():
                 present_models += 1
 
-    wf_index = _load_workflows_index()
-    total_workflows = len(wf_index)
+    total_workflows = len(_db.list_workflows())
 
     comfyui_status = "unknown"
     total_packages = 0
@@ -477,19 +476,17 @@ async def system_update(request: Request):
                     updated.append("llm_models")
 
             if "workflows" in to_update:
-                # Sync workflows from repo to working copy
+                # Sync workflow dirs from repo to working copy, then re-import into DB
                 src_dir = REPO_DIR / "workflows"
                 if src_dir.exists():
-                    # Copy index
                     WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(src_dir / "index.json"), str(WORKFLOWS_DIR / "index.json"))
-                    # Copy each workflow dir
                     for wf_dir in src_dir.iterdir():
                         if wf_dir.is_dir() and wf_dir.name != "reference":
                             dest_wf = WORKFLOWS_DIR / wf_dir.name
                             if dest_wf.exists():
                                 shutil.rmtree(str(dest_wf))
                             shutil.copytree(str(wf_dir), str(dest_wf))
+                    _db.sync_workflows_from_disk()
                     updated.append("workflows")
 
             # Step 9: Update local version.json

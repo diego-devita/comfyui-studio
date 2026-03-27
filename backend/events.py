@@ -211,6 +211,10 @@ async def _start_event_consumer():
     if stale_dl > 0:
         _events.emit("system.startup", f"Marked {stale_dl} stale downloads as failed", severity="warning")
 
+    # Sync workflow index from manifest files on disk
+    wf_count = _db.sync_workflows_from_disk()
+    _events.emit("system.startup", f"Synced {wf_count} workflows from disk", severity="info")
+
     # Register SIGTERM handler for graceful shutdown.
     # Docker sends SIGTERM before SIGKILL (10s grace period).
     # This flushes SQLite WAL files to prevent corruption.
