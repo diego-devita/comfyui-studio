@@ -3,13 +3,13 @@
     "save": {
       "inputs": {
         "filename_prefix": "comfyui-studio/{{output_dir}}/image",
-        "images": "{{final_image}}"
+        "images": "{{image}}"
       },
       "class_type": "SaveImage",
       "_meta": {"title": "Save Image (Batch {{batch_num}})"}
     }
   },
-  "imports": ["final_image"],
+  "imports": ["image"],
   "exports": {},
   "variables": ["output_dir", "batch_num"]
 }
