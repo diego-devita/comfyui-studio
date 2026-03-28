@@ -3,6 +3,7 @@ CLAUDE.md
 tools/
 workflows/.reference/
 catalogs/.drafts/
+catalogs/.custom/
 __pycache__/
 
 # Runtime data (never tracked)
