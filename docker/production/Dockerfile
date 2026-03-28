@@ -271,7 +271,8 @@ RUN pip install \
     huggingface_hub \
     aiofiles \
     requests \
-    pyyaml
+    pyyaml \
+    python-telegram-bot
 
 # ── ComfyUI core in /comfyui ─────────────────────────────
 # NOT in /workspace — that is the Network Volume, mounted at
