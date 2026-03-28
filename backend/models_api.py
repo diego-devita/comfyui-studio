@@ -568,7 +568,7 @@ async def list_compatible_loras(base_model: str):
     pairs = {}
     for cat in _all_categories():
         for m in cat.get("models", []):
-            if m.get("base_model") == base_model and m.get("pair_id"):
+            if m.get("pair_id") and (base_model == "all" or m.get("base_model") == base_model):
                 pid = m["pair_id"]
                 if pid not in pairs:
                     pairs[pid] = {"pair_id": pid, "name": "", "high": None, "low": None, "both": None}

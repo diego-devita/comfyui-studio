@@ -1580,20 +1580,49 @@
     container.className = 'lora-picker';
     container.dataset.inputId = inputId;
 
-    var baseModel = input.base_model || '';
+    var baseModel = input.base_model || manifest.base_model || '';
+    var showAll = false;
+
+    // Filter bar
+    var filterBar = document.createElement('div');
+    filterBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;' + (baseModel ? '' : 'display:none;');
+    var baseBadge = document.createElement('span');
+    baseBadge.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--accent);background:rgba(232,255,71,0.1);padding:2px 8px;border-radius:10px;';
+    baseBadge.textContent = baseModel || 'all';
+    filterBar.appendChild(baseBadge);
+    var showAllWrap = document.createElement('label');
+    showAllWrap.style.cssText = 'display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-left:auto;';
+    var showAllCb = document.createElement('input');
+    showAllCb.type = 'checkbox';
+    showAllCb.style.cssText = 'accent-color:var(--accent);';
+    showAllWrap.appendChild(showAllCb);
+    showAllWrap.appendChild(document.createTextNode('Show all'));
+    filterBar.appendChild(showAllWrap);
+    container.appendChild(filterBar);
+
     var loading = document.createElement('div');
     loading.style.cssText = 'color:var(--muted);font-size:12px;';
     loading.textContent = 'Loading compatible LoRAs...';
     container.appendChild(loading);
 
-    apiFetch('/api/admin/loras/compatible/' + encodeURIComponent(baseModel))
-      .then(function(r) { return r.json(); })
-      .then(function(pairs) {
-        // Style LoRAs = everything except lightx2v-unified and svi-v2-pro (those are fixed)
+    function loadPairs() {
+      var fetchBase = showAll ? 'all' : (baseModel || 'all');
+      apiFetch('/api/admin/loras/compatible/' + encodeURIComponent(fetchBase))
+        .then(function(r) { return r.json(); })
+        .then(function(pairs) { renderPairs(pairs); });
+    }
+
+    showAllCb.onchange = function() {
+      showAll = showAllCb.checked;
+      loadPairs();
+    };
+
+    function renderPairs(pairs) {
         _loraPairs = (pairs || []).filter(function(p) {
           return p.pair_id !== 'lightx2v-unified' && p.pair_id !== 'svi-v2-pro';
         });
-        container.innerHTML = '';
+        // Keep filter bar, remove rest
+        while (container.children.length > 1) container.removeChild(container.lastChild);
 
         if (_loraPairs.length === 0) {
           container.innerHTML = '<div style="color:var(--muted);font-size:12px;">No style LoRAs available. Download them from the Models page.</div>';
@@ -1721,11 +1750,9 @@
           } catch(e) { console.warn('LoRA prefill error', e); }
         }
         // No default slot — user adds LoRAs via "+ Add LoRA" button
-      })
-      .catch(function() {
-        container.innerHTML = '<div style="color:var(--error);font-size:12px;">Failed to load LoRAs</div>';
-      });
+    }
 
+    loadPairs();
     return container;
   }
 
