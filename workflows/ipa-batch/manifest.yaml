@@ -33,6 +33,7 @@ inputs:
     tooltip: "The base model that defines the visual style. Realistic checkpoints (CyberRealistic, RealVisXL) produce photorealistic results. Anime/illustration checkpoints (WAI-illustrious, Pony) produce stylized results. Must be SD 1.5 or SDXL-based — FLUX is not supported by IP-Adapter."
 
   - id: loras
+    depends_on: "checkpoint"
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5

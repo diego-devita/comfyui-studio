@@ -1753,6 +1753,15 @@
     }
 
     loadPairs();
+
+    // Update when checkpoint changes
+    document.addEventListener('checkpoint-changed', function(e) {
+      baseModel = e.detail.baseModel || baseModel;
+      baseBadge.textContent = baseModel || 'all';
+      filterBar.style.display = baseModel ? 'flex' : 'none';
+      loadPairs();
+    });
+
     return container;
   }
 
@@ -2168,6 +2177,7 @@
     container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Loading LoRAs...</div>';
 
     var allModels = null;
+    var dependsOn = input.depends_on || '';
     var currentBase = input.base_model || manifest.base_model || '';
 
     Promise.all([
@@ -2188,22 +2198,25 @@
       rebuildPicker();
     });
 
+    function normalizeBaseModel(val) {
+      if (!val) return '';
+      var v = val.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (v.indexOf('wan') >= 0) return 'wan';
+      if (v.indexOf('pony') >= 0) return 'sdxl';
+      if (v.indexOf('illustrious') >= 0) return 'sdxl';
+      if (v.indexOf('sdxl') >= 0) return 'sdxl';
+      if (v.indexOf('sd15') >= 0 || v === 'sd1') return 'sd15';
+      if (v.indexOf('flux') >= 0) return 'flux';
+      if (v.indexOf('hunyuan') >= 0) return 'hunyuan';
+      if (v.indexOf('cogvideo') >= 0) return 'cogvideo';
+      if (v.indexOf('ltx') >= 0) return 'ltx';
+      return v;
+    }
+
     function baseMatches(loraBase) {
-      if (!currentBase) return true; // no checkpoint selected = all compatible
-      if (!loraBase) return true; // no base info on lora = assume compatible
-      var cb = currentBase.toLowerCase().replace(/[^a-z0-9]/g, '');
-      var lb = loraBase.toLowerCase().replace(/[^a-z0-9]/g, '');
-      // Direct match or one contains the other
-      if (cb === lb) return true;
-      if (cb.indexOf(lb) >= 0 || lb.indexOf(cb) >= 0) return true;
-      // Known compatible families
-      var families = [['sdxl', 'pony', 'illustrious'], ['sd15', 'sd1']];
-      for (var i = 0; i < families.length; i++) {
-        var inCb = families[i].some(function(f) { return cb.indexOf(f) >= 0; });
-        var inLb = families[i].some(function(f) { return lb.indexOf(f) >= 0; });
-        if (inCb && inLb) return true;
-      }
-      return false;
+      if (!currentBase) return true;
+      if (!loraBase) return true;
+      return normalizeBaseModel(currentBase) === normalizeBaseModel(loraBase);
     }
 
     function rebuildPicker() {
@@ -2239,7 +2252,7 @@
 
       // Show all checkbox
       var filterBar = document.createElement('div');
-      filterBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
+      filterBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;' + (!currentBase && !dependsOn ? 'display:none;' : '');
 
       var baseBadge = document.createElement('span');
       baseBadge.className = 'lora-base-badge';
@@ -2262,35 +2275,18 @@
       slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
       container.appendChild(slotsDiv);
 
-      // Store removed optgroups so we can re-add them
-      var _removedGroups = new Map(); // sel element -> [{og, nextSibling}]
-
       function filterOptgroups() {
-        baseBadge.textContent = currentBase || 'all';
-        if (!currentBase) {
+        baseBadge.textContent = currentBase || (dependsOn ? 'select checkpoint' : 'all');
+        if (!currentBase && !dependsOn) {
           filterBar.style.display = 'none';
-          _removedGroups.forEach(function(removed, sel) {
-            removed.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
-          });
-          _removedGroups.clear();
-          return;
+        } else {
+          filterBar.style.display = 'flex';
         }
-        filterBar.style.display = 'flex';
-        container.querySelectorAll('.lora-dyn-select').forEach(function(sel) {
-          var prev = _removedGroups.get(sel) || [];
-          prev.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
-          _removedGroups.delete(sel);
-
-          if (!showAllCb.checked) {
-            var toRemove = [];
-            sel.querySelectorAll('optgroup').forEach(function(og) {
-              if (og.dataset.compatible !== '1') {
-                toRemove.push({og: og, nextSibling: og.nextSibling});
-              }
-            });
-            toRemove.forEach(function(r) { sel.removeChild(r.og); });
-            if (toRemove.length > 0) _removedGroups.set(sel, toRemove);
-          }
+        container.querySelectorAll('.lora-dyn-select optgroup').forEach(function(og) {
+          var show = !currentBase || showAllCb.checked || og.dataset.compatible === '1';
+          og.hidden = !show;
+          // Also hide/show each option inside (Firefox needs this)
+          Array.from(og.children).forEach(function(opt) { opt.hidden = !show; });
         });
       }
 
@@ -2405,11 +2401,13 @@
       filterOptgroups();
     }
 
-    document.addEventListener('checkpoint-changed', function(e) {
-      currentBase = e.detail.baseModel || '';
-      _removedGroups.clear();
-      rebuildPicker();
-    });
+    // Bind to the input this picker depends on (by ID)
+    if (dependsOn) {
+      document.addEventListener('checkpoint-changed', function(e) {
+        currentBase = e.detail.baseModel || '';
+        rebuildPicker();
+      });
+    }
 
     return container;
   }

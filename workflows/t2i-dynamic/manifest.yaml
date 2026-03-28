@@ -35,6 +35,7 @@ inputs:
     tooltip: "The base model that defines the visual style. This is the advanced T2I workflow with optional hires fix and face detailer — use the simpler T2I Batch if you don't need those."
 
   - id: loras
+    depends_on: "checkpoint"
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5

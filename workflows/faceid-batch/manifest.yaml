@@ -33,6 +33,7 @@ inputs:
     tooltip: "The base model that defines the visual style. Realistic checkpoints (CyberRealistic Pony, RealVisXL) give photorealistic output with the reference face. Anime checkpoints will stylize the face. Must be SD 1.5 or SDXL-based. FaceID Plus V2 works best with SDXL/Pony."
 
   - id: loras
+    depends_on: "checkpoint"
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5

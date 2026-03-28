@@ -34,6 +34,7 @@ inputs:
     tooltip: "The model that defines the output style. Realistic checkpoints (CyberRealistic, RealVisXL) keep things photorealistic. Anime checkpoints (WAI-illustrious, Pony) will stylize the image. The checkpoint's VAE is used to encode/decode — mismatching can cause color shifts."
 
   - id: loras
+    depends_on: "checkpoint"
     name: "LoRAs"
     type: lora_picker_dynamic
     max_loras: 5

@@ -323,35 +323,15 @@
       });
 
       for (var i = 0; i < count; i++) {
-        var params = JSON.parse(JSON.stringify(wf.params || {}));
-        if (seed !== -1) params.seed = seed + i;
-        else params.seed = -1;
-
-        // Apply placeholder replacements
-        if (Object.keys(phAnswers).length > 0) {
-          var phIdx = [0];
-          var replacer = function(match) {
-            var val = phAnswers[String(phIdx[0])];
-            phIdx[0]++;
-            return val !== undefined ? val : match;
-          };
-          var phRe = /\[\[.+?\]\]/g;
-          if (params.scenes) {
-            params.scenes.forEach(function(s) {
-              s.prompt = (s.prompt || '').replace(phRe, replacer);
-            });
-          }
-          if (params.positive_prompt) params.positive_prompt = params.positive_prompt.replace(phRe, replacer);
-          if (params.negative_prompt) params.negative_prompt = params.negative_prompt.replace(phRe, replacer);
-        }
-
-        if (existingImageName) params._existing_input_image = existingImageName;
         var formData = new FormData();
-        formData.append('params', JSON.stringify(params));
+        var jobSeed = (seed !== -1) ? String(seed + i) : '-1';
+        formData.append('seed', jobSeed);
+        if (Object.keys(phAnswers).length > 0) formData.append('answers', JSON.stringify(phAnswers));
+        if (existingImageName) formData.append('existing_image', existingImageName);
         if (selectedFile) formData.append('input_image', selectedFile);
 
         try {
-          var resp = await apiFetch('/api/run/' + encodeURIComponent(workflowId) + '/execute', {
+          var resp = await apiFetch('/api/admin/presets/' + encodeURIComponent(presetId) + '/run', {
             method: 'POST', body: formData
           });
           if (!resp.ok) {
@@ -371,27 +351,27 @@
     };
 
     // API code
-    var apiParams = JSON.parse(JSON.stringify(wf.params || {}));
-    apiParams.seed = -1;
     var curlCode = '// HTML\n' +
       '// <input type="file" id="imageFile" accept="image/*">\n\n' +
-      '// ── Execute ──\n' +
+      '// ── Run preset ──\n' +
       'async function runPreset() {\n' +
-      '  const params = ' + JSON.stringify(apiParams, null, 2) + ';\n\n' +
       '  const formData = new FormData();\n' +
-      '  formData.append("params", JSON.stringify(params));\n\n' +
+      '  formData.append("seed", "-1");\n\n' +
       '  // Option A: new image from file input\n' +
       '  const file = document.getElementById("imageFile").files[0];\n' +
       '  if (file) formData.append("input_image", file);\n\n' +
-      '  // Option B: existing image already on ComfyUI\n' +
-      '  // params._existing_input_image = "20260328_filename.jpg";\n\n' +
-      '  const resp = await fetch("/api/run/' + workflowId + '/execute", {\n' +
+      '  // Option B: existing image on server\n' +
+      '  // formData.append("existing_image", "20260328_filename.jpg");\n\n' +
+      (placeholders.length > 0 ?
+        '  // Placeholder answers (index → value)\n' +
+        '  // formData.append("answers", JSON.stringify({"0": "value"}));\n\n' : '') +
+      '  const resp = await fetch("/api/admin/presets/' + presetId + '/run", {\n' +
       '    method: "POST",\n' +
       '    headers: {"X-API-Key": "YOUR_API_KEY"},\n' +
       '    body: formData\n' +
       '  });\n' +
-      '  const {prompt_id, seeds} = await resp.json();\n' +
-      '  // prompt_id: job ID | seeds: resolved seed values\n\n' +
+      '  const {prompt_id, seeds} = await resp.json();\n\n' +
+      '  // Track job progress\n' +
       '  const url = await waitForJob(prompt_id);\n' +
       '  console.log("Output:", url);\n' +
       '}\n\n' +
@@ -403,9 +383,8 @@
       '      headers: {"X-API-Key": "YOUR_API_KEY"}\n' +
       '    });\n' +
       '    const data = await resp.json();\n\n' +
+      '    // status: queued → running → completed/failed\n' +
       '    if (data.status === "completed") {\n' +
-      '      // data.outputs.image = {filename, subfolder, type}\n' +
-      '      // data.outputs.video = {filename, subfolder, type}\n' +
       '      const out = data.outputs.image || data.outputs.video;\n' +
       '      return "/api/comfyui/view?filename=" +\n' +
       '        encodeURIComponent(out.filename) +\n' +

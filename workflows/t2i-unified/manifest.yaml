@@ -44,6 +44,7 @@ inputs:
       - id: loras
         name: "LoRAs"
         type: lora_picker_dynamic
+        depends_on: "checkpoint"
         max_loras: 5
         tooltip: "Optional style/concept LoRAs. Stack up to 5 with individual strength control."
       - id: clip_skip
