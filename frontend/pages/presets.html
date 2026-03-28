@@ -26,8 +26,12 @@
   .run-overlay.visible { display: flex; }
   .run-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
-    padding: 24px; width: 500px; max-width: 90vw;
+    padding: 24px; width: 550px; max-width: 90vw; max-height: 85vh; overflow-y: auto;
   }
+  .run-box::-webkit-scrollbar { width: 5px; }
+  .run-box::-webkit-scrollbar-track { background: transparent; }
+  .run-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+  .run-box::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
   .run-box h2 { margin: 0 0 16px; font-size: 16px; }
   .dropzone { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 24px; text-align: center; cursor: pointer; margin-bottom: 12px; position: relative; color: var(--muted); font-size: 12px; }
   .dropzone.dragover { border-color: var(--accent); }
