@@ -11,7 +11,9 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 
 from config import PRESETS_DIR
@@ -227,6 +229,63 @@ async def get_preset_placeholders(preset_id: str):
         raise HTTPException(404)
     params = data.get("workflow", {}).get("params", {})
     return extract_placeholders(params)
+
+
+@router.post("/api/admin/presets/{preset_id}/run")
+async def run_preset(
+    preset_id: str,
+    input_image: Optional[UploadFile] = File(None),
+    seed: str = Form("-1"),
+    answers: str = Form("{}"),
+    existing_image: str = Form(""),
+):
+    """Run a preset. Loads params, applies placeholders, executes job."""
+    import copy, httpx, os
+
+    data = _load_preset(preset_id)
+    if not data:
+        raise HTTPException(404, f"Preset '{preset_id}' not found")
+
+    wf = data.get("workflow", {})
+    workflow_id = wf.get("workflow_id", "")
+    if not workflow_id:
+        raise HTTPException(400, "Preset has no workflow_id")
+
+    params = copy.deepcopy(wf.get("params", {}))
+    try:
+        params["seed"] = int(seed)
+    except (ValueError, TypeError):
+        params["seed"] = -1
+
+    try:
+        ans = json.loads(answers) if answers and answers != "{}" else {}
+    except Exception:
+        ans = {}
+    if ans:
+        params = apply_placeholders(params, ans)
+
+    if existing_image:
+        params["_existing_input_image"] = existing_image
+
+    studio_port = os.environ.get("STUDIO_PORT", "8000")
+    api_key = os.environ.get("API_KEY", "changeme")
+
+    form_data = {"params": json.dumps(params)}
+    files = {}
+    if input_image:
+        image_bytes = await input_image.read()
+        files["input_image"] = (input_image.filename or "input.jpg", image_bytes, input_image.content_type or "image/jpeg")
+
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(
+            f"http://127.0.0.1:{studio_port}/api/run/{workflow_id}/execute",
+            headers={"X-API-Key": api_key},
+            data=form_data,
+            files=files if files else None,
+        )
+        if r.status_code != 200:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
 
 
 @router.get("/api/admin/presets/{preset_id}/export")
