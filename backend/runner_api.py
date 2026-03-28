@@ -85,6 +85,18 @@ async def execute_workflow(
         workflow_id, form_params, input_image,
     )
 
+    # Save debug workflow for inspection
+    try:
+        debug_dir = ASSETS_OUTPUT_DIR / output_dir
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        (debug_dir / "_debug_workflow.json").write_text(
+            json.dumps(workflow, indent=2, ensure_ascii=False))
+        (debug_dir / "_debug_params.json").write_text(
+            json.dumps({k: v for k, v in form_params.items() if not k.startswith("_")},
+                       indent=2, ensure_ascii=False, default=str))
+    except Exception:
+        pass  # non-critical
+
     # Send to ComfyUI
     client_id = uuid.uuid4().hex
     try:

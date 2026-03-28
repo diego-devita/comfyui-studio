@@ -38,6 +38,8 @@ defaults:
   lora_accelerator: "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
   lora_accelerator_strength_high: 3
   lora_accelerator_strength_low: 1.5
+  svi_pro_high: "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+  svi_pro_low: "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
 
 inputs:
   - id: input_image
