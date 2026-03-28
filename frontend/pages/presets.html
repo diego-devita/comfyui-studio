@@ -236,22 +236,48 @@
     // API code
     var apiParams = JSON.parse(JSON.stringify(wf.params || {}));
     apiParams.seed = -1;
-    var curlCode = '// HTML: <input type="file" id="imageFile" accept="image/*">\n\n' +
-      '// JavaScript\n' +
+    var curlCode = '// HTML\n' +
+      '// <input type="file" id="imageFile" accept="image/*">\n\n' +
+      '// ── Execute ──\n' +
       'async function runPreset() {\n' +
-      '  const imageInput = document.getElementById("imageFile");\n' +
+      '  const params = ' + JSON.stringify(apiParams, null, 2) + ';\n\n' +
       '  const formData = new FormData();\n' +
-      '  formData.append("params", JSON.stringify(' + JSON.stringify(apiParams, null, 2) + '));\n' +
-      '  if (imageInput.files[0]) {\n' +
-      '    formData.append("input_image", imageInput.files[0]);\n' +
-      '  }\n' +
+      '  formData.append("params", JSON.stringify(params));\n\n' +
+      '  // Option A: new image from file input\n' +
+      '  const file = document.getElementById("imageFile").files[0];\n' +
+      '  if (file) formData.append("input_image", file);\n\n' +
+      '  // Option B: existing image already on ComfyUI\n' +
+      '  // params._existing_input_image = "20260328_filename.jpg";\n\n' +
       '  const resp = await fetch("/api/run/' + workflowId + '/execute", {\n' +
       '    method: "POST",\n' +
       '    headers: {"X-API-Key": "YOUR_API_KEY"},\n' +
       '    body: formData\n' +
       '  });\n' +
-      '  const result = await resp.json();\n' +
-      '  console.log("Job queued:", result.prompt_id);\n' +
+      '  const {prompt_id, seeds} = await resp.json();\n' +
+      '  // prompt_id: job ID | seeds: resolved seed values\n\n' +
+      '  const url = await waitForJob(prompt_id);\n' +
+      '  console.log("Output:", url);\n' +
+      '}\n\n' +
+      '// ── Poll until done ──\n' +
+      'async function waitForJob(promptId) {\n' +
+      '  while (true) {\n' +
+      '    await new Promise(r => setTimeout(r, 2000));\n' +
+      '    const resp = await fetch("/api/run/status/" + promptId, {\n' +
+      '      headers: {"X-API-Key": "YOUR_API_KEY"}\n' +
+      '    });\n' +
+      '    const data = await resp.json();\n\n' +
+      '    if (data.status === "completed") {\n' +
+      '      // data.outputs.image = {filename, subfolder, type}\n' +
+      '      // data.outputs.video = {filename, subfolder, type}\n' +
+      '      const out = data.outputs.image || data.outputs.video;\n' +
+      '      return "/api/comfyui/view?filename=" +\n' +
+      '        encodeURIComponent(out.filename) +\n' +
+      '        "&type=" + out.type +\n' +
+      '        "&subfolder=" + encodeURIComponent(out.subfolder);\n' +
+      '    }\n\n' +
+      '    if (data.status === "failed" || data.status === "stalled")\n' +
+      '      throw new Error("Job " + data.status);\n' +
+      '  }\n' +
       '}';
     document.getElementById('apiCodePre').textContent = curlCode;
     document.getElementById('copyApiCode').onclick = function() {
