@@ -228,6 +228,41 @@ inputs:
     default: -1
     tooltip: "Random seed. -1 = random."
 
+technical_notes:
+  pipeline: "CheckpointLoaderSimple → CLIPSetLastLayer → optional LoRA chain → CLIPTextEncode (positive+negative) → LoadImage (reference) → [IPA mode: IPAdapterUnifiedLoader+IPAdapterAdvanced | FaceID mode: IPAdapterInsightFaceLoader+IPAdapterUnifiedLoaderFaceID+IPAdapterFaceID] → EmptyLatentImage → KSampler → VAEDecode → SaveImage"
+  model_loading:
+    unet: "Single checkpoint (SD 1.5 / SDXL / Pony) via CheckpointLoaderSimple"
+    clip: "From checkpoint, with CLIPSetLastLayer (clip_skip)"
+    vae: "From checkpoint"
+    lora: "Up to 5 user LoRAs chained via LoraLoader. Applied before IPA/FaceID model modification."
+    ipa_model: "IPA mode: auto-loaded by IPAdapterUnifiedLoader based on preset (PLUS, PLUS FACE, STANDARD, etc.)"
+    faceid_model: "FaceID mode: auto-loaded by IPAdapterUnifiedLoaderFaceID based on preset. Includes FaceID-specific LoRA (strength configurable). InsightFace (buffalo_l, CUDA) for facial geometry extraction."
+    strategy: "Checkpoint + LoRAs loaded first. IPA/FaceID modifies the model weights. The modified model goes to KSampler."
+  sampling:
+    method: "Single-pass KSampler from EmptyLatentImage. The IPA/FaceID conditioning is injected into the model, not the sampler."
+    sampler: "User-configurable"
+    scheduler: "User-configurable"
+    total_steps: "User-configurable (default 19)"
+    cfg: "User-configurable (default 4.0)"
+  post_processing:
+    upscale_method: "None"
+    frame_interpolation: "N/A"
+  output:
+    format: "PNG"
+    resolution: "User-configurable via resolution picker"
+    batch: "batch_size images per pass (parallel, same seed + different noise)"
+  resources:
+    vram_peak: "SDXL + IPA: ~12GB. SDXL + FaceID: ~14GB (InsightFace + FaceID model + LoRA)"
+    speed_notes: "IPA slightly faster than FaceID (no InsightFace inference). Both add ~20% overhead vs plain T2I."
+  notes:
+    - "Mode switch: IPA uses visual feature extraction (style/composition transfer). FaceID uses facial geometry recognition (identity preservation)."
+    - "IPA weight controls influence strength. 0.5-0.7 = balanced. 0.8+ = strong reference. Above 1.0 can cause artifacts."
+    - "IPA start/end: control when in the diffusion process IPA is active. 0.0-1.0 = full influence. 0.2-0.8 = lets model establish composition first, releases control at end."
+    - "FaceID LoRA strength: controls the FaceID-specific LoRA that helps the model understand face embeddings. Separate from user creative LoRAs."
+    - "FaceID V2 weight: secondary embedding for additional face detail. Keep similar to main FaceID weight."
+    - "LoRAs are applied BEFORE IPA/FaceID model modification — they define the base style, IPA/FaceID injects the subject."
+    - "FLUX checkpoints not supported — IP-Adapter and FaceID require SD 1.5 or SDXL architecture."
+
 outputs:
   - id: image
     name: "Output Images"

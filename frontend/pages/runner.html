@@ -873,7 +873,131 @@
       return;
     }
 
+    // Detect format: grouped (items with .group + .items) vs flat (items with .id)
+    var isGrouped = inputs.length > 0 && inputs[0].group && inputs[0].items;
+
+    if (isGrouped) {
+      inputs.forEach(function(grp) {
+        var section = document.createElement('div');
+        section.className = 'form-section';
+        section.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;';
+
+        var header = document.createElement('button');
+        header.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;background:var(--surface);border:none;color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:0.5px;cursor:pointer;';
+        var arrow = document.createElement('span');
+        arrow.style.cssText = 'transition:transform 0.2s;font-size:10px;';
+        arrow.textContent = grp.collapsed ? '\u25B6' : '\u25BC';
+        header.appendChild(arrow);
+        header.appendChild(document.createTextNode(grp.group));
+
+        // Advanced toggle
+        var hasAdvanced = (grp.items || []).some(function(inp) { return inp.advanced; });
+
+        var body = document.createElement('div');
+        body.style.cssText = 'padding:12px 16px;' + (grp.collapsed ? 'display:none;' : '');
+
+        header.onclick = function() {
+          var open = body.style.display !== 'none';
+          body.style.display = open ? 'none' : '';
+          arrow.textContent = open ? '\u25B6' : '\u25BC';
+        };
+
+        // Render items
+        var advancedItems = [];
+        (grp.items || []).forEach(function(input) {
+          var formGroup = buildFormItem(input);
+          if (input.advanced) {
+            formGroup.style.display = 'none';
+            formGroup.dataset.advanced = 'true';
+            advancedItems.push(formGroup);
+          }
+          if (input.show_when) {
+            formGroup.dataset.showWhen = input.show_when;
+            formGroup.style.display = 'none';
+          }
+          body.appendChild(formGroup);
+        });
+
+        // "Show advanced" toggle if needed
+        if (hasAdvanced) {
+          var advToggle = document.createElement('button');
+          advToggle.style.cssText = 'display:block;margin-top:8px;padding:4px 0;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;';
+          advToggle.textContent = '\u25B6 Show advanced';
+          var advOpen = false;
+          advToggle.onclick = function(e) {
+            e.stopPropagation();
+            advOpen = !advOpen;
+            advancedItems.forEach(function(el) {
+              // Only show if show_when is satisfied or not set
+              if (advOpen && !el.dataset.showWhen) el.style.display = '';
+              else if (!advOpen) el.style.display = 'none';
+            });
+            advToggle.textContent = advOpen ? '\u25BC Hide advanced' : '\u25B6 Show advanced';
+          };
+          body.appendChild(advToggle);
+        }
+
+        section.appendChild(header);
+        section.appendChild(body);
+        $formPanel.appendChild(section);
+      });
+
+      // Wire up show_when listeners
+      _wireShowWhen();
+      return;
+    }
+
+    // Flat format (backward compatible)
     inputs.forEach(input => {
+      var group = buildFormItem(input);
+      $formPanel.appendChild(group);
+    });
+  }
+
+  function _wireShowWhen() {
+    // Find all elements with data-show-when and toggle visibility based on param values
+    var allShowWhen = $formPanel.querySelectorAll('[data-show-when]');
+    if (!allShowWhen.length) return;
+
+    function evalShowWhen() {
+      allShowWhen.forEach(function(el) {
+        var cond = el.dataset.showWhen;
+        var isAdvanced = el.dataset.advanced === 'true';
+        // Check if parent advanced section is open
+        if (isAdvanced) {
+          var advToggle = el.parentElement && el.parentElement.querySelector('[data-advanced]');
+          // If advanced items are hidden, don't force show
+        }
+        // Simple truthy check on param value
+        var target = $formPanel.querySelector('[data-input-id="' + cond + '"]');
+        if (!target) {
+          // Try boolean checkbox
+          target = document.getElementById(cond);
+        }
+        var val = false;
+        if (target) {
+          if (target.type === 'checkbox') val = target.checked;
+          else if (target.value) val = target.value !== '' && target.value !== 'false';
+        }
+        if (val && !isAdvanced) el.style.display = '';
+        else if (val && isAdvanced) {
+          // Only show if advanced section is also open
+          var siblings = el.parentElement.querySelectorAll('[data-advanced="true"]');
+          var anyVisible = Array.from(siblings).some(function(s) { return s.style.display !== 'none' && !s.dataset.showWhen; });
+          if (anyVisible) el.style.display = '';
+        }
+        else el.style.display = 'none';
+      });
+    }
+
+    // Listen for changes on all inputs
+    $formPanel.addEventListener('change', evalShowWhen);
+    $formPanel.addEventListener('input', evalShowWhen);
+    // Initial eval
+    setTimeout(evalShowWhen, 100);
+  }
+
+  function buildFormItem(input) {
       const group = document.createElement('div');
       group.className = 'form-group';
 
@@ -966,8 +1090,7 @@
           group.appendChild(buildTextInput(inputId, input));
       }
 
-      $formPanel.appendChild(group);
-    });
+      return group;
   }
 
   // Track existing image selections: inputId -> filename string
@@ -1880,8 +2003,9 @@
           (cat.models || []).forEach(function(m) {
             var o = document.createElement('option');
             o.value = m.file;
-            o.textContent = m.name + (m.civitai_base_model ? ' [' + m.civitai_base_model + ']' : '');
-            o.dataset.baseModel = m.civitai_base_model || m.base_model || '';
+            var bm = m.civitai_base_model || m.base_model || '';
+            o.textContent = m.name + (bm ? ' [' + bm + ']' : '');
+            o.dataset.baseModel = bm;
             if (m.status !== 'present') { o.textContent += ' (not downloaded)'; o.disabled = true; }
             sel.appendChild(o);
           });
@@ -1928,10 +2052,20 @@
     });
 
     function baseMatches(loraBase) {
-      if (!currentBase || !loraBase) return false;
-      var cb = currentBase.toLowerCase();
-      var lb = loraBase.toLowerCase().split(' ')[0];
-      return cb.indexOf(lb) >= 0;
+      if (!currentBase || !loraBase) return true; // no info = don't warn
+      var cb = currentBase.toLowerCase().replace(/[^a-z0-9]/g, '');
+      var lb = loraBase.toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Direct match or one contains the other
+      if (cb === lb) return true;
+      if (cb.indexOf(lb) >= 0 || lb.indexOf(cb) >= 0) return true;
+      // Known compatible families
+      var families = [['sdxl', 'pony', 'illustrious'], ['sd15', 'sd1']];
+      for (var i = 0; i < families.length; i++) {
+        var inCb = families[i].some(function(f) { return cb.indexOf(f) >= 0; });
+        var inLb = families[i].some(function(f) { return lb.indexOf(f) >= 0; });
+        if (inCb && inLb) return true;
+      }
+      return false;
     }
 
     function rebuildPicker() {
@@ -2051,7 +2185,17 @@
 
     document.addEventListener('checkpoint-changed', function(e) {
       currentBase = e.detail.baseModel || '';
-      rebuildPicker();
+      // Update warnings on already-selected LoRAs without rebuilding
+      container.querySelectorAll('.lora-dyn-slot').forEach(function(slot) {
+        var sel = slot.querySelector('.lora-dyn-select');
+        var warn = slot.querySelector('div[style*="color:#ffaa33"]');
+        if (sel && warn) {
+          var opt = sel.options[sel.selectedIndex];
+          if (opt && opt.value && opt.dataset.loraBase) {
+            warn.style.display = baseMatches(opt.dataset.loraBase) ? 'none' : 'block';
+          }
+        }
+      });
     });
 
     return container;
