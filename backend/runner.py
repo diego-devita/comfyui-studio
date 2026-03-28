@@ -103,6 +103,48 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
         _mark_stalled(f"WebSocket connection failed: {e}")
         return
 
+    # Race condition guard: if ComfyUI already finished before WS connected,
+    # the messages are lost. Check history immediately after connecting.
+    _time.sleep(0.5)  # brief wait for ComfyUI to register the prompt
+    try:
+        import httpx as _hx
+        _hist_r = _hx.get(f"{COMFY_URL}/history/{prompt_id}", timeout=5)
+        if _hist_r.status_code == 200:
+            _hist_data = _hist_r.json().get(prompt_id, {})
+            _hist_status = _hist_data.get("status", {}).get("status_str", "")
+            if _hist_status in ("error", "success"):
+                # Job already finished — don't wait on WS
+                if _hist_status == "error":
+                    msgs = _hist_data.get("status", {}).get("messages", [])
+                    err_msg = ""
+                    for _m in msgs:
+                        if isinstance(_m, (list, tuple)) and len(_m) >= 2 and _m[0] == "execution_error":
+                            err_data = _m[1] if isinstance(_m[1], dict) else {}
+                            err_msg = err_data.get("exception_message", str(_m))
+                            break
+                    _mark_stalled(f"ComfyUI error: {(err_msg or str(msgs))[:200]}")
+                else:
+                    from datetime import datetime, timezone, timedelta as _td
+                    _now = datetime.now(timezone(_td(hours=1)))
+                    if job_record:
+                        job_record["status"] = "completed"
+                        job_record["finished_at"] = _now.strftime("%Y-%m-%dT%H:%M:%S")
+                        hist_outputs = _hist_data.get("outputs", {})
+                        best_video, best_images = _pick_best_output(hist_outputs)
+                        if best_video:
+                            job_record["output"] = best_video
+                        elif best_images:
+                            job_record["output"] = best_images[0]
+                        _save_job(job_record)
+                _exec_progress.pop(prompt_id, None)
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+                return
+    except Exception:
+        pass  # history check failed, proceed with WS listener as normal
+
     _preview_seq = 0
     try:
         for raw in ws:
