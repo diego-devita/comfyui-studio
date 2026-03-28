@@ -2162,7 +2162,8 @@
     });
 
     function baseMatches(loraBase) {
-      if (!currentBase || !loraBase) return true; // no info = don't warn
+      if (!currentBase) return true; // no checkpoint selected = all compatible
+      if (!loraBase) return true; // no base info on lora = assume compatible
       var cb = currentBase.toLowerCase().replace(/[^a-z0-9]/g, '');
       var lb = loraBase.toLowerCase().replace(/[^a-z0-9]/g, '');
       // Direct match or one contains the other
@@ -2209,9 +2210,55 @@
         return a.localeCompare(b);
       });
 
+      // Show all checkbox
+      var showAllWrap = document.createElement('label');
+      showAllWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-bottom:4px;';
+      var showAllCb = document.createElement('input');
+      showAllCb.type = 'checkbox';
+      showAllCb.style.cssText = 'accent-color:var(--accent);';
+      showAllWrap.appendChild(showAllCb);
+      showAllWrap.appendChild(document.createTextNode('Show all LoRAs'));
+      container.appendChild(showAllWrap);
+
       var slotsDiv = document.createElement('div');
       slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
       container.appendChild(slotsDiv);
+
+      // Store removed optgroups so we can re-add them
+      var _removedGroups = new Map(); // sel element -> [{og, nextSibling}]
+
+      function filterOptgroups() {
+        // If no checkpoint selected, show all and hide checkbox
+        if (!currentBase) {
+          showAllWrap.style.display = 'none';
+          // Re-add any removed optgroups
+          _removedGroups.forEach(function(removed, sel) {
+            removed.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
+          });
+          _removedGroups.clear();
+          return;
+        }
+        showAllWrap.style.display = 'flex';
+        container.querySelectorAll('.lora-dyn-select').forEach(function(sel) {
+          // First re-add any previously removed
+          var prev = _removedGroups.get(sel) || [];
+          prev.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
+          _removedGroups.delete(sel);
+
+          if (!showAllCb.checked) {
+            var toRemove = [];
+            sel.querySelectorAll('optgroup').forEach(function(og) {
+              if (og.dataset.compatible !== '1') {
+                toRemove.push({og: og, nextSibling: og.nextSibling});
+              }
+            });
+            toRemove.forEach(function(r) { sel.removeChild(r.og); });
+            if (toRemove.length > 0) _removedGroups.set(sel, toRemove);
+          }
+        });
+      }
+
+      showAllCb.onchange = filterOptgroups;
 
       function addSlot() {
         var slot = document.createElement('div');
@@ -2224,10 +2271,12 @@
         sel.innerHTML = '<option value="">\u2014 None \u2014</option>';
 
         sortedBases.forEach(function(groupBase) {
+          var compatible = currentBase ? baseMatches(groupBase) : true;
           var label = groupBase;
-          if (baseMatches(groupBase)) label += ' (selected)';
+          if (currentBase && compatible) label += ' \u2713';
           var optgroup = document.createElement('optgroup');
           optgroup.label = label;
+          optgroup.dataset.compatible = compatible ? '1' : '0';
           groups[groupBase].forEach(function(m) {
             var o = document.createElement('option');
             o.value = m.file;
@@ -2317,21 +2366,13 @@
       } else {
         addSlot();
       }
+      filterOptgroups();
     }
 
     document.addEventListener('checkpoint-changed', function(e) {
       currentBase = e.detail.baseModel || '';
-      // Update warnings on already-selected LoRAs without rebuilding
-      container.querySelectorAll('.lora-dyn-slot').forEach(function(slot) {
-        var sel = slot.querySelector('.lora-dyn-select');
-        var warn = slot.querySelector('div[style*="color:#ffaa33"]');
-        if (sel && warn) {
-          var opt = sel.options[sel.selectedIndex];
-          if (opt && opt.value && opt.dataset.loraBase) {
-            warn.style.display = baseMatches(opt.dataset.loraBase) ? 'none' : 'block';
-          }
-        }
-      });
+      _removedGroups.clear();
+      rebuildPicker();
     });
 
     return container;
@@ -2707,24 +2748,74 @@
   });
 
   // ── Save Preset ──
+  function slugify(text) {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 50);
+  }
+
+  function showSavePresetDialog() {
+    return new Promise(function(resolve) {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;justify-content:center;align-items:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);padding:24px;width:450px;max-width:90vw;';
+      box.innerHTML =
+        '<h2 style="margin:0 0 16px;font-size:16px;">Save Preset</h2>' +
+        '<div style="margin-bottom:12px;">' +
+          '<label style="display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;">Name</label>' +
+          '<input type="text" id="presetDialogName" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;" placeholder="My awesome preset">' +
+        '</div>' +
+        '<div style="margin-bottom:16px;">' +
+          '<label style="display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;">Description</label>' +
+          '<textarea id="presetDialogDesc" rows="3" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;resize:vertical;" placeholder="Optional description..."></textarea>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+          '<button class="btn btn--sm" id="presetDialogCancel">Cancel</button>' +
+          '<button class="btn" id="presetDialogSave">Save</button>' +
+        '</div>';
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      var nameInput = document.getElementById('presetDialogName');
+      nameInput.focus();
+
+      function close(result) {
+        document.body.removeChild(overlay);
+        resolve(result);
+      }
+
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) close(null); });
+      document.getElementById('presetDialogCancel').onclick = function() { close(null); };
+      document.getElementById('presetDialogSave').onclick = function() {
+        var name = nameInput.value.trim();
+        if (!name) { nameInput.style.borderColor = 'var(--error)'; return; }
+        close({name: name, description: document.getElementById('presetDialogDesc').value.trim()});
+      };
+      nameInput.onkeydown = function(e) {
+        if (e.key === 'Enter') document.getElementById('presetDialogSave').click();
+        if (e.key === 'Escape') close(null);
+      };
+    });
+  }
+
   document.getElementById('savePresetBtn').addEventListener('click', async function() {
+    var result = await showSavePresetDialog();
+    if (!result) return;
+
     var params = gatherCurrentParams();
-    // Remove image-related params — preset doesn't include images
     delete params.input_image;
     delete params.image;
 
-    var id = prompt('Preset ID (alphanumeric, no spaces):');
-    if (!id) return;
-    var desc = prompt('Description (optional):') || '';
+    var presetId = slugify(result.name);
+    if (!presetId) presetId = 'preset-' + Date.now();
 
     try {
       var resp = await apiFetch('/api/admin/presets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          id: id,
-          name: (manifest.name || workflowId) + ' — ' + id,
-          description: desc,
+          id: presetId,
+          name: result.name,
+          description: result.description,
           workflow: {
             workflow_id: workflowId,
             workflow_name: manifest.name || workflowId,
@@ -2733,7 +2824,7 @@
         })
       });
       if (resp.ok) {
-        showToast('Preset saved: ' + id, 3000, 'success');
+        showToast('Preset saved: ' + result.name, 3000, 'success');
       } else {
         var err = await resp.json().catch(function() { return {}; });
         showToast('Error: ' + (err.detail || resp.status), 5000, 'error');

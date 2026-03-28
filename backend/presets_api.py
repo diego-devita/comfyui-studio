@@ -81,6 +81,22 @@ async def save_preset(request: Request):
     return {"id": preset_id, "message": "Preset saved"}
 
 
+@router.put("/api/admin/presets/{preset_id}/rename")
+async def rename_preset(preset_id: str, request: Request):
+    """Rename a preset."""
+    body = await request.json()
+    new_name = body.get("name", "").strip()
+    if not new_name:
+        raise HTTPException(400, "Name is required")
+    data = _load_preset(preset_id)
+    if not data:
+        raise HTTPException(404)
+    data["name"] = new_name
+    p = _presets_dir() / f"{preset_id}.json"
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return {"id": preset_id, "name": new_name}
+
+
 @router.delete("/api/admin/presets/{preset_id}")
 async def delete_preset(preset_id: str):
     """Delete a preset."""
