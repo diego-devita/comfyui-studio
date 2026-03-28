@@ -322,6 +322,15 @@
     <button class="btn" id="flushDbBtn">Flush DB</button>
   </div>
 
+  <div class="action-card" id="restartCard">
+    <span class="icon icon-refresh action-card-icon"></span>
+    <div class="action-card-text">
+      <h3>Restart Backend</h3>
+      <p>Restart the uvicorn process. Active jobs will be marked as stalled.</p>
+    </div>
+    <button class="btn" id="restartBtn">Restart</button>
+  </div>
+
   <!-- Environment Variables (accordion) -->
   <div class="settings-accordion">
     <button class="accordion-toggle" id="envAccordionToggle">
@@ -666,6 +675,26 @@
     } else {
       doFlush();
     }
+  });
+
+  // ── Restart Backend ──
+  var $restartBtn = document.getElementById('restartBtn');
+  $restartBtn.addEventListener('click', function() {
+    studioConfirm('Restart the backend? Active jobs will be marked as stalled.', function() {
+      $restartBtn.disabled = true;
+      $restartBtn.textContent = 'Restarting...';
+      apiFetch('/api/admin/system/restart', { method: 'POST' })
+        .then(function() {
+          showToast('Backend restarting — page will reconnect automatically', 5000, 'info');
+        })
+        .catch(function(err) {
+          if (err.message !== 'auth') showToast('Restart failed: ' + err.message, 5000, 'error');
+        })
+        .finally(function() {
+          $restartBtn.disabled = false;
+          setTimeout(function() { $restartBtn.textContent = 'Restart'; }, 10000);
+        });
+    });
   });
 
   // ── Boot ──

@@ -7,7 +7,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import LLM_MODELS_DIR, LLAMA_SERVER_PORT, LLAMA_SERVER_PATH, DEV_MODE
-from catalogs import _llm_models_data, _reload_models, _find_llm_model, _build_catalog_response
+import catalogs as _catalogs
+from catalogs import _find_llm_model, _build_catalog_response
 from download import _download_state, _enqueue_download
 from events import _events
 from llm_server import (
@@ -21,15 +22,14 @@ router = APIRouter()
 @router.get("/api/admin/llm/models")
 async def llm_models_list():
     """List LLM models catalog with download/presence status."""
-    _reload_models()
-    result_categories = _build_catalog_response(_llm_models_data, LLM_MODELS_DIR, _download_state)
+    result_categories = _build_catalog_response(_catalogs._llm_models_data, LLM_MODELS_DIR, _download_state)
 
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
     return JSONResponse({
-        "version": _llm_models_data.get("version", 0),
-        "date": _llm_models_data.get("date", ""),
+        "version": _catalogs._llm_models_data.get("version", 0),
+        "date": _catalogs._llm_models_data.get("date", ""),
         "categories": result_categories,
         "summary": {
             "total": total_count,
@@ -41,7 +41,6 @@ async def llm_models_list():
 @router.post("/api/admin/llm/models/download/{filename}")
 async def llm_model_download(filename: str):
     """Download an LLM model file."""
-    _reload_models()
     model = _find_llm_model(filename)
     if not model:
         raise HTTPException(status_code=404, detail=f"LLM model '{filename}' not found in catalog")
@@ -59,7 +58,6 @@ async def llm_model_download(filename: str):
 @router.delete("/api/admin/llm/models/{filename}")
 async def llm_model_delete(filename: str):
     """Delete an LLM model file from disk."""
-    _reload_models()
     model = _find_llm_model(filename)
     if not model:
         raise HTTPException(status_code=404, detail=f"LLM model '{filename}' not found in catalog")

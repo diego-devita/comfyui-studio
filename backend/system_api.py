@@ -569,6 +569,50 @@ async def system_update(request: Request):
         raise HTTPException(500, f"Update failed: {str(e)}")
 
 
+# ── Reload catalogs ──────────────────────────────────────────────────────────
+
+
+@router.post("/api/admin/system/reload-catalogs")
+async def reload_catalogs():
+    """Force reload all catalogs (models, loras, LLM) from disk."""
+    _reload_models()
+    return {"message": "Catalogs reloaded"}
+
+
+# ── Restart backend ─────────────────────────────────────────────────────────
+
+
+@router.post("/api/admin/system/restart")
+async def restart_backend():
+    """Restart the uvicorn process. Flushes DB first."""
+    # Flush databases
+    try:
+        _db._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        import gallery_db as _gdb
+        _gdb._get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        pass
+
+    async def _do_restart():
+        await asyncio.sleep(1)
+        os.chdir(str(BACKEND_DIR))
+        uvicorn_bin = shutil.which("uvicorn")
+        if not uvicorn_bin:
+            for candidate in ["/opt/venv/bin/uvicorn"]:
+                if os.path.isfile(candidate):
+                    uvicorn_bin = candidate
+                    break
+        if not uvicorn_bin:
+            return
+        os.execv(
+            uvicorn_bin,
+            ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"), "--workers", "1"],
+        )
+
+    asyncio.get_event_loop().create_task(_do_restart())
+    return {"message": "Restarting..."}
+
+
 # ── Telemetry ────────────────────────────────────────────────────────────────
 
 

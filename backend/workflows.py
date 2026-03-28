@@ -12,7 +12,7 @@ from config import (
     COMFY_URL, COMFYUI_DIR, MODELS_BASE,
     WORKFLOWS_DIR,
 )
-from catalogs import _all_categories, _reload_models
+from catalogs import _all_categories
 
 
 # ── Workflow path resolution ────────────────────────────────────────────────
@@ -83,8 +83,6 @@ async def _get_installed_nodes() -> set:
 
 def _check_model_exists(filename: str) -> bool:
     """Check if a model file exists anywhere under MODELS_BASE."""
-    # First try to find dest from models.json / loras.json
-    _reload_models()
     for cat in _all_categories():
         for m in cat.get("models", []):
             if m["file"] == filename:
@@ -167,7 +165,6 @@ def _normalize_loras(raw_loras: list) -> list[dict]:
 
 def _build_lora_file_map() -> dict:
     """Build pair_id → {high: file, low: file, both: file} from catalogs."""
-    _reload_models()
     lora_map = {}
     for cat in _all_categories():
         for m in cat.get("models", []):

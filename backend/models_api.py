@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from config import MODELS_BASE, MODELS_JSON, REPO_DIR
 import catalogs as _catalogs
 from catalogs import (
-    _models_data, _loras_data, _reload_models,
+    _reload_models,
     _find_model, _all_categories, _build_catalog_response,
 )
 from download import (
@@ -171,7 +171,7 @@ def _fetch_metadata_batch(items: list):
                     pass
 
             changes = []
-            for cat in _models_data.get("categories", []):
+            for cat in _catalogs._models_data.get("categories", []):
                 for m in cat.get("models", []):
                     if m.get("file") == fname:
                         if base_model_civitai:
@@ -238,7 +238,7 @@ def _fetch_metadata_batch(items: list):
                          severity="error", data={"filename": fname, "error": str(e)})
 
     # Fetch HuggingFace dates
-    for cat in _models_data.get("categories", []):
+    for cat in _catalogs._models_data.get("categories", []):
         for m in cat.get("models", []):
             if m.get("source") != "huggingface" or not m.get("hf_repo"):
                 continue
@@ -265,7 +265,7 @@ def _fetch_metadata_batch(items: list):
 
     if any_updated:
         MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
-        MODELS_JSON.write_text(json.dumps(_models_data, indent=2, ensure_ascii=False))
+        MODELS_JSON.write_text(json.dumps(_catalogs._models_data, indent=2, ensure_ascii=False))
         _log_activity("Saved models.json", "ok")
 
     total = len(items)
@@ -282,8 +282,7 @@ def _fetch_metadata_batch(items: list):
 
 @router.get("/api/admin/models")
 async def models_list():
-    _reload_models()
-    result_categories = _build_catalog_response(_models_data, MODELS_BASE, _download_state)
+    result_categories = _build_catalog_response(_catalogs._models_data, MODELS_BASE, _download_state)
 
     # Compute stats
     queued_count = sum(1 for s in _download_state.values() if s.get("status") == "queued")
@@ -302,8 +301,8 @@ async def models_list():
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
     return JSONResponse({
-        "version": _models_data.get("version", 0),
-        "date": _models_data.get("date", ""),
+        "version": _catalogs._models_data.get("version", 0),
+        "date": _catalogs._models_data.get("date", ""),
         "stats": {
             "queued_count": queued_count,
             "downloading_count": downloading_count,
@@ -321,8 +320,7 @@ async def models_list():
 @router.get("/api/admin/loras")
 async def loras_list():
     """List LoRAs catalog with download/presence status."""
-    _reload_models()
-    ld = _catalogs._loras_data  # fresh reference after reload
+    ld = _catalogs._loras_data
     result_categories = _build_catalog_response(ld, MODELS_BASE, _download_state)
 
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
@@ -358,7 +356,6 @@ async def loras_list():
 
 @router.post("/api/admin/models/download/{filename}")
 async def models_download(filename: str):
-    _reload_models()
     model = _find_model(filename)
     if not model:
         raise HTTPException(status_code=404, detail=f"Model '{filename}' not found in catalog")
@@ -373,7 +370,6 @@ async def models_download(filename: str):
 
 @router.post("/api/admin/models/download-batch")
 async def models_download_batch(body: BatchDownloadRequest):
-    _reload_models()
     queued = []
     skipped = []
 
@@ -448,11 +444,11 @@ async def import_models(file: UploadFile = File(...)):
     _reload_models()
 
     existing_files = set()
-    for cat in _models_data.get("categories", []):
+    for cat in _catalogs._models_data.get("categories", []):
         for m in cat.get("models", []):
             existing_files.add(m.get("file", ""))
 
-    cat_map = {cat["id"]: cat for cat in _models_data.get("categories", [])}
+    cat_map = {cat["id"]: cat for cat in _catalogs._models_data.get("categories", [])}
 
     added = []
     skipped = []
@@ -474,20 +470,20 @@ async def import_models(file: UploadFile = File(...)):
                 cat_map[cat_id]["models"].append(m)
             else:
                 new_cat = {"id": cat_id, "name": imp_cat.get("name", cat_id), "models": [m]}
-                _models_data["categories"].append(new_cat)
+                _catalogs._models_data["categories"].append(new_cat)
                 cat_map[cat_id] = new_cat
 
             existing_files.add(fname)
             added.append(fname)
 
     if added:
-        _models_data["version"] = _models_data.get("version", 0) + 1
+        _catalogs._models_data["version"] = _catalogs._models_data.get("version", 0) + 1
         from datetime import datetime, timezone, timedelta
         now = datetime.now(timezone(timedelta(hours=1)))
-        _models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
+        _catalogs._models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
 
         MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
-        MODELS_JSON.write_text(json.dumps(_models_data, indent=2, ensure_ascii=False))
+        MODELS_JSON.write_text(json.dumps(_catalogs._models_data, indent=2, ensure_ascii=False))
 
     return {"added": added, "skipped": skipped, "total_added": len(added)}
 
@@ -543,7 +539,7 @@ async def sync_models():
 
         remote = json.loads(src.read_text())
         remote_version = remote.get("version", 0)
-        local_version = _models_data.get("version", 0)
+        local_version = _catalogs._models_data.get("version", 0)
 
         if type(remote_version) != type(local_version) or remote_version > local_version:
             MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -569,7 +565,6 @@ async def sync_models():
 @router.get("/api/admin/loras/compatible/{base_model}")
 async def list_compatible_loras(base_model: str):
     """List LoRA pairs compatible with a given base model."""
-    _reload_models()
     pairs = {}
     for cat in _all_categories():
         for m in cat.get("models", []):
