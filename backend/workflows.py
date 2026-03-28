@@ -432,6 +432,10 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
         variables["_iteration"] = iteration
         if seed is not None:
             variables["seed"] = seed
+        elif "seed" in variables:
+            s = int(variables["seed"])
+            if s == -1:
+                variables["seed"] = random.randint(0, 2**53)
         # Hires computed dimensions
         if params.get("hires_enabled"):
             scale = float(params.get("hires_scale", 1.5))
