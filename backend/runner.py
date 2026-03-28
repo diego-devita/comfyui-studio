@@ -78,17 +78,17 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
     comfy_ws = COMFY_URL.replace("http://", "ws://").replace("https://", "wss://")
     ws_url = f"{comfy_ws}/ws?clientId={client_id}"
 
-    def _mark_stalled(reason="WebSocket listener terminated unexpectedly"):
-        """Mark the job as stalled in DB if it never completed."""
+    def _mark_failed(reason="WebSocket listener terminated unexpectedly", status="error"):
+        """Mark the job as failed/stalled in DB if it never completed."""
         if job_record and job_record.get("status") in ("queued", "running"):
             from datetime import datetime, timezone, timedelta
             now = datetime.now(timezone(timedelta(hours=1)))
-            job_record["status"] = "stalled"
+            job_record["status"] = status
             job_record["error"] = reason
             job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
             _save_job(job_record)
             from events import _events
-            _events.emit("job.failed", f"Job stalled: {reason[:100]}", severity="error",
+            _events.emit("job.failed", f"Job {status}: {reason[:100]}", severity="error",
                          data={"prompt_id": prompt_id})
 
     try:
@@ -96,11 +96,11 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
         ws = ws_connect(ws_url)
     except ImportError:
         _exec_progress.pop(prompt_id, None)
-        _mark_stalled("websockets library not available")
+        _mark_failed("websockets library not available", status="stalled")
         return
     except Exception as e:
         _exec_progress.pop(prompt_id, None)
-        _mark_stalled(f"WebSocket connection failed: {e}")
+        _mark_failed(f"WebSocket connection failed: {e}", status="stalled")
         return
 
     # Race condition guard: if ComfyUI already finished before WS connected,
@@ -122,7 +122,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                             err_data = _m[1] if isinstance(_m[1], dict) else {}
                             err_msg = err_data.get("exception_message", str(_m))
                             break
-                    _mark_stalled(f"ComfyUI error: {(err_msg or str(msgs))[:200]}")
+                    _mark_failed(f"ComfyUI error: {(err_msg or str(msgs))[:200]}")
                 else:
                     from datetime import datetime, timezone, timedelta as _td
                     _now = datetime.now(timezone(_td(hours=1)))
@@ -332,7 +332,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
 
             _exec_progress[prompt_id] = state
     except Exception as _ws_err:
-        _mark_stalled(f"WebSocket error: {_ws_err}")
+        _mark_failed(f"WebSocket error: {_ws_err}", status="stalled")
     finally:
         _exec_progress.pop(prompt_id, None)
         try:
@@ -357,7 +357,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                                 break
                         if not err_msg:
                             err_msg = str(msgs)
-                        _mark_stalled(f"ComfyUI error: {err_msg[:200]}")
+                        _mark_failed(f"ComfyUI error: {err_msg[:200]}")
                     elif status_info.get("status_str") == "success":
                         # Completed but WS missed it — mark completed
                         from datetime import datetime, timezone, timedelta
@@ -372,11 +372,11 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                             job_record["output"] = best_images[0]
                         _save_job(job_record)
                     else:
-                        _mark_stalled("WS listener ended without completion")
+                        _mark_failed("WS listener ended without completion", status="stalled")
                 else:
-                    _mark_stalled("WS listener ended, ComfyUI history unavailable")
+                    _mark_failed("WS listener ended, ComfyUI history unavailable", status="stalled")
             except Exception as _hist_err:
-                _mark_stalled(f"WS listener ended: {_hist_err}")
+                _mark_failed(f"WS listener ended: {_hist_err}", status="stalled")
 
 
 async def _build_workflow(
