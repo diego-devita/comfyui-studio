@@ -740,6 +740,7 @@ _ENV_GROUPS = [
         ("API_KEY",         True,  "changeme",        "Master password for web login and X-API-Key header"),
         ("CIVITAI_API_KEY", True,  "",                 "CivitAI API token — used for model downloads and metadata fetches"),
         ("HF_TOKEN",        True,  "",                 "HuggingFace token — required for gated models (Flux, WAN, etc.)"),
+        ("TELEGRAM_BOT_TOKEN", True, "",               "Telegram bot token from @BotFather — enables Telegram bot for running presets"),
     ]),
     ("paths", "Paths", [
         ("STUDIO_DIR",        False, "/workspace/studio",   "Root directory for all Studio data on the volume"),

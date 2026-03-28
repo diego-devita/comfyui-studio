@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""ComfyUI Studio — Telegram Bot
+
+Polling bot that lets you run presets from Telegram.
+Runs as a background process inside the pod alongside uvicorn.
+
+Flow:
+  /start    → list presets (inline buttons)
+  Pick preset → show preset details + ask for image
+  Send photo  → confirm launch
+  Confirm     → execute job, poll progress every 10s, send result
+
+Environment:
+  TELEGRAM_BOT_TOKEN  — from @BotFather (if empty, bot doesn't start)
+  API_KEY             — same as Studio backend
+  STUDIO_PORT         — backend port (default 8000)
+"""
+
+import asyncio
+import io
+import json
+import logging
+import os
+import time
+
+import httpx
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("studio-bot")
+
+# ── Config ──
+
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+STUDIO_URL = "http://127.0.0.1:" + os.environ.get("STUDIO_PORT", "8000")
+API_KEY = os.environ.get("API_KEY", "changeme")
+
+HEADERS = {"X-API-Key": API_KEY}
+
+
+# ── Studio API helpers ──
+
+async def studio_get(path: str) -> dict:
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get(f"{STUDIO_URL}{path}", headers=HEADERS)
+        r.raise_for_status()
+        return r.json()
+
+
+async def studio_post(path: str, **kwargs) -> dict:
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(f"{STUDIO_URL}{path}", headers=HEADERS, **kwargs)
+        r.raise_for_status()
+        return r.json()
+
+
+async def studio_get_bytes(path: str) -> bytes:
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.get(f"{STUDIO_URL}{path}", headers=HEADERS)
+        r.raise_for_status()
+        return r.content
+
+
+# ── Handlers ──
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List available presets."""
+    presets = await studio_get("/api/admin/presets")
+    if not presets:
+        await update.message.reply_text("No presets available. Create one from the Studio web UI.")
+        return
+
+    buttons = []
+    for p in presets:
+        label = p.get("name", p["id"])
+        buttons.append([InlineKeyboardButton(label, callback_data=f"preset:{p['id']}")])
+
+    await update.message.reply_text(
+        "🎨 *Choose a preset:*",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle preset selection."""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if data.startswith("preset:"):
+        preset_id = data.split(":", 1)[1]
+        preset = await studio_get(f"/api/admin/presets/{preset_id}")
+
+        context.user_data["preset"] = preset
+        context.user_data["state"] = "waiting_image"
+
+        wf_name = preset.get("workflow", {}).get("workflow_name", "?")
+        desc = preset.get("description", "")
+        text = f"✅ *{preset.get('name', preset_id)}*\n"
+        if desc:
+            text += f"_{desc}_\n"
+        text += f"\nWorkflow: `{wf_name}`\n"
+        text += "\n📷 Now send me a photo to use as input."
+
+        await query.edit_message_text(text, parse_mode="Markdown")
+
+    elif data.startswith("confirm:"):
+        await _launch_job(update, context)
+
+    elif data == "cancel":
+        context.user_data.clear()
+        await query.edit_message_text("❌ Cancelled.")
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive photo for the preset."""
+    state = context.user_data.get("state")
+    if state != "waiting_image":
+        await update.message.reply_text("Use /start to choose a preset first.")
+        return
+
+    # Download the photo (highest resolution)
+    photo = update.message.photo[-1]
+    file = await photo.get_file()
+    bio = io.BytesIO()
+    await file.download_to_memory(bio)
+    bio.seek(0)
+
+    context.user_data["image_bytes"] = bio.getvalue()
+    context.user_data["image_name"] = f"telegram_{photo.file_unique_id}.jpg"
+    context.user_data["state"] = "confirm"
+
+    preset = context.user_data.get("preset", {})
+    buttons = [
+        [
+            InlineKeyboardButton("🚀 Launch", callback_data="confirm:yes"),
+            InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
+        ]
+    ]
+    await update.message.reply_text(
+        f"📷 Image received.\n\n"
+        f"Ready to run *{preset.get('name', '?')}*?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Execute the preset job and track progress."""
+    query = update.callback_query
+    preset = context.user_data.get("preset", {})
+    image_bytes = context.user_data.get("image_bytes")
+    image_name = context.user_data.get("image_name", "input.jpg")
+    wf = preset.get("workflow", {})
+    workflow_id = wf.get("workflow_id", "")
+    params = dict(wf.get("params", {}))
+    params["seed"] = -1
+
+    status_msg = await query.edit_message_text("⏳ Uploading and queuing job...")
+
+    try:
+        # Execute
+        files = {"input_image": (image_name, image_bytes, "image/jpeg")}
+        data = {"params": json.dumps(params)}
+
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(
+                f"{STUDIO_URL}/api/run/{workflow_id}/execute",
+                headers=HEADERS,
+                files=files,
+                data=data,
+            )
+            r.raise_for_status()
+            result = r.json()
+
+        prompt_id = result["prompt_id"]
+        seeds = result.get("seeds", {})
+        seed_info = ", ".join(f"{k}={v}" for k, v in seeds.items()) if seeds else "random"
+
+        await status_msg.edit_text(
+            f"🚀 *Job queued*\n"
+            f"ID: `{prompt_id[:12]}...`\n"
+            f"Seed: {seed_info}\n\n"
+            f"⏳ Waiting for completion...",
+            parse_mode="Markdown",
+        )
+
+        # Poll progress
+        last_percent = -1
+        for i in range(180):  # max 30 min (180 × 10s)
+            await asyncio.sleep(10)
+
+            try:
+                status = await studio_get(f"/api/run/status/{prompt_id}")
+            except Exception:
+                continue
+
+            st = status.get("status", "pending")
+            percent = status.get("percent", 0)
+            node = status.get("node_title", "")
+            eta = status.get("eta_seconds")
+
+            if st == "completed":
+                # Get result
+                outputs = status.get("outputs", {})
+                out = outputs.get("video") or outputs.get("image")
+
+                if out:
+                    url = (
+                        f"/api/comfyui/view?filename={out['filename']}"
+                        f"&type={out.get('type', 'output')}"
+                        f"&subfolder={out.get('subfolder', '')}"
+                    )
+                    file_bytes = await studio_get_bytes(url)
+
+                    await status_msg.edit_text("✅ *Done!* Sending result...", parse_mode="Markdown")
+
+                    if out["filename"].endswith((".mp4", ".webm")):
+                        await status_msg.reply_video(
+                            video=io.BytesIO(file_bytes),
+                            filename=out["filename"],
+                            caption=f"Preset: {preset.get('name', '?')}\nSeed: {seed_info}",
+                        )
+                    else:
+                        await status_msg.reply_photo(
+                            photo=io.BytesIO(file_bytes),
+                            filename=out["filename"],
+                            caption=f"Preset: {preset.get('name', '?')}\nSeed: {seed_info}",
+                        )
+                else:
+                    await status_msg.edit_text("✅ *Completed* but no output found.", parse_mode="Markdown")
+
+                context.user_data.clear()
+                return
+
+            if st in ("failed", "stalled", "error"):
+                await status_msg.edit_text(
+                    f"❌ *Job {st}*\n{status.get('error', 'Unknown error')}",
+                    parse_mode="Markdown",
+                )
+                context.user_data.clear()
+                return
+
+            # Update progress (only if changed)
+            if percent != last_percent:
+                last_percent = percent
+                eta_str = f"{eta}s" if eta else "?"
+                text = (
+                    f"⏳ *Running* — {percent}%\n"
+                    f"Node: {node}\n"
+                    f"ETA: {eta_str}"
+                )
+                try:
+                    await status_msg.edit_text(text, parse_mode="Markdown")
+                except Exception:
+                    pass  # "message is not modified" error
+
+        await status_msg.edit_text("⚠️ *Timeout* — job took too long.", parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Job failed: {e}")
+        try:
+            await status_msg.edit_text(f"❌ *Error:* {str(e)[:200]}", parse_mode="Markdown")
+        except Exception:
+            pass
+
+    context.user_data.clear()
+
+
+# ── Main ──
+
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CallbackQueryHandler(cb_preset_selected))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    logger.info(f"Bot starting — Studio: {STUDIO_URL}")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()

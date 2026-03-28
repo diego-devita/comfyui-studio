@@ -74,6 +74,15 @@ uvicorn main:app \
     --workers 1 \
     2>&1 | tee -a /var/log/admin.log &
 
+# ── STEP 4: Start Telegram bot (if token configured) ─────────────
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+    echo "[4/4] Starting Telegram bot..."
+    cd "${STUDIO_DIR}/backend"
+    python3 telegram_bot.py 2>&1 | tee -a /var/log/telegram_bot.log &
+else
+    echo "[4/4] Telegram bot skipped (TELEGRAM_BOT_TOKEN not set)"
+fi
+
 echo "=== Services started ==="
 echo "    ComfyUI Studio: https://PODID-${STUDIO_PORT}.proxy.runpod.net"
 echo "    ComfyUI:        https://PODID-8188.proxy.runpod.net"

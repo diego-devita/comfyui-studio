@@ -43,7 +43,8 @@ RUN pip install --no-cache-dir \
     requests \
     pyyaml \
     aiohttp \
-    Pillow
+    Pillow \
+    python-telegram-bot
 
 # sqlite-web (dev database browser)
 RUN pip install --no-cache-dir sqlite-web
