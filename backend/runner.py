@@ -28,6 +28,8 @@ def _pick_best_output(hist_outputs: dict):
     """From ComfyUI history outputs, pick final video/images (skip intermediate)."""
     all_videos, all_images = [], []
     for _nout in hist_outputs.values():
+        if not isinstance(_nout, dict):
+            continue
         for _k in ("gifs", "videos"):
             if _k in _nout and _nout[_k]:
                 all_videos.extend(_nout[_k])
