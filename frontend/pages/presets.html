@@ -33,6 +33,10 @@
   .dropzone.dragover { border-color: var(--accent); }
   .dropzone img { max-height: 120px; border-radius: 4px; margin-top: 8px; }
   .api-code { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--muted); max-height: 200px; overflow-y: auto; margin-top: 16px; position: relative; }
+  .api-code::-webkit-scrollbar { width: 6px; }
+  .api-code::-webkit-scrollbar-track { background: transparent; }
+  .api-code::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  .api-code::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 </style>
 </head>
 <body>
@@ -116,7 +120,7 @@
         '<div class="actions">' +
           '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
           '<button class="btn btn--sm export-btn" data-id="' + escHtml(p.id) + '"><span class="icon icon-file-export icon-sm"></span></button>' +
-          '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);">&times;</button>' +
+          '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);font-size:11px;">Delete</button>' +
         '</div>';
 
       card.querySelector('.run-btn').onclick = function(e) { e.stopPropagation(); openRunDialog(p.id); };
@@ -150,6 +154,7 @@
         '<img id="presetImagePreview" style="display:none;">' +
         '<div id="presetImageName" style="font-size:10px;margin-top:4px;color:var(--accent);"></div>' +
       '</div>' +
+      '<div style="text-align:right;margin-top:-10px;margin-bottom:10px;"><a href="#" id="pickExistingImg" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none;opacity:0.6;">or pick from existing inputs</a></div>' +
       '<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">' +
         '<label style="font-family:var(--mono);font-size:12px;color:var(--muted);">Seed:</label>' +
         '<input type="number" id="presetSeed" value="-1" style="width:180px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;">' +
@@ -191,6 +196,54 @@
       reader.readAsDataURL(f);
     }
 
+    // Pick from existing inputs
+    var existingImageName = null;
+    document.getElementById('pickExistingImg').onclick = function(e) {
+      e.preventDefault();
+      apiFetch('/api/comfyui/view?type=input&filename=.')
+        .catch(function() { return null; });
+      // Fetch input images list
+      apiFetch('/api/admin/assets/inputs')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var items = (data.files || []).filter(function(f) {
+            return /\.(jpg|jpeg|png|webp)$/i.test(f.filename);
+          });
+          if (!items.length) { showToast('No input images found', 2000, 'warning'); return; }
+          // Build a simple picker dropdown
+          var picker = document.createElement('div');
+          picker.style.cssText = 'position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);z-index:60;box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+          picker.className = 'api-code'; // reuse scrollbar style
+          items.slice(0, 50).forEach(function(f) {
+            var n = f.filename;
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text);border-bottom:1px solid var(--border);';
+            row.onmouseenter = function() { row.style.background = 'rgba(255,255,255,0.05)'; };
+            row.onmouseleave = function() { row.style.background = ''; };
+            var thumb = document.createElement('img');
+            thumb.src = '/api/comfyui/view?filename=' + encodeURIComponent(n) + '&type=input';
+            thumb.style.cssText = 'width:40px;height:40px;object-fit:cover;border-radius:3px;';
+            row.appendChild(thumb);
+            var label = document.createElement('span');
+            label.textContent = n;
+            label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            row.appendChild(label);
+            row.onclick = function() {
+              existingImageName = n;
+              selectedFile = null;
+              fname.textContent = n + ' (existing)';
+              preview.src = '/api/comfyui/view?filename=' + encodeURIComponent(n) + '&type=input';
+              preview.style.display = '';
+              picker.remove();
+            };
+            picker.appendChild(row);
+          });
+          dz.style.position = 'relative';
+          dz.appendChild(picker);
+          setTimeout(function() { document.addEventListener('click', function rm() { picker.remove(); document.removeEventListener('click', rm); }); }, 100);
+        });
+    };
+
     // Count stepper
     var count = 1;
     var $count = document.getElementById('presetCount');
@@ -210,6 +263,7 @@
         if (seed !== -1) params.seed = seed + i;
         else params.seed = -1;
 
+        if (existingImageName) params._existing_input_image = existingImageName;
         var formData = new FormData();
         formData.append('params', JSON.stringify(params));
         if (selectedFile) formData.append('input_image', selectedFile);

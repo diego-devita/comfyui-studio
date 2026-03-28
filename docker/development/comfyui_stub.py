@@ -441,8 +441,9 @@ async def upload_image(request):
     if not filename:
         filename = f"stub_upload_{uuid.uuid4().hex[:8]}.png"
 
-    # Save to ComfyUI input dir so LoadImage can find it
-    input_dir = os.path.join(os.environ.get("COMFYUI_DIR", "/workspace/ComfyUI"), "input")
+    # Save to Studio assets input dir (same as production --input-directory)
+    studio_dir = os.environ.get("STUDIO_DIR", "/workspace/studio")
+    input_dir = os.path.join(studio_dir, "assets", "input")
     os.makedirs(input_dir, exist_ok=True)
     with open(os.path.join(input_dir, filename), "wb") as f:
         if image_data:
