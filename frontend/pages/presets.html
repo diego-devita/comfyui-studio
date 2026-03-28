@@ -236,16 +236,23 @@
     // API code
     var apiParams = JSON.parse(JSON.stringify(wf.params || {}));
     apiParams.seed = -1;
-    var curlCode = '// JavaScript (fetch)\n' +
-      'const formData = new FormData();\n' +
-      'formData.append("params", JSON.stringify(' + JSON.stringify(apiParams, null, 2) + '));\n' +
-      'formData.append("input_image", fileInput.files[0]);\n\n' +
-      'const resp = await fetch("/api/run/' + workflowId + '/execute", {\n' +
-      '  method: "POST",\n' +
-      '  headers: {"Cookie": "session=YOUR_SESSION"},\n' +
-      '  body: formData\n' +
-      '});\n' +
-      'const result = await resp.json();';
+    var curlCode = '// HTML: <input type="file" id="imageFile" accept="image/*">\n\n' +
+      '// JavaScript\n' +
+      'async function runPreset() {\n' +
+      '  const imageInput = document.getElementById("imageFile");\n' +
+      '  const formData = new FormData();\n' +
+      '  formData.append("params", JSON.stringify(' + JSON.stringify(apiParams, null, 2) + '));\n' +
+      '  if (imageInput.files[0]) {\n' +
+      '    formData.append("input_image", imageInput.files[0]);\n' +
+      '  }\n' +
+      '  const resp = await fetch("/api/run/' + workflowId + '/execute", {\n' +
+      '    method: "POST",\n' +
+      '    headers: {"X-API-Key": "YOUR_API_KEY"},\n' +
+      '    body: formData\n' +
+      '  });\n' +
+      '  const result = await resp.json();\n' +
+      '  console.log("Job queued:", result.prompt_id);\n' +
+      '}';
     document.getElementById('apiCodePre').textContent = curlCode;
     document.getElementById('copyApiCode').onclick = function() {
       copyToClipboard(curlCode);
