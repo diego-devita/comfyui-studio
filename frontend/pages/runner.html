@@ -607,6 +607,7 @@
         <span class="wf-version" id="wfVersion" style="display:none;"></span>
       </div>
       <p class="wf-desc" id="wfDesc"></p>
+      <div id="technicalNotesContainer"></div>
     </div>
 
     <!-- Dynamic form -->
@@ -862,7 +863,7 @@
 
     wrapper.appendChild(toggle);
     wrapper.appendChild(body);
-    $formPanel.appendChild(wrapper);
+    document.getElementById('technicalNotesContainer').appendChild(wrapper);
   }
 
   function buildForm(inputs) {
