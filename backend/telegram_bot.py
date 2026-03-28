@@ -117,11 +117,16 @@ async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("❌ Cancelled.")
 
 
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Any text message → show presets list."""
+    await cmd_start(update, context)
+
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive photo for the preset."""
     state = context.user_data.get("state")
     if state != "waiting_image":
-        await update.message.reply_text("Use /start to choose a preset first.")
+        await cmd_start(update, context)
         return
 
     # Download the photo (highest resolution)
@@ -311,8 +316,10 @@ def start_bot() -> str:
         try:
             _bot_app = Application.builder().token(BOT_TOKEN).build()
             _bot_app.add_handler(CommandHandler("start", cmd_start))
+            _bot_app.add_handler(CommandHandler("presets", cmd_start))
             _bot_app.add_handler(CallbackQueryHandler(cb_preset_selected))
             _bot_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+            _bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
             logger.info(f"Bot starting — Studio: {STUDIO_URL}")
             _bot_app.run_polling()
         except Exception as e:
