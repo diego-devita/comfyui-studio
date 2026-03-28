@@ -460,7 +460,7 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
                 "chain_imports": stage.get("chain_imports", {}),
                 "stages": [stage],
             }
-        elif current_repeat is not None and not stage.get("in_repeat") is False:
+        elif current_repeat is not None:
             # Check explicit opt-out
             if stage.get("in_repeat", True) is False:
                 groups.append(current_repeat)
