@@ -543,20 +543,12 @@ async def system_update(request: Request):
             async def _restart():
                 await asyncio.sleep(1)
                 os.chdir(str(BACKEND_DIR))
-                uvicorn_bin = shutil.which("uvicorn")
-                if not uvicorn_bin:
-                    # Fallback: try common venv paths
-                    for candidate in ["/workspace/venv/bin/uvicorn", "/opt/venv/bin/uvicorn"]:
-                        if os.path.isfile(candidate):
-                            uvicorn_bin = candidate
-                            break
-                if not uvicorn_bin:
-                    print("[update] FATAL: uvicorn not found on PATH, cannot restart", flush=True)
-                    auth._maintenance_mode = False
-                    return
+                import sys
                 os.execv(
-                    uvicorn_bin,
-                    ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"), "--workers", "1"],
+                    sys.executable,
+                    [sys.executable, "-m", "uvicorn", "main:app",
+                     "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"),
+                     "--workers", "1"],
                 )
             asyncio.get_event_loop().create_task(_restart())
 
@@ -582,6 +574,21 @@ async def reload_catalogs():
 # ── Restart backend ─────────────────────────────────────────────────────────
 
 
+_backend_started_at = time.time()
+
+
+@router.get("/api/admin/system/uptime")
+async def backend_uptime():
+    """Return backend start time and uptime."""
+    from datetime import datetime, timezone, timedelta
+    started = datetime.fromtimestamp(_backend_started_at, tz=timezone(timedelta(hours=1)))
+    uptime_secs = int(time.time() - _backend_started_at)
+    return {
+        "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+        "uptime_seconds": uptime_secs,
+    }
+
+
 @router.post("/api/admin/system/restart")
 async def restart_backend():
     """Restart the uvicorn process. Flushes DB first."""
@@ -598,15 +605,19 @@ async def restart_backend():
         os.chdir(str(BACKEND_DIR))
         uvicorn_bin = shutil.which("uvicorn")
         if not uvicorn_bin:
-            for candidate in ["/opt/venv/bin/uvicorn"]:
+            for candidate in ["/opt/venv/bin/uvicorn", "/usr/local/bin/uvicorn"]:
                 if os.path.isfile(candidate):
                     uvicorn_bin = candidate
                     break
         if not uvicorn_bin:
             return
+        # Use sys.executable to restart via python -m uvicorn (works with --reload)
+        import sys
         os.execv(
-            uvicorn_bin,
-            ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"), "--workers", "1"],
+            sys.executable,
+            [sys.executable, "-m", "uvicorn", "main:app",
+             "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"),
+             "--workers", "1"],
         )
 
     asyncio.get_event_loop().create_task(_do_restart())

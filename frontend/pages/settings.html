@@ -326,7 +326,7 @@
     <span class="icon icon-refresh action-card-icon"></span>
     <div class="action-card-text">
       <h3>Restart Backend</h3>
-      <p>Restart the uvicorn process. Active jobs will be marked as stalled.</p>
+      <p>Running since <span id="uptimeValue" style="color:var(--accent)">...</span>. Active jobs will be marked as stalled.</p>
     </div>
     <button class="btn" id="restartBtn">Restart</button>
   </div>
@@ -676,6 +676,14 @@
       doFlush();
     }
   });
+
+  // ── Uptime ──
+  apiFetch('/api/admin/system/uptime')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('uptimeValue').textContent = data.started_at;
+    })
+    .catch(function() {});
 
   // ── Restart Backend ──
   var $restartBtn = document.getElementById('restartBtn');
