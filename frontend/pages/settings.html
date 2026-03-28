@@ -506,6 +506,8 @@
       if (r.ok) {
         input.classList.add('saved');
         setTimeout(function() { input.classList.remove('saved'); }, 1500);
+        // Re-check telegram start button if token was changed
+        if (key === 'TELEGRAM_BOT_TOKEN') checkTelegramStartEnabled();
       } else {
         r.json().then(function(err) { showToast(err.detail || 'Save failed', 3000, 'error'); });
       }
@@ -709,61 +711,68 @@
           $tgStatus.innerHTML = info;
           $tgStartBtn.style.display = 'none';
           $tgStopBtn.style.display = '';
+          $tgStopBtn.disabled = false;
+          $tgStopBtn.textContent = 'Stop';
         } else {
           $tgStatus.textContent = 'Not running';
           $tgStartBtn.style.display = '';
           $tgStopBtn.style.display = 'none';
-          // Enable start only if token is configured
-          apiFetch('/api/admin/telegram/status').then(function(r2) { return r2.json(); }).then(function(d2) {
-            // Check if token env var is set by looking at the status response
-            // The real check: try to see if TELEGRAM_BOT_TOKEN is in env
-          });
+          checkTelegramStartEnabled();
         }
       })
-      .catch(function() { $tgStatus.textContent = 'Not configured'; });
+      .catch(function() {
+        $tgStatus.textContent = 'Not configured';
+        $tgStartBtn.style.display = '';
+        $tgStopBtn.style.display = 'none';
+        $tgStartBtn.disabled = true;
+      });
   }
 
-  // Check if token is set to enable/disable start button
-  apiFetch('/api/admin/settings/env')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var tokenSet = false;
-      (data.groups || []).forEach(function(g) {
-        (g.vars || []).forEach(function(v) {
-          if (v.key === 'TELEGRAM_BOT_TOKEN' && v.set) tokenSet = true;
-        });
-      });
-      $tgStartBtn.disabled = !tokenSet;
-      if (!tokenSet) $tgStartBtn.title = 'Set TELEGRAM_BOT_TOKEN in Environment Variables first';
-    });
+  function checkTelegramStartEnabled() {
+    // Check if token input has a value in the env vars section
+    var tokenInput = document.querySelector('.env-edit-input[data-key="TELEGRAM_BOT_TOKEN"]');
+    var hasToken = tokenInput && tokenInput.value.trim().length > 0;
+    $tgStartBtn.disabled = !hasToken;
+    $tgStartBtn.title = hasToken ? '' : 'Set TELEGRAM_BOT_TOKEN in Environment Variables first';
+  }
 
   $tgStartBtn.addEventListener('click', function() {
     $tgStartBtn.disabled = true;
-    $tgStartBtn.textContent = 'Starting...';
+    $tgStartBtn.innerHTML = '<span class="spinner sm"></span> Starting...';
     apiFetch('/api/admin/telegram/start', { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         showToast('Bot: ' + data.result, 3000, data.result === 'started' ? 'success' : 'warning');
         setTimeout(refreshTelegramStatus, 2000);
       })
-      .catch(function(err) { if (err.message !== 'auth') showToast('Start failed: ' + err.message, 5000, 'error'); })
-      .finally(function() { $tgStartBtn.disabled = false; $tgStartBtn.textContent = 'Start'; });
+      .catch(function(err) {
+        if (err.message !== 'auth') showToast('Start failed: ' + err.message, 5000, 'error');
+        $tgStartBtn.disabled = false;
+        $tgStartBtn.textContent = 'Start';
+      });
   });
 
   $tgStopBtn.addEventListener('click', function() {
     $tgStopBtn.disabled = true;
-    $tgStopBtn.textContent = 'Stopping...';
+    $tgStopBtn.innerHTML = '<span class="spinner sm"></span> Stopping...';
     apiFetch('/api/admin/telegram/stop', { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         showToast('Bot: ' + data.result, 3000, 'info');
         setTimeout(refreshTelegramStatus, 1000);
       })
-      .catch(function(err) { if (err.message !== 'auth') showToast('Stop failed', 5000, 'error'); })
-      .finally(function() { $tgStopBtn.disabled = false; $tgStopBtn.textContent = 'Stop'; });
+      .catch(function(err) {
+        if (err.message !== 'auth') showToast('Stop failed', 5000, 'error');
+        $tgStopBtn.disabled = false;
+        $tgStopBtn.textContent = 'Stop';
+      });
   });
 
-  refreshTelegramStatus();
+  // Initial load — wait for env vars to render first
+  setTimeout(function() {
+    refreshTelegramStatus();
+    checkTelegramStartEnabled();
+  }, 1000);
 
   // ── Uptime ──
   apiFetch('/api/admin/system/uptime')
