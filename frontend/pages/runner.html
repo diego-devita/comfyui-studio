@@ -2447,7 +2447,16 @@
 
   function prefillForm(data) {
     var params = data.params || {};
+    // Flatten grouped inputs to flat list
+    var flatInputs = [];
     (manifest.inputs || []).forEach(function(inp) {
+      if (inp.items) {
+        inp.items.forEach(function(item) { flatInputs.push(item); });
+      } else {
+        flatInputs.push(inp);
+      }
+    });
+    flatInputs.forEach(function(inp) {
       var id = inp.id;
       var type = (inp.type || 'text').toLowerCase();
       var val = params[id];
@@ -2455,7 +2464,7 @@
         prefillImage(id, data.input_image);
       } else if (type === 'scene_list') {
         prefillSceneList(id, inp, val, data);
-      } else if (type === 'lora_picker') {
+      } else if (type === 'lora_picker' || type === 'lora_picker_dynamic') {
         prefillLoraPicker(id, val);
       } else if (val != null) {
         prefillSimpleInput(id, type, val);
@@ -2506,6 +2515,18 @@
     el.value = val;
     if (el.type === 'range') {
       el.dispatchEvent(new Event('input'));
+    }
+    // For selects (checkpoint_picker, etc.): options may load async. Retry.
+    if (el.tagName === 'SELECT' && el.value !== String(val)) {
+      var attempts = 0;
+      var retryInterval = setInterval(function() {
+        el.value = val;
+        el.dispatchEvent(new Event('change'));
+        attempts++;
+        if (el.value === String(val) || attempts > 20) clearInterval(retryInterval);
+      }, 500);
+    } else {
+      el.dispatchEvent(new Event('change'));
     }
   }
 
