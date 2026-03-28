@@ -118,7 +118,49 @@ def init_db():
         conn.execute("ALTER TABLE workflows ADD COLUMN technical_notes TEXT DEFAULT ''")
     except Exception:
         pass  # already exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS saved_prompts (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            type       TEXT NOT NULL CHECK (type IN ('positive', 'negative')),
+            text       TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+    """)
     conn.commit()
+
+
+# ── Saved Prompts ────────────────────────────────────────────
+
+
+def save_prompt(prompt_type: str, text: str) -> int:
+    conn = _get_conn()
+    cur = conn.execute(
+        "INSERT INTO saved_prompts (type, text, created_at) VALUES (?, ?, ?)",
+        (prompt_type, text, _now_italian()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_prompts(prompt_type: str = None) -> list[dict]:
+    conn = _get_conn()
+    if prompt_type:
+        rows = conn.execute(
+            "SELECT * FROM saved_prompts WHERE type = ? ORDER BY created_at DESC",
+            (prompt_type,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM saved_prompts ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_prompt(prompt_id: int) -> bool:
+    conn = _get_conn()
+    cur = conn.execute("DELETE FROM saved_prompts WHERE id = ?", (prompt_id,))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 # ── Job CRUD ─────────────────────────────────────────────────

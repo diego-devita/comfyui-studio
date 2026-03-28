@@ -1233,13 +1233,113 @@
   }
 
   function buildTextarea(inputId, input) {
-    const el = document.createElement('textarea');
+    var isPrompt = inputId.indexOf('prompt') >= 0;
+    var promptType = inputId.indexOf('negative') >= 0 ? 'negative' : 'positive';
+
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:relative;';
+
+    var el = document.createElement('textarea');
     el.className = 'form-input';
     el.dataset.inputId = inputId;
     el.rows = 3;
     el.placeholder = input.placeholder || '';
     if (input.default != null) el.value = String(input.default);
-    return el;
+    wrapper.appendChild(el);
+
+    if (isPrompt) {
+      var toolbar = document.createElement('div');
+      toolbar.style.cssText = 'position:absolute;top:4px;right:6px;display:flex;gap:6px;z-index:1;';
+
+      // Save button
+      var saveBtn = document.createElement('span');
+      saveBtn.className = 'icon icon-star-regular icon-sm';
+      saveBtn.title = 'Save prompt';
+      saveBtn.style.cssText = 'cursor:pointer;opacity:0.4;';
+      saveBtn.onmouseenter = function() { saveBtn.style.opacity = '0.9'; };
+      saveBtn.onmouseleave = function() { saveBtn.style.opacity = '0.4'; };
+      saveBtn.onclick = function() {
+        var text = el.value.trim();
+        if (!text) { showToast('Prompt is empty', 2000, 'warning'); return; }
+        apiFetch('/api/admin/prompts', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({type: promptType, text: text})
+        }).then(function() {
+          showToast('Prompt saved', 2000, 'success');
+          saveBtn.className = 'icon icon-star-solid icon-sm';
+          setTimeout(function() { saveBtn.className = 'icon icon-star-regular icon-sm'; }, 2000);
+        }).catch(function(err) {
+          if (err.message !== 'auth') showToast('Save failed', 2000, 'error');
+        });
+      };
+      toolbar.appendChild(saveBtn);
+
+      // Library button
+      var libBtn = document.createElement('span');
+      libBtn.className = 'icon icon-database icon-sm';
+      libBtn.title = 'Load saved prompt';
+      libBtn.style.cssText = 'cursor:pointer;opacity:0.4;';
+      libBtn.onmouseenter = function() { libBtn.style.opacity = '0.9'; };
+      libBtn.onmouseleave = function() { libBtn.style.opacity = '0.4'; };
+
+      var dropdown = document.createElement('div');
+      dropdown.style.cssText = 'display:none;position:absolute;top:24px;right:0;width:400px;max-height:250px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+
+      libBtn.onclick = function(e) {
+        e.stopPropagation();
+        if (dropdown.style.display !== 'none') { dropdown.style.display = 'none'; return; }
+        dropdown.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:11px;">Loading...</div>';
+        dropdown.style.display = 'block';
+        apiFetch('/api/admin/prompts?type=' + promptType)
+          .then(function(r) { return r.json(); })
+          .then(function(items) {
+            if (!items.length) {
+              dropdown.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:11px;">No saved prompts</div>';
+              return;
+            }
+            dropdown.innerHTML = '';
+            items.forEach(function(item) {
+              var row = document.createElement('div');
+              row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);';
+              row.onmouseenter = function() { row.style.background = 'rgba(255,255,255,0.05)'; };
+              row.onmouseleave = function() { row.style.background = ''; };
+
+              var txt = document.createElement('span');
+              txt.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+              txt.textContent = item.text;
+              txt.title = item.text;
+              txt.onclick = function() {
+                var cur = el.value.trim();
+                el.value = cur ? cur + ', ' + item.text : item.text;
+                dropdown.style.display = 'none';
+                el.dispatchEvent(new Event('input'));
+              };
+              row.appendChild(txt);
+
+              var del = document.createElement('span');
+              del.innerHTML = '&times;';
+              del.title = 'Delete';
+              del.style.cssText = 'color:var(--muted);cursor:pointer;font-size:14px;padding:0 4px;';
+              del.onclick = function(e2) {
+                e2.stopPropagation();
+                apiFetch('/api/admin/prompts/' + item.id, {method: 'DELETE'}).then(function() { row.remove(); });
+              };
+              row.appendChild(del);
+
+              dropdown.appendChild(row);
+            });
+          });
+      };
+      // Close on click outside
+      document.addEventListener('click', function() { dropdown.style.display = 'none'; });
+
+      toolbar.appendChild(libBtn);
+      wrapper.appendChild(toolbar);
+      wrapper.appendChild(dropdown);
+    }
+
+    return wrapper;
   }
 
   function buildTextInput(inputId, input) {

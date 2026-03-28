@@ -9,7 +9,7 @@ from typing import Optional
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
@@ -464,6 +464,34 @@ async def extract_workflow_from_image(file: UploadFile = File(...)):
         raise HTTPException(404, "No workflow metadata found in this image")
 
     return result
+
+
+# ── Saved Prompts ───────────────────────────────────────────────────────────
+
+
+@router.get("/api/admin/prompts")
+async def list_saved_prompts(type: str = None):
+    return _db.list_prompts(type)
+
+
+@router.post("/api/admin/prompts")
+async def save_prompt(request: Request):
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    prompt_type = body.get("type", "positive")
+    if not text:
+        raise HTTPException(400, "Empty prompt")
+    if prompt_type not in ("positive", "negative"):
+        raise HTTPException(400, "Type must be 'positive' or 'negative'")
+    pid = _db.save_prompt(prompt_type, text)
+    return {"id": pid}
+
+
+@router.delete("/api/admin/prompts/{prompt_id}")
+async def delete_saved_prompt(prompt_id: int):
+    if not _db.delete_prompt(prompt_id):
+        raise HTTPException(404)
+    return {"ok": True}
 
 
 @router.get("/api/run/extract-workflow/{filename}")
