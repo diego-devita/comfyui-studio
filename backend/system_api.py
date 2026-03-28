@@ -602,17 +602,8 @@ async def restart_backend():
 
     async def _do_restart():
         await asyncio.sleep(1)
-        os.chdir(str(BACKEND_DIR))
-        uvicorn_bin = shutil.which("uvicorn")
-        if not uvicorn_bin:
-            for candidate in ["/opt/venv/bin/uvicorn", "/usr/local/bin/uvicorn"]:
-                if os.path.isfile(candidate):
-                    uvicorn_bin = candidate
-                    break
-        if not uvicorn_bin:
-            return
-        # Use sys.executable to restart via python -m uvicorn (works with --reload)
         import sys
+        os.chdir(str(BACKEND_DIR))
         os.execv(
             sys.executable,
             [sys.executable, "-m", "uvicorn", "main:app",
