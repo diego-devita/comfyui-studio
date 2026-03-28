@@ -614,13 +614,16 @@
               escHtml(scene.prompt || '') + copyBtn(scene.prompt || '') +
               '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's \u00b7 seed: ' + seedDisplay + copyBtn(seedCopyVal) + '</span></td></tr>';
           });
-        } else if (key === 'loras' && Array.isArray(val)) {
+        } else if ((key === 'loras' || key === 'loras_high' || key === 'loras_low') && Array.isArray(val)) {
+          var loraLabel = key === 'loras_high' ? 'LoRA High' : key === 'loras_low' ? 'LoRA Low' : 'LoRA';
           val.forEach(function(lora, idx) {
-            var loraName = typeof lora === 'string' ? lora : (lora.pair_id || '?');
-            var strH = typeof lora === 'object' ? lora.strength_high : '';
-            var strL = typeof lora === 'object' ? lora.strength_low : '';
-            var strInfo = strH || strL ? ' H:' + (strH||'?') + ' L:' + (strL||'?') : '';
-            rows += '<tr><td>LoRA ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
+            var loraName = typeof lora === 'string' ? lora : (lora.file || lora.pair_id || '?');
+            var strInfo = '';
+            if (typeof lora === 'object') {
+              if (lora.strength != null) strInfo = ' str:' + lora.strength;
+              else if (lora.strength_high != null || lora.strength_low != null) strInfo = ' H:' + (lora.strength_high||'?') + ' L:' + (lora.strength_low||'?');
+            }
+            rows += '<tr><td>' + loraLabel + ' ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
           });
         } else if (key === 'seed') {
           var resolvedSeed = job.seeds && job.seeds[key] ? job.seeds[key] : null;
@@ -640,9 +643,35 @@
       }
     }
 
+    // Build plain-text summary for copy
+    var summary = (job.workflow_name || job.workflow_id) + ' (' + (job.workflow_id || '') + ')\n';
+    summary += 'Status: ' + (job.status || (job.progress ? job.progress.status : '?')) + '\n';
+    summary += 'Job ID: ' + job.prompt_id + '\n';
+    summary += 'Queued: ' + (job.queued_at || '--') + '\n';
+    if (job.started_at) summary += 'Started: ' + job.started_at + '\n';
+    if (job.input_image) summary += 'Input Image: ' + job.input_image + '\n';
+    summary += '\n';
+    if (job.params) {
+      for (var sk in job.params) {
+        if (sk.startsWith('_')) continue;
+        var sv = job.params[sk];
+        if (sk === 'scenes' && Array.isArray(sv)) {
+          sv.forEach(function(sc, si) {
+            var rsd = job.seeds && job.seeds['scene_' + (si+1)] ? job.seeds['scene_' + (si+1)] : sc.seed;
+            summary += 'Scene ' + (si+1) + ': ' + (sc.prompt || '') + ' (' + (sc.duration||'?') + 's, seed: ' + rsd + ')\n';
+          });
+        } else if (typeof sv === 'object') {
+          summary += sk + ': ' + JSON.stringify(sv) + '\n';
+        } else {
+          summary += sk + ': ' + sv + '\n';
+        }
+      }
+    }
+    window._detailSummary = summary;
+
     $detailBox.innerHTML =
       '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
-      '<h2>Job Details</h2>' +
+      '<h2>Job Details <span class="icon icon-copy icon-sm" style="cursor:pointer;opacity:0.5;vertical-align:middle;margin-left:8px;" onclick="copyToClipboard(window._detailSummary);showToast(\'Job details copied\',2000,\'success\')" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.5" title="Copy job details"></span></h2>' +
       '<table class="detail-table">' + rows + '</table>';
 
     $overlay.classList.add('visible');
