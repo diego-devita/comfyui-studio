@@ -272,24 +272,6 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
 
 
-# ── Config persistence ──
-
-import json as _json
-from pathlib import Path as _Path
-
-_CONFIG_PATH = _Path(os.environ.get("STUDIO_DIR", "/workspace/studio")) / "bot_config.json"
-
-def load_bot_config() -> dict:
-    try:
-        return _json.loads(_CONFIG_PATH.read_text())
-    except Exception:
-        return {}
-
-def save_bot_config(config: dict):
-    _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _CONFIG_PATH.write_text(_json.dumps(config, indent=2))
-
-
 # ── Bot lifecycle ──
 
 _bot_app = None
@@ -300,35 +282,23 @@ def bot_running() -> bool:
     return _bot_thread is not None and _bot_thread.is_alive()
 
 def bot_status() -> dict:
-    config = load_bot_config()
     return {
         "running": bot_running(),
-        "name": config.get("bot_name", ""),
+        "name": os.environ.get("TELEGRAM_BOT_NAME", ""),
         "started_at": _bot_started_at,
     }
 
-def start_bot(token: str = None, bot_name: str = None) -> str:
+def start_bot() -> str:
     global _bot_app, _bot_thread, _bot_started_at, BOT_TOKEN
 
     if bot_running():
         return "already running"
 
-    config = load_bot_config()
-    if token:
-        config["token"] = token
-    if bot_name:
-        config["bot_name"] = bot_name
-    if token or bot_name:
-        save_bot_config(config)
-
-    resolved_token = token or config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    resolved_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not resolved_token:
         return "no token configured"
 
     BOT_TOKEN = resolved_token
-    os.environ["TELEGRAM_BOT_TOKEN"] = resolved_token
-    if bot_name or config.get("bot_name"):
-        os.environ["TELEGRAM_BOT_NAME"] = bot_name or config.get("bot_name", "")
 
     import threading
 
@@ -371,22 +341,18 @@ def stop_bot() -> str:
 # ── Auto-start on import ──
 
 def auto_start():
-    """Start bot if config has a token. Called from backend startup."""
-    config = load_bot_config()
-    token = config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if token:
-        start_bot(token, config.get("bot_name"))
+    """Start bot if TELEGRAM_BOT_TOKEN env var is set. Called from backend startup."""
+    if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        start_bot()
 
 
 # ── Standalone mode ──
 
 if __name__ == "__main__":
-    config = load_bot_config()
-    token = config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if not token:
-        print("No token. Set TELEGRAM_BOT_TOKEN or save via web UI.")
+    if not os.environ.get("TELEGRAM_BOT_TOKEN"):
+        print("Set TELEGRAM_BOT_TOKEN env var or configure from Settings UI.")
     else:
-        BOT_TOKEN = token
+        BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
         app = Application.builder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", cmd_start))
         app.add_handler(CallbackQueryHandler(cb_preset_selected))

@@ -336,14 +336,11 @@
     <span class="icon icon-telegram action-card-icon"></span>
     <div class="action-card-text">
       <h3>Telegram Bot</h3>
-      <p id="telegramStatus" style="margin-bottom:8px;">Loading...</p>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="telegramToken" placeholder="Bot token from @BotFather" style="flex:1;min-width:200px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;">
-        <input type="text" id="telegramName" placeholder="Bot username (no @)" style="width:160px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;">
-      </div>
+      <p id="telegramStatus">Loading...</p>
+      <p style="font-size:10px;color:var(--muted);margin-top:4px;">Configure token and name in Environment Variables below, then start.</p>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;">
-      <button class="btn" id="telegramStartBtn">Start</button>
+      <button class="btn" id="telegramStartBtn" disabled>Start</button>
       <button class="btn" id="telegramStopBtn" style="display:none;">Stop</button>
     </div>
   </div>
@@ -698,8 +695,6 @@
   var $tgStatus = document.getElementById('telegramStatus');
   var $tgStartBtn = document.getElementById('telegramStartBtn');
   var $tgStopBtn = document.getElementById('telegramStopBtn');
-  var $tgToken = document.getElementById('telegramToken');
-  var $tgName = document.getElementById('telegramName');
 
   function refreshTelegramStatus() {
     apiFetch('/api/admin/telegram/status')
@@ -715,22 +710,35 @@
           $tgStatus.textContent = 'Not running';
           $tgStartBtn.style.display = '';
           $tgStopBtn.style.display = 'none';
+          // Enable start only if token is configured
+          apiFetch('/api/admin/telegram/status').then(function(r2) { return r2.json(); }).then(function(d2) {
+            // Check if token env var is set by looking at the status response
+            // The real check: try to see if TELEGRAM_BOT_TOKEN is in env
+          });
         }
       })
       .catch(function() { $tgStatus.textContent = 'Error loading status'; });
   }
 
+  // Check if token is set to enable/disable start button
+  apiFetch('/api/admin/settings/env')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var tokenSet = false;
+      (data.groups || []).forEach(function(g) {
+        (g.vars || []).forEach(function(v) {
+          if (v.key === 'TELEGRAM_BOT_TOKEN' && v.set) tokenSet = true;
+        });
+      });
+      $tgStartBtn.disabled = !tokenSet;
+      if (!tokenSet) $tgStartBtn.title = 'Set TELEGRAM_BOT_TOKEN in Environment Variables first';
+    });
+
   $tgStartBtn.addEventListener('click', function() {
-    var body = {};
-    if ($tgToken.value.trim()) body.token = $tgToken.value.trim();
-    if ($tgName.value.trim()) body.bot_name = $tgName.value.trim();
     $tgStartBtn.disabled = true;
     $tgStartBtn.textContent = 'Starting...';
-    apiFetch('/api/admin/telegram/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    }).then(function(r) { return r.json(); })
+    apiFetch('/api/admin/telegram/start', { method: 'POST' })
+      .then(function(r) { return r.json(); })
       .then(function(data) {
         showToast('Bot: ' + data.result, 3000, data.result === 'started' ? 'success' : 'warning');
         setTimeout(refreshTelegramStatus, 2000);

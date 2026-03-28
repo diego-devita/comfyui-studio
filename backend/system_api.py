@@ -629,14 +629,9 @@ async def telegram_bot_status():
 
 
 @router.post("/api/admin/telegram/start")
-async def telegram_bot_start(request: Request):
-    body = {}
-    try:
-        body = await request.json()
-    except Exception:
-        pass
+async def telegram_bot_start():
     from telegram_bot import start_bot
-    result = start_bot(token=body.get("token"), bot_name=body.get("bot_name"))
+    result = start_bot()
     return {"result": result}
 
 
@@ -827,6 +822,8 @@ def _mask(val):
 _EDITABLE_VARS = {
     "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
     "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
+    "TELEGRAM_BOT_TOKEN": ("_env", str),
+    "TELEGRAM_BOT_NAME": ("_env", str),
 }
 
 
@@ -854,8 +851,11 @@ async def get_env_vars():
         for key, sensitive, default, description in var_defs:
             if key in _EDITABLE_VARS:
                 path, _ = _EDITABLE_VARS[key]
-                mod, attr = _resolve_editable(path)
-                val = str(getattr(mod, attr, ""))
+                if path == "_env":
+                    val = os.environ.get(key, "")
+                else:
+                    mod, attr = _resolve_editable(path)
+                    val = str(getattr(mod, attr, ""))
             else:
                 val = os.environ.get(key, "")
             vars_list.append({
@@ -880,16 +880,21 @@ async def update_env_var(request: Request):
     if key not in _EDITABLE_VARS:
         raise HTTPException(400, f"Variable {key} is not editable")
     path, cast = _EDITABLE_VARS[key]
+
+    if path == "_env":
+        # Persist in os.environ + DB
+        os.environ[key] = str(value)
+        _db.set_setting(key, str(value))
+        return {"key": key, "value": str(value)}
+
     mod, attr = _resolve_editable(path)
     try:
         casted = cast(value)
-        # Clamp MAX_CONCURRENT_DOWNLOADS to 1-10
         if key == "MAX_CONCURRENT_DOWNLOADS":
             casted = max(1, min(10, casted))
         setattr(mod, attr, casted)
     except (ValueError, TypeError):
         raise HTTPException(400, f"Invalid value for {key}")
-    # Trigger scheduler if concurrent downloads changed
     if key == "MAX_CONCURRENT_DOWNLOADS":
         with _queue_lock:
             _schedule_downloads()

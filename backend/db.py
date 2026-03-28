@@ -126,7 +126,37 @@ def init_db():
             created_at TEXT NOT NULL
         );
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        );
+    """)
     conn.commit()
+
+
+# ── Settings key/value ──────────────────────────────────────
+
+
+def get_setting(key: str, default: str = "") -> str:
+    conn = _get_conn()
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_setting(key: str, value: str):
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, value),
+    )
+    conn.commit()
+
+
+def get_all_settings() -> dict:
+    conn = _get_conn()
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    return {r[0]: r[1] for r in rows}
 
 
 # ── Saved Prompts ────────────────────────────────────────────
