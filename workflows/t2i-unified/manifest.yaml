@@ -6,6 +6,7 @@ date: "2026-03-28 02:00"
 type: dynamic
 description: "Unified T2I/I2I workflow. Checkpoint, LoRA stack, CLIP skip, optional input image (becomes I2I), optional hires fix, optional face detailer, batch generation."
 author: ""
+group: "unified"
 
 blocks_dir: "blocks"
 

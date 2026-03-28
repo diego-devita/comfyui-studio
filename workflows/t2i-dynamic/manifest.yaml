@@ -6,6 +6,7 @@ date: "2026-03-23 01:28"
 type: dynamic
 description: "Configurable text-to-image with checkpoint selection, LoRA stack, hires fix, face detailer, and batch generation."
 author: ""
+group: "original"
 
 blocks_dir: "blocks"
 

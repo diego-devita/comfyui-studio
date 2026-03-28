@@ -5,6 +5,7 @@ version: 8
 date: "2026-03-23 01:40"
 description: "Image to video using Kijai's WanVideoWrapper nodes with FP8 models, SageAttention, torch compile, block swap for VRAM management, LightX2V LoRA, dual-pass sampling (6 steps split 3+3), CFG scheduling. Output at 16fps native resolution."
 author: ""
+group: "original"
 
 workflow_file: "workflow.json"
 

@@ -6,6 +6,7 @@ date: "2026-03-23 01:05"
 type: dynamic
 description: "Simple text-to-image with checkpoint, CLIP skip, LoRA stack, and native batch support. Generates N images in one pass."
 author: ""
+group: "original"
 
 blocks_dir: "blocks"
 

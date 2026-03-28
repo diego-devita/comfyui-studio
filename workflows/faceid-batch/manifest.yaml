@@ -6,6 +6,7 @@ date: "2026-03-23 01:01"
 type: dynamic
 description: "IP-Adapter FaceID — preserves facial identity using InsightFace recognition. Strongest face preservation for character consistency."
 author: ""
+group: "original"
 
 blocks_dir: "blocks"
 

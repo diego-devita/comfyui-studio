@@ -6,6 +6,7 @@ date: "2026-03-28 02:00"
 type: dynamic
 description: "Unified IP-Adapter and FaceID workflow. Switch between IP-Adapter (style/composition transfer) and FaceID (facial identity preservation). Checkpoint, LoRA stack, reference image, batch generation."
 author: ""
+group: "unified"
 
 blocks_dir: "blocks"
 

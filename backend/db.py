@@ -104,9 +104,15 @@ def init_db():
             outputs         TEXT DEFAULT '[]',
             required_models TEXT DEFAULT '[]',
             required_nodes  TEXT DEFAULT '[]',
+            "group"         TEXT DEFAULT '',
             synced_at       TEXT NOT NULL
         );
     """)
+    # Migration: add group column if missing
+    try:
+        conn.execute("ALTER TABLE workflows ADD COLUMN \"group\" TEXT DEFAULT ''")
+    except Exception:
+        pass  # already exists
     conn.commit()
 
 
@@ -337,8 +343,8 @@ def sync_workflows_from_disk():
                 conn.execute("""
                     INSERT INTO workflows (id, name, category, type, version, date,
                                            description, author, inputs, outputs,
-                                           required_models, required_nodes, synced_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                           required_models, required_nodes, "group", synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name=excluded.name, category=excluded.category, type=excluded.type,
                         version=excluded.version, date=excluded.date,
@@ -346,6 +352,7 @@ def sync_workflows_from_disk():
                         inputs=excluded.inputs, outputs=excluded.outputs,
                         required_models=excluded.required_models,
                         required_nodes=excluded.required_nodes,
+                        "group"=excluded."group",
                         synced_at=excluded.synced_at
                 """, (
                     wf_id, m.get("name", wf_id), m.get("category", ""),
@@ -355,6 +362,7 @@ def sync_workflows_from_disk():
                     json.dumps(m.get("outputs", []), ensure_ascii=False),
                     json.dumps(m.get("required_models", []), ensure_ascii=False),
                     json.dumps(m.get("required_nodes", []), ensure_ascii=False),
+                    m.get("group", ""),
                     now,
                 ))
             except Exception as e:

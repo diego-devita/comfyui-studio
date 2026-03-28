@@ -229,6 +229,7 @@
     <span class="spinner"></span>
     Loading workflows...
   </div>
+  <div id="groupFilters" style="display:none;margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;"></div>
   <div class="card-grid" id="cardGrid" style="display:none;"></div>
   <div class="empty-state" id="emptyState" style="display:none;">
     <p>No workflows found. Click Sync to scan for workflow manifests.</p>
@@ -242,13 +243,14 @@
 
   // ── State ──
   let workflows = [];
-
+  let activeGroups = new Set(); // empty = show all
 
   // ── DOM refs ──
   const $main         = document.getElementById('mainContent');
   const $loading      = document.getElementById('loadingState');
   const $cardGrid     = document.getElementById('cardGrid');
   const $emptyState   = document.getElementById('emptyState');
+  const $groupFilters = document.getElementById('groupFilters');
 
   // ── Initial load ──
   async function initialLoad() {
@@ -269,14 +271,45 @@
   // ── Data handling ──
   function handleWorkflowData(data) {
     workflows = Array.isArray(data) ? data : (data.workflows || []);
+    buildGroupFilters();
     renderCards();
     _startPollIfNeeded();
+  }
+
+  function buildGroupFilters() {
+    var groups = new Set();
+    workflows.forEach(function(wf) { if (wf.group) groups.add(wf.group); });
+    $groupFilters.innerHTML = '';
+    if (groups.size < 2) { $groupFilters.style.display = 'none'; return; }
+    $groupFilters.style.display = 'flex';
+    // Initialize: all groups active
+    if (activeGroups.size === 0) groups.forEach(function(g) { activeGroups.add(g); });
+    groups.forEach(function(g) {
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-sm' + (activeGroups.has(g) ? ' active' : '');
+      btn.textContent = g;
+      btn.style.cssText = 'padding:4px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;border-radius:20px;' +
+        (activeGroups.has(g) ? 'background:var(--accent);color:var(--bg);' : 'background:var(--surface);color:var(--muted);border:1px solid var(--border);');
+      btn.onclick = function() {
+        if (activeGroups.has(g)) activeGroups.delete(g); else activeGroups.add(g);
+        // Don't allow all off — re-enable all
+        if (activeGroups.size === 0) groups.forEach(function(gg) { activeGroups.add(gg); });
+        buildGroupFilters();
+        renderCards();
+      };
+      $groupFilters.appendChild(btn);
+    });
   }
 
   function renderCards() {
     $cardGrid.innerHTML = '';
 
-    if (workflows.length === 0) {
+    var filtered = workflows.filter(function(wf) {
+      if (activeGroups.size === 0) return true;
+      return activeGroups.has(wf.group || '');
+    });
+
+    if (filtered.length === 0) {
       $cardGrid.style.display = 'none';
       $emptyState.style.display = '';
       return;
@@ -285,7 +318,7 @@
     $emptyState.style.display = 'none';
     $cardGrid.style.display = '';
 
-    workflows.forEach(wf => {
+    filtered.forEach(wf => {
       $cardGrid.appendChild(createWorkflowCard(wf));
     });
   }

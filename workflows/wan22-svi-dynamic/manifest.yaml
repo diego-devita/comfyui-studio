@@ -6,6 +6,7 @@ date: "2026-03-28 00:58"
 type: dynamic
 description: "Multi-scene I2V using SVI Pro technique. Configurable scene count, per-scene prompts, durations and seeds, LoRA picker. GGUF Q8 models, LightX2V + SVI Pro LoRAs, RIFE 2x interpolation to 32fps."
 author: ""
+group: "original"
 
 base_model: "wan-i2v-14b"
 
