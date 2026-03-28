@@ -370,6 +370,8 @@ async def list_assets(asset_type: str):
                 if video_files:
                     job_entry["type"] = "studio_job"
                     job_entry["video"] = video_files[0]
+                    # For video jobs, png files are thumbnails not separate images
+                    job_entry["image_count"] = 0
                     job_entry["thumbnail"] = (preview_files[0] if preview_files
                                               else image_files[0] if image_files
                                               else None)
@@ -386,6 +388,9 @@ async def list_assets(asset_type: str):
                 studio_jobs.append(job_entry)
                 total_size += folder_size
 
+    if asset_type == "outputs":
+        # For outputs, only return grouped studio_jobs — no loose files
+        return {"files": [], "studio_jobs": studio_jobs, "total_size": total_size}
     return {"files": files, "studio_jobs": studio_jobs, "total_size": total_size}
 
 
