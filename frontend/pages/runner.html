@@ -2211,14 +2211,25 @@
       });
 
       // Show all checkbox
+      var filterBar = document.createElement('div');
+      filterBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
+
+      var baseBadge = document.createElement('span');
+      baseBadge.className = 'lora-base-badge';
+      baseBadge.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--accent);background:rgba(232,255,71,0.1);padding:2px 8px;border-radius:10px;';
+      baseBadge.textContent = currentBase || 'all';
+      filterBar.appendChild(baseBadge);
+
       var showAllWrap = document.createElement('label');
-      showAllWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-bottom:4px;';
+      showAllWrap.style.cssText = 'display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-left:auto;';
       var showAllCb = document.createElement('input');
       showAllCb.type = 'checkbox';
       showAllCb.style.cssText = 'accent-color:var(--accent);';
       showAllWrap.appendChild(showAllCb);
-      showAllWrap.appendChild(document.createTextNode('Show all LoRAs'));
-      container.appendChild(showAllWrap);
+      showAllWrap.appendChild(document.createTextNode('Show all'));
+      filterBar.appendChild(showAllWrap);
+
+      container.appendChild(filterBar);
 
       var slotsDiv = document.createElement('div');
       slotsDiv.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
@@ -2228,19 +2239,17 @@
       var _removedGroups = new Map(); // sel element -> [{og, nextSibling}]
 
       function filterOptgroups() {
-        // If no checkpoint selected, show all and hide checkbox
+        baseBadge.textContent = currentBase || 'all';
         if (!currentBase) {
-          showAllWrap.style.display = 'none';
-          // Re-add any removed optgroups
+          filterBar.style.display = 'none';
           _removedGroups.forEach(function(removed, sel) {
             removed.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
           });
           _removedGroups.clear();
           return;
         }
-        showAllWrap.style.display = 'flex';
+        filterBar.style.display = 'flex';
         container.querySelectorAll('.lora-dyn-select').forEach(function(sel) {
-          // First re-add any previously removed
           var prev = _removedGroups.get(sel) || [];
           prev.forEach(function(r) { sel.insertBefore(r.og, r.nextSibling); });
           _removedGroups.delete(sel);
