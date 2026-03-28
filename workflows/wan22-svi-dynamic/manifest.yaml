@@ -76,6 +76,13 @@ inputs:
         default: -1
         tooltip: "Seed for this specific scene. Use -1 for random. Setting different seeds per scene varies the motion style; using the same seed across scenes creates more consistent movement patterns."
 
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+    tooltip: "Applies to all scenes. Describes what to avoid in the generated video."
+
   - id: loras_high
     name: "LoRAs (High Noise)"
     type: lora_picker_dynamic

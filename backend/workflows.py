@@ -539,7 +539,7 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
         return {
             **defaults,
             "prompt": scene.get("prompt", ""),
-            "negative_prompt": defaults.get("negative_prompt", ""),
+            "negative_prompt": params.get("negative_prompt", defaults.get("negative_prompt", "")),
             "duration_frames": duration_sec * 16 + 1,
             "seed": scene_seed,
             "scene_num": str(iteration + 1),

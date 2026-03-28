@@ -1471,10 +1471,36 @@
 
       var header = document.createElement('div');
       header.className = 'scene-card-header';
+      header.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
       var num = document.createElement('span');
       num.className = 'scene-num';
       num.textContent = 'Scene ' + (idx + 1);
       header.appendChild(num);
+
+      // Duration on same row as title, right-aligned
+      var durWrap = document.createElement('div');
+      durWrap.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:4px;';
+      var sel = document.createElement('select');
+      sel.className = 'scene-duration';
+      sel.style.cssText = 'padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;';
+      durationOpts.forEach(function(opt) {
+        var o = document.createElement('option');
+        o.value = typeof opt === 'object' ? opt.value : opt;
+        o.textContent = typeof opt === 'object' ? opt.label : opt;
+        if (String(o.value) === String(duration || defaultDuration)) o.selected = true;
+        sel.appendChild(o);
+      });
+      durWrap.appendChild(sel);
+
+      // Help icon for duration
+      var helpIcon = document.createElement('span');
+      helpIcon.className = 'form-tooltip';
+      helpIcon.textContent = '?';
+      helpIcon.innerHTML += '<span class="tooltip-text">WAN generates at 16fps. Duration = frames / 16. 3s=49f, 5s=81f, 8s=129f. Longer scenes use more VRAM. 5s is the sweet spot.</span>';
+      durWrap.appendChild(helpIcon);
+
+      header.appendChild(durWrap);
 
       if (idx > 0) {
         var rmBtn = document.createElement('button');
@@ -1491,25 +1517,6 @@
       ta.placeholder = 'Describe what happens in this scene...';
       ta.value = prompt || '';
       card.appendChild(ta);
-
-      var durRow = document.createElement('div');
-      durRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
-      var durLabel = document.createElement('span');
-      durLabel.style.cssText = 'font-size:12px;color:var(--muted);';
-      durLabel.textContent = 'Duration:';
-      durRow.appendChild(durLabel);
-
-      var sel = document.createElement('select');
-      sel.className = 'scene-duration';
-      durationOpts.forEach(function(opt) {
-        var o = document.createElement('option');
-        o.value = typeof opt === 'object' ? opt.value : opt;
-        o.textContent = typeof opt === 'object' ? opt.label : opt;
-        if (String(o.value) === String(duration || defaultDuration)) o.selected = true;
-        sel.appendChild(o);
-      });
-      durRow.appendChild(sel);
-      card.appendChild(durRow);
 
       // Seed row
       var seedRow = document.createElement('div');
