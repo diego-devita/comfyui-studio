@@ -584,7 +584,8 @@ def _assemble_dynamic_workflow(manifest: dict, params: dict) -> tuple:
             else:
                 count = int(params.get(param, 0))
 
-            prev_chain_exports = None
+            # Initialize from previous block exports (e.g. scene_first → scene_extend)
+            prev_chain_exports = _latest_exports()
             for i in range(count):
                 # For scene-based chains, use scene variables
                 if params.get("scenes") and group["stages"][0].get("file", "").startswith("scene"):
