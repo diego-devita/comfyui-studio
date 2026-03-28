@@ -78,7 +78,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
     comfy_ws = COMFY_URL.replace("http://", "ws://").replace("https://", "wss://")
     ws_url = f"{comfy_ws}/ws?clientId={client_id}"
 
-    def _mark_failed(reason="WebSocket listener terminated unexpectedly", status="error"):
+    def _mark_failed(reason="WebSocket listener terminated unexpectedly", status="failed"):
         """Mark the job as failed/stalled in DB if it never completed."""
         if job_record and job_record.get("status") in ("queued", "running"):
             from datetime import datetime, timezone, timedelta
@@ -322,7 +322,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                 if job_record:
                     from datetime import datetime, timezone, timedelta
                     now = datetime.now(timezone(timedelta(hours=1)))
-                    job_record["status"] = "error"
+                    job_record["status"] = "failed"
                     job_record["error"] = full_err
                     job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
                     _save_job(job_record)
