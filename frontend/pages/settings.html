@@ -332,6 +332,22 @@
     <button class="btn" id="restartBtn">Restart</button>
   </div>
 
+  <div class="action-card" id="telegramCard">
+    <span class="icon icon-telegram action-card-icon"></span>
+    <div class="action-card-text">
+      <h3>Telegram Bot</h3>
+      <p id="telegramStatus" style="margin-bottom:8px;">Loading...</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="telegramToken" placeholder="Bot token from @BotFather" style="flex:1;min-width:200px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;">
+        <input type="text" id="telegramName" placeholder="Bot username (no @)" style="width:160px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;">
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <button class="btn" id="telegramStartBtn">Start</button>
+      <button class="btn" id="telegramStopBtn" style="display:none;">Stop</button>
+    </div>
+  </div>
+
   <!-- Environment Variables (accordion) -->
   <div class="settings-accordion">
     <button class="accordion-toggle" id="envAccordionToggle">
@@ -677,6 +693,66 @@
       doFlush();
     }
   });
+
+  // ── Telegram Bot ──
+  var $tgStatus = document.getElementById('telegramStatus');
+  var $tgStartBtn = document.getElementById('telegramStartBtn');
+  var $tgStopBtn = document.getElementById('telegramStopBtn');
+  var $tgToken = document.getElementById('telegramToken');
+  var $tgName = document.getElementById('telegramName');
+
+  function refreshTelegramStatus() {
+    apiFetch('/api/admin/telegram/status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.running) {
+          var info = 'Running since ' + (data.started_at || '?');
+          if (data.name) info += ' — <a href="https://t.me/' + data.name + '" target="_blank" style="color:var(--accent);">@' + data.name + '</a>';
+          $tgStatus.innerHTML = info;
+          $tgStartBtn.style.display = 'none';
+          $tgStopBtn.style.display = '';
+        } else {
+          $tgStatus.textContent = 'Not running';
+          $tgStartBtn.style.display = '';
+          $tgStopBtn.style.display = 'none';
+        }
+      })
+      .catch(function() { $tgStatus.textContent = 'Error loading status'; });
+  }
+
+  $tgStartBtn.addEventListener('click', function() {
+    var body = {};
+    if ($tgToken.value.trim()) body.token = $tgToken.value.trim();
+    if ($tgName.value.trim()) body.bot_name = $tgName.value.trim();
+    $tgStartBtn.disabled = true;
+    $tgStartBtn.textContent = 'Starting...';
+    apiFetch('/api/admin/telegram/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); })
+      .then(function(data) {
+        showToast('Bot: ' + data.result, 3000, data.result === 'started' ? 'success' : 'warning');
+        setTimeout(refreshTelegramStatus, 2000);
+      })
+      .catch(function(err) { if (err.message !== 'auth') showToast('Start failed: ' + err.message, 5000, 'error'); })
+      .finally(function() { $tgStartBtn.disabled = false; $tgStartBtn.textContent = 'Start'; });
+  });
+
+  $tgStopBtn.addEventListener('click', function() {
+    $tgStopBtn.disabled = true;
+    $tgStopBtn.textContent = 'Stopping...';
+    apiFetch('/api/admin/telegram/stop', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        showToast('Bot: ' + data.result, 3000, 'info');
+        setTimeout(refreshTelegramStatus, 1000);
+      })
+      .catch(function(err) { if (err.message !== 'auth') showToast('Stop failed', 5000, 'error'); })
+      .finally(function() { $tgStopBtn.disabled = false; $tgStopBtn.textContent = 'Stop'; });
+  });
+
+  refreshTelegramStatus();
 
   // ── Uptime ──
   apiFetch('/api/admin/system/uptime')

@@ -619,6 +619,34 @@ async def restart_backend():
     return {"message": "Restarting..."}
 
 
+# ── Telegram bot control ─────────────────────────────────────────────────────
+
+
+@router.get("/api/admin/telegram/status")
+async def telegram_bot_status():
+    from telegram_bot import bot_status
+    return bot_status()
+
+
+@router.post("/api/admin/telegram/start")
+async def telegram_bot_start(request: Request):
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    from telegram_bot import start_bot
+    result = start_bot(token=body.get("token"), bot_name=body.get("bot_name"))
+    return {"result": result}
+
+
+@router.post("/api/admin/telegram/stop")
+async def telegram_bot_stop():
+    from telegram_bot import stop_bot
+    result = stop_bot()
+    return {"result": result}
+
+
 # ── Telemetry ────────────────────────────────────────────────────────────────
 
 

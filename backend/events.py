@@ -215,6 +215,13 @@ async def _start_event_consumer():
     wf_count = _db.sync_workflows_from_disk()
     _events.emit("system.startup", f"Synced {wf_count} workflows from disk", severity="info")
 
+    # Auto-start Telegram bot if configured
+    try:
+        from telegram_bot import auto_start as _bot_auto_start
+        _bot_auto_start()
+    except Exception as _bot_err:
+        print(f"[startup] Telegram bot auto-start failed: {_bot_err}", flush=True)
+
     # Register SIGTERM handler for graceful shutdown.
     # Docker sends SIGTERM before SIGKILL (10s grace period).
     # This flushes SQLite WAL files to prevent corruption.

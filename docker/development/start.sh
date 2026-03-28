@@ -91,17 +91,8 @@ echo "[2/3] Starting sqlite-web on port ${SQLITE_WEB_PORT}..."
         -x
 ) &
 
-# ── Start Telegram bot (if token configured) ──
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-    echo "[3/4] Starting Telegram bot..."
-    cd "${STUDIO_DIR}/backend"
-    python3 telegram_bot.py 2>&1 &
-else
-    echo "[3/4] Telegram bot skipped (TELEGRAM_BOT_TOKEN not set)"
-fi
-
 # ── Start Studio backend with hot reload ──
-echo "[4/4] Starting Studio backend on port ${STUDIO_PORT} (hot reload)..."
+echo "[3/3] Starting Studio backend on port ${STUDIO_PORT} (hot reload)..."
 cd "${STUDIO_DIR}/backend"
 uvicorn main:app \
     --host 0.0.0.0 \

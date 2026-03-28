@@ -272,18 +272,124 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
 
 
-# ── Main ──
+# ── Config persistence ──
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+import json as _json
+from pathlib import Path as _Path
 
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CallbackQueryHandler(cb_preset_selected))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+_CONFIG_PATH = _Path(os.environ.get("STUDIO_DIR", "/workspace/studio")) / "bot_config.json"
 
-    logger.info(f"Bot starting — Studio: {STUDIO_URL}")
-    app.run_polling()
+def load_bot_config() -> dict:
+    try:
+        return _json.loads(_CONFIG_PATH.read_text())
+    except Exception:
+        return {}
 
+def save_bot_config(config: dict):
+    _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _CONFIG_PATH.write_text(_json.dumps(config, indent=2))
+
+
+# ── Bot lifecycle ──
+
+_bot_app = None
+_bot_thread = None
+_bot_started_at = None
+
+def bot_running() -> bool:
+    return _bot_thread is not None and _bot_thread.is_alive()
+
+def bot_status() -> dict:
+    config = load_bot_config()
+    return {
+        "running": bot_running(),
+        "name": config.get("bot_name", ""),
+        "started_at": _bot_started_at,
+    }
+
+def start_bot(token: str = None, bot_name: str = None) -> str:
+    global _bot_app, _bot_thread, _bot_started_at, BOT_TOKEN
+
+    if bot_running():
+        return "already running"
+
+    config = load_bot_config()
+    if token:
+        config["token"] = token
+    if bot_name:
+        config["bot_name"] = bot_name
+    if token or bot_name:
+        save_bot_config(config)
+
+    resolved_token = token or config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not resolved_token:
+        return "no token configured"
+
+    BOT_TOKEN = resolved_token
+    os.environ["TELEGRAM_BOT_TOKEN"] = resolved_token
+    if bot_name or config.get("bot_name"):
+        os.environ["TELEGRAM_BOT_NAME"] = bot_name or config.get("bot_name", "")
+
+    import threading
+
+    def _run():
+        global _bot_app, _bot_started_at
+        import time as _t
+        from datetime import datetime, timezone, timedelta
+        _bot_started_at = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            _bot_app = Application.builder().token(BOT_TOKEN).build()
+            _bot_app.add_handler(CommandHandler("start", cmd_start))
+            _bot_app.add_handler(CallbackQueryHandler(cb_preset_selected))
+            _bot_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+            logger.info(f"Bot starting — Studio: {STUDIO_URL}")
+            _bot_app.run_polling()
+        except Exception as e:
+            logger.error(f"Bot crashed: {e}")
+        finally:
+            _bot_app = None
+            _bot_started_at = None
+
+    _bot_thread = threading.Thread(target=_run, daemon=True)
+    _bot_thread.start()
+    return "started"
+
+def stop_bot() -> str:
+    global _bot_app, _bot_thread, _bot_started_at
+    if not bot_running():
+        return "not running"
+    try:
+        if _bot_app:
+            _bot_app.stop_running()
+    except Exception as e:
+        logger.error(f"Error stopping bot: {e}")
+    _bot_started_at = None
+    return "stopped"
+
+
+# ── Auto-start on import ──
+
+def auto_start():
+    """Start bot if config has a token. Called from backend startup."""
+    config = load_bot_config()
+    token = config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if token:
+        start_bot(token, config.get("bot_name"))
+
+
+# ── Standalone mode ──
 
 if __name__ == "__main__":
-    main()
+    config = load_bot_config()
+    token = config.get("token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        print("No token. Set TELEGRAM_BOT_TOKEN or save via web UI.")
+    else:
+        BOT_TOKEN = token
+        app = Application.builder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", cmd_start))
+        app.add_handler(CallbackQueryHandler(cb_preset_selected))
+        app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+        logger.info(f"Bot starting — Studio: {STUDIO_URL}")
+        app.run_polling()
