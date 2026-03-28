@@ -132,7 +132,7 @@ def main():
     log("  Copied version.json")
 
     # Step 4: Create runtime directories
-    for d in ["assets/input", "assets/output", "db", "llm/models"]:
+    for d in ["assets/input", "assets/output", "db", "llm/models", "presets"]:
         os.makedirs(os.path.join(STUDIO_DIR, d), exist_ok=True)
 
     log(f"Bootstrap complete — app v{app_version}")

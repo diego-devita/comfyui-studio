@@ -672,7 +672,7 @@
   }
   $flushBtn.addEventListener('click', function() {
     if (flushSafe === false) {
-      studioConfirm('There are active database writes. Flushing now may cause write failures. Continue anyway?', doFlush);
+      studioConfirm('There are active database writes. Flushing now may cause write failures. Continue anyway?', {danger: true}).then(function(ok) { if (ok) doFlush(); });
     } else {
       doFlush();
     }
@@ -689,7 +689,7 @@
   // ── Restart Backend ──
   var $restartBtn = document.getElementById('restartBtn');
   $restartBtn.addEventListener('click', function() {
-    studioConfirm('Restart the backend? Active jobs will be marked as stalled.', function() {
+    studioConfirm('Restart the backend? Active jobs will be marked as stalled.', {danger: true}).then(function(ok) { if (!ok) return;
       $restartBtn.disabled = true;
       $restartBtn.innerHTML = '<span class="spinner sm"></span> Restarting...';
       showToast('Backend restarting...', 0, 'info');

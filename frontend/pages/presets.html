@@ -123,7 +123,8 @@
       card.querySelector('.export-btn').onclick = function(e) { e.stopPropagation(); exportPreset(p.id); };
       card.querySelector('.del-btn').onclick = function(e) {
         e.stopPropagation();
-        studioConfirm('Delete preset "' + p.name + '"?', function() {
+        studioConfirm('Delete preset "' + p.name + '"?', {danger: true}).then(function(ok) {
+          if (!ok) return;
           apiFetch('/api/admin/presets/' + p.id, {method: 'DELETE'}).then(function() { loadPresets(); });
         });
       };

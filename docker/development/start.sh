@@ -17,7 +17,8 @@ mkdir -p "${DATA_DIR}/catalogs" \
          "${DATA_DIR}/database" \
          "${DATA_DIR}/assets/input" \
          "${DATA_DIR}/assets/output" \
-         "${DATA_DIR}/llm/models"
+         "${DATA_DIR}/llm/models" \
+         "${STUDIO_DIR}/presets"
 
 # ── Fake ComfyUI tree ──
 # Mirrors real ComfyUI directory structure so model downloads land correctly.
