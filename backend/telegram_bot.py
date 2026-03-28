@@ -97,7 +97,11 @@ async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE)
         preset = await studio_get(f"/api/admin/presets/{preset_id}")
 
         context.user_data["preset"] = preset
-        context.user_data["state"] = "waiting_image"
+        context.user_data["placeholder_answers"] = {}
+
+        # Check for placeholders
+        placeholders = await studio_get(f"/api/admin/presets/{preset_id}/placeholders")
+        context.user_data["placeholders"] = placeholders
 
         wf_name = preset.get("workflow", {}).get("workflow_name", "?")
         desc = preset.get("description", "")
@@ -105,9 +109,26 @@ async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if desc:
             text += f"_{desc}_\n"
         text += f"\nWorkflow: `{wf_name}`\n"
-        text += "\n📷 Now send me a photo to use as input."
 
-        await query.edit_message_text(text, parse_mode="Markdown")
+        if placeholders:
+            context.user_data["state"] = "answering_placeholders"
+            context.user_data["current_placeholder"] = 0
+            await query.edit_message_text(text, parse_mode="Markdown")
+            await _ask_next_placeholder(update, context)
+        else:
+            context.user_data["state"] = "waiting_image"
+            text += "\n📷 Now send me a photo to use as input."
+            await query.edit_message_text(text, parse_mode="Markdown")
+
+    elif data.startswith("ph_answer:"):
+        # Handle choice placeholder answer
+        parts = data.split(":", 2)
+        ph_idx = int(parts[1])
+        answer = parts[2]
+        context.user_data["placeholder_answers"][str(ph_idx)] = answer
+        context.user_data["current_placeholder"] = ph_idx + 1
+        await query.answer()
+        await _ask_next_placeholder(update, context)
 
     elif data.startswith("confirm:"):
         await _launch_job(update, context)
@@ -117,8 +138,53 @@ async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("❌ Cancelled.")
 
 
+async def _ask_next_placeholder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask the next placeholder question, or move to image if done."""
+    placeholders = context.user_data.get("placeholders", [])
+    current = context.user_data.get("current_placeholder", 0)
+
+    if current >= len(placeholders):
+        # All answered — ask for image
+        context.user_data["state"] = "waiting_image"
+        chat_id = update.effective_chat.id
+        await context.bot.send_message(chat_id, "📷 Now send me a photo to use as input.")
+        return
+
+    ph = placeholders[current]
+    scene_label = f"Scena {ph['scene']}: " if ph.get("scene") else ""
+    question = f"{scene_label}{ph['question']}"
+
+    chat_id = update.effective_chat.id
+
+    if ph["options"]:
+        # Choice — inline buttons
+        buttons = []
+        for opt in ph["options"]:
+            buttons.append([InlineKeyboardButton(opt, callback_data=f"ph_answer:{ph['index']}:{opt}")])
+        await context.bot.send_message(
+            chat_id, question,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    else:
+        # Free text
+        context.user_data["state"] = "answering_text"
+        context.user_data["text_ph_index"] = ph["index"]
+        await context.bot.send_message(chat_id, f"{question}\n_(scrivi la risposta)_", parse_mode="Markdown")
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Any text message → show presets list."""
+    """Handle text — either placeholder answer or show presets."""
+    state = context.user_data.get("state")
+
+    if state == "answering_text":
+        # Free text placeholder answer
+        ph_idx = context.user_data.get("text_ph_index")
+        context.user_data["placeholder_answers"][str(ph_idx)] = update.message.text.strip()
+        context.user_data["current_placeholder"] = ph_idx + 1
+        context.user_data["state"] = "answering_placeholders"
+        await _ask_next_placeholder(update, context)
+        return
+
     await cmd_start(update, context)
 
 
@@ -165,6 +231,12 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     workflow_id = wf.get("workflow_id", "")
     params = dict(wf.get("params", {}))
     params["seed"] = -1
+
+    # Apply placeholder answers
+    answers = context.user_data.get("placeholder_answers", {})
+    if answers:
+        from presets_api import apply_placeholders
+        params = apply_placeholders(params, answers)
 
     status_msg = await query.edit_message_text("⏳ Uploading and queuing job...")
 

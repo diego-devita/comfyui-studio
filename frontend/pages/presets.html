@@ -144,10 +144,36 @@
     var wf = preset.workflow || {};
     var workflowId = wf.workflow_id || '';
 
+    // Fetch placeholders
+    var phResp = await apiFetch('/api/admin/presets/' + presetId + '/placeholders');
+    var placeholders = phResp.ok ? await phResp.json() : [];
+
+    var phHtml = '';
+    if (placeholders.length > 0) {
+      phHtml = '<div style="margin-bottom:12px;">';
+      placeholders.forEach(function(ph) {
+        var label = (ph.scene ? 'Scena ' + ph.scene + ': ' : '') + ph.question;
+        phHtml += '<div style="margin-bottom:8px;">';
+        phHtml += '<label style="font-family:var(--mono);font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">' + escHtml(label) + '</label>';
+        if (ph.options && ph.options.length > 0) {
+          phHtml += '<select class="ph-input" data-ph-index="' + ph.index + '" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;">';
+          ph.options.forEach(function(opt) {
+            phHtml += '<option value="' + escHtml(opt) + '">' + escHtml(opt) + '</option>';
+          });
+          phHtml += '</select>';
+        } else {
+          phHtml += '<input type="text" class="ph-input" data-ph-index="' + ph.index + '" placeholder="Scrivi..." style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;">';
+        }
+        phHtml += '</div>';
+      });
+      phHtml += '</div>';
+    }
+
     $runBox.innerHTML =
       '<button class="close-btn" onclick="document.getElementById(\'runOverlay\').classList.remove(\'visible\')">&times;</button>' +
       '<h2>' + escHtml(preset.name || preset.id) + '</h2>' +
       '<p style="color:var(--muted);font-size:11px;margin-bottom:16px;">' + escHtml(preset.description || '') + '</p>' +
+      phHtml +
       '<div class="dropzone" id="presetDropzone">' +
         '<input type="file" id="presetImageInput" accept="image/*" style="display:none;">' +
         '<div>Drop image here or click to browse</div>' +
@@ -258,10 +284,34 @@
       btn.textContent = 'Queuing...';
       var status = document.getElementById('presetStatus');
 
+      // Collect placeholder answers
+      var phAnswers = {};
+      document.querySelectorAll('.ph-input').forEach(function(el) {
+        phAnswers[el.dataset.phIndex] = el.value;
+      });
+
       for (var i = 0; i < count; i++) {
         var params = JSON.parse(JSON.stringify(wf.params || {}));
         if (seed !== -1) params.seed = seed + i;
         else params.seed = -1;
+
+        // Apply placeholder replacements
+        if (Object.keys(phAnswers).length > 0) {
+          var phIdx = [0];
+          var replacer = function(match) {
+            var val = phAnswers[String(phIdx[0])];
+            phIdx[0]++;
+            return val !== undefined ? val : match;
+          };
+          var phRe = /\[\[.+?\]\]/g;
+          if (params.scenes) {
+            params.scenes.forEach(function(s) {
+              s.prompt = (s.prompt || '').replace(phRe, replacer);
+            });
+          }
+          if (params.positive_prompt) params.positive_prompt = params.positive_prompt.replace(phRe, replacer);
+          if (params.negative_prompt) params.negative_prompt = params.negative_prompt.replace(phRe, replacer);
+        }
 
         if (existingImageName) params._existing_input_image = existingImageName;
         var formData = new FormData();
