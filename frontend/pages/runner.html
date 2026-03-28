@@ -2281,7 +2281,33 @@
       addBtn.onclick = addSlot;
       container.appendChild(addBtn);
 
-      addSlot();
+      // Check for prefill data
+      var prefillRaw = container.dataset.prefillLoras;
+      if (prefillRaw) {
+        try {
+          var prefillLoras = JSON.parse(prefillRaw);
+          prefillLoras.forEach(function(lora) {
+            addSlot();
+            var slots = slotsDiv.querySelectorAll('.lora-dyn-slot');
+            var lastSlot = slots[slots.length - 1];
+            if (lastSlot) {
+              var sel = lastSlot.querySelector('.lora-dyn-select');
+              if (sel) {
+                sel.value = lora.file || '';
+                sel.dispatchEvent(new Event('change'));
+              }
+              var str = lastSlot.querySelector('.lora-dyn-strength');
+              if (str && lora.strength != null) {
+                str.value = lora.strength;
+                str.dispatchEvent(new Event('input'));
+              }
+            }
+          });
+          delete container.dataset.prefillLoras;
+        } catch(e) { console.warn('LoRA dynamic prefill error', e); }
+      } else {
+        addSlot();
+      }
     }
 
     document.addEventListener('checkpoint-changed', function(e) {

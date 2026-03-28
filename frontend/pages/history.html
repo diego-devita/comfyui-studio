@@ -365,13 +365,16 @@
               escHtml(scene.prompt || '') + copyBtn(scene.prompt || '') +
               '<br><span style="color:var(--muted);font-size:11px;">' + (scene.duration || '?') + 's · seed: ' + seedDisplay + copyBtn(seedCopyVal) + '</span></td></tr>';
           });
-        } else if (key === 'loras' && Array.isArray(val)) {
+        } else if ((key === 'loras' || key === 'loras_high' || key === 'loras_low') && Array.isArray(val)) {
+          var loraLabel = key === 'loras_high' ? 'LoRA High' : key === 'loras_low' ? 'LoRA Low' : 'LoRA';
           val.forEach(function(lora, idx) {
-            var loraName = typeof lora === 'string' ? lora : (lora.pair_id || '?');
-            var strH = typeof lora === 'object' ? lora.strength_high : '';
-            var strL = typeof lora === 'object' ? lora.strength_low : '';
-            var strInfo = strH || strL ? ' H:' + (strH||'?') + ' L:' + (strL||'?') : '';
-            rows += '<tr><td>LoRA ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
+            var loraName = typeof lora === 'string' ? lora : (lora.file || lora.pair_id || '?');
+            var strInfo = '';
+            if (typeof lora === 'object') {
+              if (lora.strength != null) strInfo = ' str:' + lora.strength;
+              else if (lora.strength_high != null || lora.strength_low != null) strInfo = ' H:' + (lora.strength_high||'?') + ' L:' + (lora.strength_low||'?');
+            }
+            rows += '<tr><td>' + loraLabel + ' ' + (idx+1) + '</td><td>' + escHtml(loraName) + ' <span style="color:var(--muted);">' + escHtml(strInfo) + '</span></td></tr>';
           });
         } else if (key === 'seed') {
           // Single seed field (static workflows)
