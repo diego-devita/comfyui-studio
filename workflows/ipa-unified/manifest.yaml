@@ -1,0 +1,250 @@
+id: ipa-unified
+category: ipa
+name: "UNIFIED IP-Adapter / FaceID"
+version: 1
+date: "2026-03-28 02:00"
+type: dynamic
+description: "Unified IP-Adapter and FaceID workflow. Switch between IP-Adapter (style/composition transfer) and FaceID (facial identity preservation). Checkpoint, LoRA stack, reference image, batch generation."
+author: ""
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+    lora_injection: true
+  - block: ipa_apply
+    file: "ipa_apply.json"
+    condition: "mode == ipa"
+  - block: faceid_apply
+    file: "faceid_apply.json"
+    condition: "mode == faceid"
+  - block: generate
+    file: "generate.json"
+
+inputs:
+  - id: mode
+    name: "Mode"
+    type: select
+    options:
+      - {label: "IP-Adapter (style/composition)", value: "ipa"}
+      - {label: "FaceID (face identity)", value: "faceid"}
+    default: "ipa"
+    tooltip: "IP-Adapter transfers visual style and composition from the reference image. FaceID uses facial recognition to preserve identity — stronger face preservation, best for character consistency."
+
+  - id: image
+    name: "Reference Image"
+    type: image
+    required: true
+    tooltip: "The face or subject to transfer. IP-Adapter uses visual features, FaceID uses facial geometry."
+
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    required: true
+    tooltip: "The base model. Must be SD 1.5 or SDXL-based — FLUX is not supported by IP-Adapter."
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker_dynamic
+    max_loras: 5
+    tooltip: "Optional style/concept LoRAs."
+
+  - id: ipa_preset
+    name: "IP-Adapter Preset"
+    type: select
+    options:
+      - {label: "PLUS (high strength)", value: "PLUS (high strength)"}
+      - {label: "PLUS FACE (portraits)", value: "PLUS FACE (portraits)"}
+      - {label: "STANDARD (medium)", value: "STANDARD (medium strength)"}
+      - {label: "VIT-G (medium)", value: "VIT-G (medium strength)"}
+      - {label: "LIGHT - SD1.5 only", value: "LIGHT - SD1.5 only (low strength)"}
+    default: "PLUS FACE (portraits)"
+    tooltip: "Which IP-Adapter model variant. Only used in IP-Adapter mode."
+
+  - id: ipa_weight
+    name: "IP-Adapter Weight"
+    type: float
+    min: 0.0
+    max: 2.0
+    step: 0.05
+    default: 0.8
+    tooltip: "How strongly the reference influences output. 0.5-0.7 = balanced, 0.8-1.0 = strong."
+
+  - id: ipa_start
+    name: "IP-Adapter Start"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 0.0
+    tooltip: "When IP-Adapter kicks in. 0.0 = from start."
+
+  - id: ipa_end
+    name: "IP-Adapter End"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 1.0
+    tooltip: "When IP-Adapter stops. 1.0 = until end."
+
+  - id: faceid_preset
+    name: "FaceID Preset"
+    type: select
+    options:
+      - {label: "FACEID PLUS V2 (recommended)", value: "FACEID PLUS V2"}
+      - {label: "FACEID", value: "FACEID"}
+      - {label: "FACEID PLUS - SD1.5 only", value: "FACEID PLUS - SD1.5 only"}
+      - {label: "FACEID PORTRAIT", value: "FACEID PORTRAIT (style transfer)"}
+      - {label: "FACEID PORTRAIT UNNORM - SDXL only", value: "FACEID PORTRAIT UNNORM - SDXL only (strong)"}
+    default: "FACEID PLUS V2"
+    tooltip: "Which FaceID model. Only used in FaceID mode."
+
+  - id: faceid_lora_strength
+    name: "FaceID LoRA Strength"
+    type: float
+    min: 0.0
+    max: 2.0
+    step: 0.05
+    default: 0.6
+    tooltip: "Strength of the FaceID-specific LoRA. Only used in FaceID mode."
+
+  - id: faceid_weight
+    name: "FaceID Weight"
+    type: float
+    min: 0.0
+    max: 2.0
+    step: 0.05
+    default: 0.85
+    tooltip: "How strongly face identity influences generation."
+
+  - id: faceid_v2_weight
+    name: "FaceID V2 Weight"
+    type: float
+    min: 0.0
+    max: 2.0
+    step: 0.05
+    default: 0.85
+    tooltip: "Secondary FaceID embedding weight."
+
+  - id: clip_skip
+    name: "CLIP Skip"
+    type: int
+    min: -12
+    max: -1
+    default: -2
+    tooltip: "CLIP layers to skip."
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    required: true
+    default: ""
+    placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes the scene. The reference image provides the subject."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "bad quality, worst quality, low quality"
+    tooltip: "What to avoid."
+
+  - id: resolution
+    name: "Resolution"
+    type: resolution_picker
+    presets:
+      sd15: [{label: "512x512", w: 512, h: 512}, {label: "512x768", w: 512, h: 768}, {label: "768x512", w: 768, h: 512}]
+      sdxl: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      pony: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+    default: {w: 832, h: 1216}
+    tooltip: "Output image size."
+
+  - id: batch_size
+    name: "Batch Size"
+    type: int
+    min: 1
+    max: 100
+    default: 1
+    tooltip: "Number of images per pass."
+
+  - id: steps
+    name: "Steps"
+    type: int
+    min: 1
+    max: 100
+    default: 19
+    tooltip: "Denoising steps."
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 4.0
+    tooltip: "Prompt adherence."
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    options:
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "Euler", value: "euler"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+      - {label: "UniPC", value: "uni_pc"}
+    default: "euler_ancestral"
+    tooltip: "Denoising algorithm."
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+      - {label: "SGM Uniform", value: "sgm_uniform"}
+      - {label: "Simple", value: "simple"}
+    default: "normal"
+    tooltip: "Noise schedule."
+
+  - id: denoise
+    name: "Denoise"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 1.0
+    tooltip: "Keep at 1.0 — generating from empty latent."
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+    tooltip: "Random seed. -1 = random."
+
+outputs:
+  - id: image
+    name: "Output Images"
+    type: image
+
+required_models: []
+
+required_nodes:
+  - "CheckpointLoaderSimple"
+  - "CLIPSetLastLayer"
+  - "CLIPTextEncode"
+  - "EmptyLatentImage"
+  - "KSampler"
+  - "VAEDecode"
+  - "SaveImage"
+  - "LoadImage"
+  - "IPAdapterUnifiedLoader"
+  - "IPAdapterAdvanced"
+  - "IPAdapterUnifiedLoaderFaceID"
+  - "IPAdapterFaceID"
+  - "IPAdapterInsightFaceLoader"

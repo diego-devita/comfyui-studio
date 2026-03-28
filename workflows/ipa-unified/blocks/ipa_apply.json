@@ -1,0 +1,37 @@
+{
+  "nodes": {
+    "load_image": {
+      "inputs": {"image": "{{input_image}}"},
+      "class_type": "LoadImage",
+      "_meta": {"title": "Load Reference Image"}
+    },
+    "ipa_loader": {
+      "inputs": {
+        "model": "{{model}}",
+        "preset": "{{ipa_preset}}"
+      },
+      "class_type": "IPAdapterUnifiedLoader",
+      "_meta": {"title": "IP-Adapter Loader"}
+    },
+    "ipa_apply": {
+      "inputs": {
+        "model": ["ipa_loader", 0],
+        "ipadapter": ["ipa_loader", 1],
+        "image": ["load_image", 0],
+        "weight": "{{ipa_weight}}",
+        "weight_type": "linear",
+        "combine_embeds": "concat",
+        "start_at": "{{ipa_start}}",
+        "end_at": "{{ipa_end}}",
+        "embeds_scaling": "V only"
+      },
+      "class_type": "IPAdapterAdvanced",
+      "_meta": {"title": "IP-Adapter Apply"}
+    }
+  },
+  "imports": ["model"],
+  "exports": {
+    "model": {"node": "ipa_apply", "output": 0}
+  },
+  "variables": ["input_image", "ipa_preset", "ipa_weight", "ipa_start", "ipa_end"]
+}

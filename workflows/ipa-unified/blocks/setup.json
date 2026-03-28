@@ -1,0 +1,34 @@
+{
+  "nodes": {
+    "checkpoint": {
+      "inputs": {"ckpt_name": "{{checkpoint}}"},
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {"title": "Load Checkpoint"}
+    },
+    "clip_skip": {
+      "inputs": {
+        "stop_at_clip_layer": "{{clip_skip}}",
+        "clip": ["checkpoint", 1]
+      },
+      "class_type": "CLIPSetLastLayer",
+      "_meta": {"title": "CLIP Set Last Layer"}
+    },
+    "pos_prompt": {
+      "inputs": {"text": "{{positive_prompt}}", "clip": ["clip_skip", 0]},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Positive Prompt"}
+    },
+    "neg_prompt": {
+      "inputs": {"text": "{{negative_prompt}}", "clip": ["clip_skip", 0]},
+      "class_type": "CLIPTextEncode",
+      "_meta": {"title": "Negative Prompt"}
+    }
+  },
+  "exports": {
+    "model": {"node": "checkpoint", "output": 0},
+    "positive": {"node": "pos_prompt", "output": 0},
+    "negative": {"node": "neg_prompt", "output": 0},
+    "vae": {"node": "checkpoint", "output": 2},
+    "clip": {"node": "clip_skip", "output": 0}
+  }
+}

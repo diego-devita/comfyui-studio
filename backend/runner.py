@@ -382,6 +382,7 @@ async def _build_workflow(
             input_image = None
 
         form_params["_uploaded_image"] = uploaded_name or "input.png"
+        form_params["_has_input_image"] = uploaded_name is not None
         if isinstance(form_params.get("scenes"), str):
             form_params["scenes"] = json.loads(form_params["scenes"])
         if isinstance(form_params.get("loras"), str):

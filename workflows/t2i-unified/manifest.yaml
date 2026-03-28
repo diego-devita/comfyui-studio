@@ -1,0 +1,230 @@
+id: t2i-unified
+category: t2i
+name: "UNIFIED Text/Image to Image"
+version: 1
+date: "2026-03-28 02:00"
+type: dynamic
+description: "Unified T2I/I2I workflow. Checkpoint, LoRA stack, CLIP skip, optional input image (becomes I2I), optional hires fix, optional face detailer, batch generation."
+author: ""
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+    lora_injection: true
+    vae_override: true
+  - block: empty_latent
+    file: "empty_latent.json"
+    condition: "!_has_input_image"
+  - block: i2i_encode
+    file: "i2i_encode.json"
+    condition: "_has_input_image"
+  - block: generate
+    file: "generate.json"
+    repeat: "batch_count"
+  - block: hires
+    file: "hires.json"
+    condition: "hires_enabled"
+  - block: face_fix
+    file: "face_fix.json"
+    condition: "facefix_enabled"
+  - block: output
+    file: "output.json"
+
+inputs:
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    required: true
+    tooltip: "The base model. Determines style and quality of output."
+
+  - id: loras
+    name: "LoRAs"
+    type: lora_picker_dynamic
+    max_loras: 5
+    tooltip: "Optional style/concept LoRAs. Stack up to 5 with individual strength control."
+
+  - id: clip_skip
+    name: "CLIP Skip"
+    type: int
+    min: -12
+    max: -1
+    default: -2
+    tooltip: "CLIP layers to skip. -2 is standard for most models."
+
+  - id: vae_override
+    name: "VAE Override"
+    type: vae_picker
+    required: false
+    tooltip: "Override the checkpoint's built-in VAE. Only if you know a specific VAE works better."
+
+  - id: input_image
+    name: "Input Image (optional → I2I mode)"
+    type: image
+    required: false
+    tooltip: "If provided, switches to image-to-image mode. The image is VAE-encoded and used as the starting latent instead of empty noise. Adjust denoise to control how much of the original is preserved."
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    required: true
+    default: ""
+    placeholder: "masterpiece, best quality, ..."
+    tooltip: "Describes what you want to generate."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "ugly, deformed, noisy, blurry, low quality, worst quality, bad anatomy, bad hands"
+    tooltip: "What to avoid."
+
+  - id: resolution
+    name: "Resolution"
+    type: resolution_picker
+    presets:
+      sd15: [{label: "512x512", w: 512, h: 512}, {label: "512x768", w: 512, h: 768}, {label: "768x512", w: 768, h: 512}]
+      sdxl: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      pony: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      illustrious: [{label: "1024x1024", w: 1024, h: 1024}, {label: "832x1216", w: 832, h: 1216}, {label: "1216x832", w: 1216, h: 832}]
+      flux: [{label: "1024x1024", w: 1024, h: 1024}, {label: "768x1344", w: 768, h: 1344}, {label: "1344x768", w: 1344, h: 768}]
+    default: {w: 832, h: 1216}
+    tooltip: "Output size. Must match checkpoint training resolution. In I2I mode this is the empty latent size (ignored if input image is provided)."
+
+  - id: steps
+    name: "Steps"
+    type: int
+    min: 1
+    max: 100
+    default: 20
+    tooltip: "Denoising steps. 15-25 is the sweet spot."
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 7.0
+    tooltip: "Prompt adherence. Pony/Illustrious: 3-5. SD 1.5: 7-9."
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    options:
+      - {label: "Euler", value: "euler"}
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+      - {label: "UniPC", value: "uni_pc"}
+      - {label: "LMS", value: "lms"}
+    default: "euler"
+    tooltip: "Denoising algorithm."
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+      - {label: "SGM Uniform", value: "sgm_uniform"}
+      - {label: "Simple", value: "simple"}
+    default: "normal"
+    tooltip: "Noise schedule."
+
+  - id: denoise
+    name: "Denoise"
+    type: float
+    min: 0.0
+    max: 1.0
+    step: 0.05
+    default: 1.0
+    tooltip: "1.0 for T2I (full generation). For I2I: 0.3-0.5 = subtle changes, 0.5-0.7 = moderate rework, 0.8+ = heavy rework."
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    default: -1
+    tooltip: "-1 = random. With batch > 1, each gets seed + increment."
+
+  - id: batch_count
+    name: "Batch Count"
+    type: int
+    min: 1
+    max: 10
+    default: 1
+    tooltip: "Number of images to generate sequentially. Each with a different seed."
+
+  - id: hires_enabled
+    name: "Hires Fix"
+    type: boolean
+    default: false
+    tooltip: "Upscale and re-run KSampler at higher resolution."
+
+  - id: hires_scale
+    name: "Hires Scale"
+    type: float
+    min: 1.0
+    max: 2.5
+    step: 0.1
+    default: 1.5
+    tooltip: "Upscale factor for hires fix."
+
+  - id: hires_steps
+    name: "Hires Steps"
+    type: int
+    min: 1
+    max: 50
+    default: 15
+    tooltip: "Steps for the hires pass."
+
+  - id: hires_denoise
+    name: "Hires Denoise"
+    type: float
+    min: 0.1
+    max: 1.0
+    step: 0.05
+    default: 0.5
+    tooltip: "How much to regenerate during hires. 0.3-0.5 = refine, 0.6+ = rework."
+
+  - id: facefix_enabled
+    name: "Face Fix"
+    type: boolean
+    default: false
+    tooltip: "Detect and re-generate faces at higher detail."
+
+  - id: facefix_steps
+    name: "Face Fix Steps"
+    type: int
+    min: 1
+    max: 50
+    default: 20
+    tooltip: "Steps for face inpainting."
+
+  - id: facefix_denoise
+    name: "Face Fix Denoise"
+    type: float
+    min: 0.1
+    max: 1.0
+    step: 0.05
+    default: 0.4
+    tooltip: "How much to regenerate the face."
+
+outputs:
+  - id: image
+    name: "Output Image"
+    type: image
+
+required_models: []
+
+required_nodes:
+  - "CheckpointLoaderSimple"
+  - "CLIPSetLastLayer"
+  - "CLIPTextEncode"
+  - "EmptyLatentImage"
+  - "KSampler"
+  - "VAEDecode"
+  - "SaveImage"

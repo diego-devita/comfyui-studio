@@ -1,0 +1,22 @@
+{
+  "nodes": {
+    "load_image": {
+      "inputs": {"image": "{{input_image}}"},
+      "class_type": "LoadImage",
+      "_meta": {"title": "Load Input Image"}
+    },
+    "vae_encode": {
+      "inputs": {
+        "pixels": ["load_image", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEEncode",
+      "_meta": {"title": "VAE Encode Input"}
+    }
+  },
+  "imports": ["vae"],
+  "exports": {
+    "latent_image": {"node": "vae_encode", "output": 0}
+  },
+  "variables": ["input_image"]
+}

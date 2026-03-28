@@ -111,6 +111,8 @@ def _eval_condition(condition: str, params: dict) -> bool:
     if not condition:
         return True
     condition = condition.strip()
+    if condition.startswith("!"):
+        return not _eval_condition(condition[1:], params)
     for op in ("!=", "=="):
         if op in condition:
             left, right = condition.split(op, 1)

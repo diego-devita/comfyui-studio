@@ -1,0 +1,34 @@
+{
+  "nodes": {
+    "sampler": {
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{steps}}",
+        "cfg": "{{cfg}}",
+        "sampler_name": "{{sampler_name}}",
+        "scheduler": "{{scheduler}}",
+        "denoise": "{{denoise}}",
+        "model": "{{model}}",
+        "positive": "{{positive}}",
+        "negative": "{{negative}}",
+        "latent_image": "{{latent_image}}"
+      },
+      "class_type": "KSampler",
+      "_meta": {"title": "KSampler (Batch {{batch_num}})"}
+    },
+    "vae_decode": {
+      "inputs": {
+        "samples": ["sampler", 0],
+        "vae": "{{vae}}"
+      },
+      "class_type": "VAEDecode",
+      "_meta": {"title": "VAE Decode (Batch {{batch_num}})"}
+    }
+  },
+  "imports": ["model", "positive", "negative", "vae", "latent_image"],
+  "exports": {
+    "image": {"node": "vae_decode", "output": 0},
+    "latent": {"node": "sampler", "output": 0}
+  },
+  "variables": ["seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "batch_num"]
+}

@@ -1,0 +1,17 @@
+{
+  "nodes": {
+    "empty_latent": {
+      "inputs": {
+        "width": "{{width}}",
+        "height": "{{height}}",
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {"title": "Empty Latent ({{width}}x{{height}})"}
+    }
+  },
+  "exports": {
+    "latent_image": {"node": "empty_latent", "output": 0}
+  },
+  "variables": ["width", "height"]
+}
