@@ -297,6 +297,44 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
             ws.close()
         except Exception:
             pass
+        # If job never completed/errored via WS, check ComfyUI history as fallback
+        if job_record and job_record.get("status") in ("queued", "running"):
+            try:
+                import httpx as _hx
+                r = _hx.get(f"{COMFY_URL}/history/{prompt_id}", timeout=5)
+                if r.status_code == 200:
+                    hist = r.json().get(prompt_id, {})
+                    status_info = hist.get("status", {})
+                    if status_info.get("status_str") == "error":
+                        msgs = status_info.get("messages", [])
+                        err_msg = ""
+                        for m in msgs:
+                            if isinstance(m, (list, tuple)) and len(m) >= 2 and m[0] == "execution_error":
+                                err_data = m[1] if isinstance(m[1], dict) else {}
+                                err_msg = err_data.get("exception_message", str(m))
+                                break
+                        if not err_msg:
+                            err_msg = str(msgs)
+                        _mark_stalled(f"ComfyUI error: {err_msg[:200]}")
+                    elif status_info.get("status_str") == "success":
+                        # Completed but WS missed it — mark completed
+                        from datetime import datetime, timezone, timedelta
+                        now = datetime.now(timezone(timedelta(hours=1)))
+                        job_record["status"] = "completed"
+                        job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+                        hist_outputs = hist.get("outputs", {})
+                        best_video, best_images = _pick_best_output(hist_outputs)
+                        if best_video:
+                            job_record["output"] = best_video
+                        elif best_images:
+                            job_record["output"] = best_images[0]
+                        _save_job(job_record)
+                    else:
+                        _mark_stalled("WS listener ended without completion")
+                else:
+                    _mark_stalled("WS listener ended, ComfyUI history unavailable")
+            except Exception as _hist_err:
+                _mark_stalled(f"WS listener ended: {_hist_err}")
 
 
 async def _build_workflow(
