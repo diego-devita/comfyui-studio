@@ -121,39 +121,55 @@
       card.innerHTML =
         '<div style="display:flex;align-items:center;gap:6px;">' +
           '<h3 class="preset-name" style="flex:1;margin:0;">' + escHtml(p.name || p.id) + '</h3>' +
-          '<span class="preset-rename" style="cursor:pointer;opacity:0.3;font-size:12px;" title="Rename">&#9998;</span>' +
+          '<span class="preset-edit" style="cursor:pointer;opacity:0.3;font-size:12px;" title="Edit">&#9998;</span>' +
         '</div>' +
-        '<div class="desc">' + escHtml(p.description || '') + '</div>' +
+        '<div class="preset-id" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">id: ' + escHtml(p.id) + '</div>' +
+        '<div class="desc" style="margin-top:4px;">' + escHtml(p.description || '') + '</div>' +
         '<div class="actions">' +
           '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
           '<button class="btn btn--sm export-btn" data-id="' + escHtml(p.id) + '"><span class="icon icon-file-export icon-sm"></span></button>' +
           '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);font-size:11px;">Delete</button>' +
         '</div>';
 
-      card.querySelector('.preset-rename').onclick = function(e) {
+      card.querySelector('.preset-edit').onclick = function(e) {
         e.stopPropagation();
-        var h3 = card.querySelector('.preset-name');
-        var input = document.createElement('input');
-        input.type = 'text';
-        input.value = h3.textContent;
-        input.style.cssText = 'width:100%;padding:2px 6px;background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:14px;font-weight:bold;';
-        h3.replaceWith(input);
-        input.focus();
-        input.select();
+        var nameEl = card.querySelector('.preset-name');
+        var idEl = card.querySelector('.preset-id');
+        var descEl = card.querySelector('.desc');
+
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text'; nameInput.value = p.name || p.id;
+        nameInput.style.cssText = 'width:100%;padding:2px 6px;background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:14px;font-weight:bold;margin-bottom:4px;';
+
+        var idInput = document.createElement('input');
+        idInput.type = 'text'; idInput.value = p.id;
+        idInput.style.cssText = 'width:100%;padding:2px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);font-family:var(--mono);font-size:10px;margin-bottom:4px;';
+
+        var descInput = document.createElement('textarea');
+        descInput.rows = 2; descInput.value = p.description || '';
+        descInput.style.cssText = 'width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;resize:vertical;';
+
+        nameEl.replaceWith(nameInput);
+        idEl.replaceWith(idInput);
+        descEl.replaceWith(descInput);
+        nameInput.focus();
+        nameInput.select();
+
         function save() {
-          var newName = input.value.trim();
-          if (newName && newName !== p.name) {
-            apiFetch('/api/admin/presets/' + p.id + '/rename', {
-              method: 'PUT',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({name: newName})
-            }).then(function() { loadPresets(); });
-          } else {
-            loadPresets();
-          }
+          var newName = nameInput.value.trim();
+          var newId = idInput.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          var newDesc = descInput.value.trim();
+          if (!newName || !newId) { loadPresets(); return; }
+
+          apiFetch('/api/admin/presets/' + p.id + '/rename', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: newName, id: newId, description: newDesc})
+          }).then(function() { loadPresets(); });
         }
-        input.onblur = save;
-        input.onkeydown = function(ev) { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') loadPresets(); };
+        descInput.onblur = save;
+        nameInput.onkeydown = function(ev) { if (ev.key === 'Enter') { ev.preventDefault(); save(); } if (ev.key === 'Escape') loadPresets(); };
+        idInput.onkeydown = nameInput.onkeydown;
       };
       card.querySelector('.run-btn').onclick = function(e) { e.stopPropagation(); openRunDialog(p.id); };
       card.querySelector('.export-btn').onclick = function(e) { e.stopPropagation(); exportPreset(p.id); };

@@ -85,18 +85,36 @@ async def save_preset(request: Request):
 
 @router.put("/api/admin/presets/{preset_id}/rename")
 async def rename_preset(preset_id: str, request: Request):
-    """Rename a preset."""
+    """Update preset name, id, and/or description. Renames file if id changes."""
     body = await request.json()
-    new_name = body.get("name", "").strip()
-    if not new_name:
-        raise HTTPException(400, "Name is required")
     data = _load_preset(preset_id)
     if not data:
         raise HTTPException(404)
-    data["name"] = new_name
-    p = _presets_dir() / f"{preset_id}.json"
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-    return {"id": preset_id, "name": new_name}
+
+    new_name = body.get("name", "").strip()
+    new_id = body.get("id", "").strip()
+    new_desc = body.get("description")
+
+    if new_name:
+        data["name"] = new_name
+    if new_desc is not None:
+        data["description"] = new_desc
+
+    old_path = _presets_dir() / f"{preset_id}.json"
+
+    if new_id and new_id != preset_id:
+        if not re.match(r'^[a-zA-Z0-9_\-]+$', new_id):
+            raise HTTPException(400, "ID must be alphanumeric (a-z, 0-9, _, -)")
+        new_path = _presets_dir() / f"{new_id}.json"
+        if new_path.exists():
+            raise HTTPException(409, f"Preset '{new_id}' already exists")
+        data["id"] = new_id
+        new_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        old_path.unlink()
+        return {"id": new_id, "name": data["name"]}
+
+    old_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return {"id": preset_id, "name": data["name"]}
 
 
 @router.delete("/api/admin/presets/{preset_id}")
