@@ -105,12 +105,17 @@ def init_db():
             required_models TEXT DEFAULT '[]',
             required_nodes  TEXT DEFAULT '[]',
             "group"         TEXT DEFAULT '',
+            technical_notes TEXT DEFAULT '',
             synced_at       TEXT NOT NULL
         );
     """)
-    # Migration: add group column if missing
+    # Migration: add columns if missing
     try:
         conn.execute("ALTER TABLE workflows ADD COLUMN \"group\" TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE workflows ADD COLUMN technical_notes TEXT DEFAULT ''")
     except Exception:
         pass  # already exists
     conn.commit()
@@ -343,8 +348,9 @@ def sync_workflows_from_disk():
                 conn.execute("""
                     INSERT INTO workflows (id, name, category, type, version, date,
                                            description, author, inputs, outputs,
-                                           required_models, required_nodes, "group", synced_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                           required_models, required_nodes, "group",
+                                           technical_notes, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name=excluded.name, category=excluded.category, type=excluded.type,
                         version=excluded.version, date=excluded.date,
@@ -353,6 +359,7 @@ def sync_workflows_from_disk():
                         required_models=excluded.required_models,
                         required_nodes=excluded.required_nodes,
                         "group"=excluded."group",
+                        technical_notes=excluded.technical_notes,
                         synced_at=excluded.synced_at
                 """, (
                     wf_id, m.get("name", wf_id), m.get("category", ""),
@@ -363,6 +370,7 @@ def sync_workflows_from_disk():
                     json.dumps(m.get("required_models", []), ensure_ascii=False),
                     json.dumps(m.get("required_nodes", []), ensure_ascii=False),
                     m.get("group", ""),
+                    json.dumps(m.get("technical_notes", {}), ensure_ascii=False),
                     now,
                 ))
             except Exception as e:
@@ -395,7 +403,7 @@ def get_workflow(workflow_id: str) -> dict | None:
 def _row_to_workflow(row: sqlite3.Row) -> dict:
     """Convert a DB row to workflow dict with parsed JSON fields."""
     d = dict(row)
-    for field in ("inputs", "outputs", "required_models", "required_nodes"):
+    for field in ("inputs", "outputs", "required_models", "required_nodes", "technical_notes"):
         if d.get(field):
             try:
                 d[field] = json.loads(d[field])

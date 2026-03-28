@@ -771,9 +771,98 @@
     $wfDesc.textContent = manifest.description || '';
 
     buildForm(manifest.inputs || []);
+    buildTechnicalNotes(manifest.technical_notes);
     $content.style.display = '';
     $generateBtn.disabled = false;
     applyRerunData();
+  }
+
+  function buildTechnicalNotes(tn) {
+    var existing = document.getElementById('technicalNotesAccordion');
+    if (existing) existing.remove();
+    if (!tn || typeof tn !== 'object' || Object.keys(tn).length === 0) return;
+
+    var wrapper = document.createElement('div');
+    wrapper.id = 'technicalNotesAccordion';
+    wrapper.style.cssText = 'margin-top:20px;border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;';
+
+    var toggle = document.createElement('button');
+    toggle.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;background:var(--surface);border:none;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;';
+    toggle.innerHTML = '<span style="transition:transform 0.2s;" id="tnArrow">&#9654;</span> Technical Details';
+    var body = document.createElement('div');
+    body.style.cssText = 'display:none;padding:16px;background:var(--bg);font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text);';
+
+    toggle.onclick = function() {
+      var open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      document.getElementById('tnArrow').style.transform = open ? '' : 'rotate(90deg)';
+    };
+
+    // Pipeline
+    if (tn.pipeline) {
+      body.innerHTML += '<div style="margin-bottom:14px;"><div style="color:var(--accent);margin-bottom:4px;font-weight:bold;">Pipeline</div><div style="color:var(--muted);word-break:break-word;">' + escHtml(tn.pipeline) + '</div></div>';
+    }
+
+    // Grid: Models | Sampling | Post-processing
+    var grid = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">';
+
+    if (tn.model_loading) {
+      grid += '<div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);"><div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Models</div>';
+      for (var mk in tn.model_loading) {
+        grid += '<div><span style="color:var(--muted);">' + escHtml(mk) + ':</span> ' + escHtml(String(tn.model_loading[mk])) + '</div>';
+      }
+      grid += '</div>';
+    }
+
+    if (tn.sampling) {
+      grid += '<div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);"><div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Sampling</div>';
+      for (var sk in tn.sampling) {
+        grid += '<div><span style="color:var(--muted);">' + escHtml(sk) + ':</span> ' + escHtml(String(tn.sampling[sk])) + '</div>';
+      }
+      grid += '</div>';
+    }
+
+    if (tn.post_processing) {
+      grid += '<div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);"><div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Post-processing</div>';
+      for (var pk in tn.post_processing) {
+        grid += '<div><span style="color:var(--muted);">' + escHtml(pk) + ':</span> ' + escHtml(String(tn.post_processing[pk])) + '</div>';
+      }
+      grid += '</div>';
+    }
+
+    grid += '</div>';
+    body.innerHTML += grid;
+
+    // Output + Resources row
+    var infoRow = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">';
+    if (tn.output) {
+      infoRow += '<div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);"><div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Output</div>';
+      for (var ok in tn.output) {
+        infoRow += '<div><span style="color:var(--muted);">' + escHtml(ok) + ':</span> ' + escHtml(String(tn.output[ok])) + '</div>';
+      }
+      infoRow += '</div>';
+    }
+    if (tn.resources) {
+      infoRow += '<div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);"><div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Resources</div>';
+      for (var rk in tn.resources) {
+        infoRow += '<div><span style="color:var(--muted);">' + escHtml(rk) + ':</span> ' + escHtml(String(tn.resources[rk])) + '</div>';
+      }
+      infoRow += '</div>';
+    }
+    infoRow += '</div>';
+    body.innerHTML += infoRow;
+
+    // Notes
+    if (tn.notes && Array.isArray(tn.notes) && tn.notes.length > 0) {
+      var notesHtml = '<div style="color:var(--accent);margin-bottom:6px;font-weight:bold;">Notes</div><ul style="margin:0;padding-left:18px;color:var(--muted);">';
+      tn.notes.forEach(function(n) { notesHtml += '<li style="margin-bottom:4px;">' + escHtml(n) + '</li>'; });
+      notesHtml += '</ul>';
+      body.innerHTML += notesHtml;
+    }
+
+    wrapper.appendChild(toggle);
+    wrapper.appendChild(body);
+    $formPanel.appendChild(wrapper);
   }
 
   function buildForm(inputs) {

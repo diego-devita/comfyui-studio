@@ -90,6 +90,48 @@ outputs:
     type: video
     node_id: "94"
 
+technical_notes:
+  pipeline: "LoadImage → auto-scale (snap 16px) → WanImageToVideo encode (240x416 base) → dual UNET FP16 full precision (dedicated LightX2V weights, high+low noise) → ModelSamplingSD3 shift=11 → dual-pass KSamplerAdvanced (euler/simple, split at half) → VAEDecode → Remacri 4x neural upscale → Lanczos resize (1.5x) → RIFE 4x (16fps→60fps) → h264 MP4"
+  model_loading:
+    unet: "2x FP16 full precision (wan2.2_i2v_A14b_high/low_noise_lightx2v), ~28GB each. LightX2V-specific weights — no separate LoRA needed."
+    clip: "umt5_xxl FP32 (full precision for best text understanding)"
+    vae: "WAN 2.1 FP32"
+    lora: "None — acceleration is baked into the LightX2V model weights"
+    strategy: "All models loaded to GPU simultaneously. Requires 32GB+ VRAM."
+  sampling:
+    method: "Dual-pass — high noise model with noise enabled (returns leftover noise), low noise model without added noise (runs to completion)"
+    sampler: "euler"
+    scheduler: "simple"
+    total_steps: "User-configurable, split in half automatically"
+    split_at: "auto (total_steps / 2)"
+    shift: 11
+    cfg: 3.5
+    acceleration: "Baked into LightX2V weights — no LoRA overhead, native fast generation"
+  post_processing:
+    upscale_method: "Remacri 4x (4x_foolhardy_Remacri.pth neural upscaler) → Lanczos resize to 1.5x of input dimensions"
+    upscale_factor: "4x neural then 1.5x Lanczos (user-configurable)"
+    frame_interpolation: "RIFE 4x (rife49, ensemble mode, float32)"
+    frame_rate_in: 16
+    frame_rate_out: 60
+  output:
+    format: "h264 MP4"
+    crf: 19
+    resolution: "~1080p+ (240x416 base → 4x Remacri → 1.5x Lanczos)"
+    framerate: "60fps"
+  resources:
+    vram_peak: "~32GB+"
+    vram_notes: "FP16 full precision UNETs + FP32 CLIP + FP32 VAE + Remacri upscale model all in VRAM. Requires A100 or equivalent."
+    speed_notes: "Medium speed — fast generation (baked LightX2V) but heavy post-processing (4x neural upscale + 4x RIFE on high-res frames)"
+  notes:
+    - "shift=11 (vs 8 in FP8/Kijai): more aggressive early denoising, tuned specifically for LightX2V full-precision weights"
+    - "CFG 3.5 on both passes (higher than FP8's wired CFG): stronger prompt adherence at cost of slightly less natural motion"
+    - "240x416 generation base (very small latent): all quality comes from post-processing upscale chain, not from sampling resolution"
+    - "Remacri 4x neural upscale: sharper and more detailed than Lanczos, adds real texture detail. Slow but highest quality."
+    - "Post-processing chain: VAEDecode → ImageFromBatch (extract frames) → ImageListToImageBatch → Remacri 4x → Lanczos 1.5x → RIFE 4x"
+    - "FP32 CLIP and VAE (not FP8): maximum text encoding and decode quality at cost of memory"
+    - "Anything Everywhere / Prompts Everywhere nodes: broadcast model/clip/vae without spaghetti connections (utility only, no functional impact)"
+    - "No separate LoRA loading: LightX2V acceleration is baked into the UNET weights themselves, avoiding LoRA merge overhead"
+
 required_models:
   - "wan2.2_i2v_A14b_high_noise_lightx2v.safetensors"
   - "wan2.2_i2v_A14b_low_noise_lightx2v.safetensors"

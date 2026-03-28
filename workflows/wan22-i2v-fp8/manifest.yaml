@@ -90,6 +90,46 @@ outputs:
     type: video
     node_id: "28"
 
+technical_notes:
+  pipeline: "LoadImage → auto-scale to 480p (snap 16px) → WanImageToVideo encode → dual UNET FP8 (high+low noise) + LightX2V 4-step LoRA → ModelSamplingSD3 shift=8 → dual-pass KSamplerAdvanced (steps 0-4 high, 4-8 low) → VAEDecode → Lanczos upscale → RIFE 4x → h264 MP4"
+  model_loading:
+    unet: "2x FP8 quantized (wan2.2 high+low noise 14B), ~14GB each"
+    clip: "umt5_xxl FP8 scaled"
+    vae: "WAN 2.1 FP32"
+    lora: "LightX2V 4-step accelerator (high+low), strength 1.0"
+    strategy: "All models loaded to GPU simultaneously"
+  sampling:
+    method: "Dual-pass — high noise model handles coarse structure (steps 0-4), low noise model refines details (steps 4-8)"
+    sampler: "euler"
+    scheduler: "simple"
+    total_steps: 8
+    split_at: 4
+    shift: 8
+    cfg: "Not directly exposed (wired in graph)"
+    acceleration: "LightX2V LoRA reduces 20-30 native steps to 4-8"
+  post_processing:
+    upscale_method: "Lanczos"
+    upscale_factor: "User-configurable 1.0-2.0x (default 1.5)"
+    frame_interpolation: "RIFE 4x (rife49, ensemble mode, float32)"
+    frame_rate_in: 16
+    frame_rate_out: 60
+  output:
+    format: "h264 MP4"
+    crf: 19
+    resolution: "~720p (depends on upscale factor, 480p base)"
+    framerate: "60fps"
+  resources:
+    vram_peak: "~18GB"
+    vram_notes: "FP8 halves memory vs FP16. Both UNETs loaded simultaneously."
+    speed_notes: "Fastest of the three — 4-step LoRA + FP8 + no neural upscale"
+  notes:
+    - "FP8 quantization halves VRAM but may introduce subtle color/detail artifacts vs FP16"
+    - "shift=8 controls noise schedule scaling — higher = more aggressive early denoising, tuned for FP8 WAN weights"
+    - "Lanczos upscale is fast but softer than neural upscale (Remacri). Good for speed, not max quality."
+    - "RIFE ensemble mode gives higher quality interpolation at ~2x slower than fast mode"
+    - "480p generation base matches WAN training resolution — going higher causes artifacts"
+    - "Split sampling: high noise model captures motion/structure, low noise model adds fine detail and coherence"
+
 required_models:
   - "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
   - "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"

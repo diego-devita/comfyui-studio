@@ -79,6 +79,48 @@ outputs:
     type: video
     node_id: "60"
 
+technical_notes:
+  pipeline: "LoadImage → ImageResizeKJ (720x720 max, lanczos, center crop, divisible by 32) → WanVideoImageToVideoEncode (81 frames) → dual WanVideoModelLoader FP8 Kijai format (high+low noise) → WanVideoBlockSwap (20 blocks to CPU) → LightX2V LoRA (high: strength 3, low: strength 1) → WanVideoSampler dual-pass (6 steps, split at 3, dpm++_sde) → WanVideoDecode → h264 MP4"
+  model_loading:
+    unet: "2x FP8 Kijai format (Wan2_2-I2V-A14B HIGH+LOW), fp16_fast base + fp8_e4m3fn_scaled quant"
+    clip: "umt5-xxl BF16, loaded to offload_device with force_offload"
+    vae: "WAN 2.1 BF16, no tiling"
+    lora: "LightX2V accelerator BF16 — strength 3 on high noise, strength 1 on low noise"
+    strategy: "Models loaded to offload_device (CPU), swapped to GPU per-block during inference. SageAttention enabled."
+  sampling:
+    method: "Dual-pass — high noise model (steps 0-3), low noise model (steps 3-6)"
+    sampler: "dpm++_sde"
+    scheduler: "CreateCFGScheduleFloatList"
+    total_steps: 6
+    split_at: 3
+    shift: 8
+    cfg: "Flat 2.0 applied only to first 1% of steps (effectively CFG-free generation)"
+    acceleration: "LightX2V LoRA with asymmetric strengths (3 high / 1 low) for aggressive coarse-pass acceleration"
+  post_processing:
+    upscale_method: "None"
+    upscale_factor: "N/A"
+    frame_interpolation: "None"
+    frame_rate_in: 16
+    frame_rate_out: 16
+  output:
+    format: "h264 MP4"
+    crf: 19
+    resolution: "~480p native (720px max input resize)"
+    framerate: "16fps (native, no interpolation)"
+  resources:
+    vram_peak: "~12-14GB"
+    vram_notes: "Block swap offloads 20 transformer blocks to CPU. Drastically reduces VRAM at cost of speed (PCIe transfer overhead per step)."
+    speed_notes: "Slowest of the three — block swap CPU↔GPU transfers add 2-3x overhead. Trade-off for low VRAM."
+  notes:
+    - "Block swap (20 blocks): enables running on GPUs with ~16GB VRAM by offloading most of the model to system RAM"
+    - "SageAttention: optimized attention kernel, faster than default PyTorch attention"
+    - "Torch compile available but not active by default (inductor backend configured). Speeds up repeated runs."
+    - "dpm++_sde sampler (vs euler in FP8/LightX2V): slightly different noise character, may produce smoother motion"
+    - "CFG schedule flat 2.0 at 1% then off: near-zero classifier-free guidance, relies on model quality alone"
+    - "Asymmetric LoRA strengths (3/1): high noise pass gets aggressive acceleration, low noise pass gets gentle refinement"
+    - "No frame interpolation or upscale: output is raw 480p 16fps. Add RIFE + upscale externally if needed."
+    - "720px max resize with center crop and divisible-by-32 constraint: matches Kijai wrapper's requirements"
+
 required_models:
   - "WanVideo/2_2/Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors"
   - "WanVideo/2_2/Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors"
