@@ -170,7 +170,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                 continue
 
             msg_type = msg.get("type")
-            data = msg.get("data", {})
+            data = msg.get("data") or {}
 
             if data.get("prompt_id") != prompt_id:
                 continue
@@ -296,7 +296,7 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
 
             elif msg_type == "executed":
                 exec_node = str(data.get("node", ""))
-                output_data = data.get("output", {})
+                output_data = data.get("output") or {}
                 if "node_outputs" not in state:
                     state["node_outputs"] = {}
                 for key in ("images", "gifs", "videos"):
