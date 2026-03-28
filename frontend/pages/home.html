@@ -349,6 +349,7 @@
     <div class="sys-info" id="sysInfo">
       <div id="comfyStatus"><span class="status-dot green"></span>ComfyUI: loading...</div>
       <div id="dbStatus"></div>
+      <div id="botStatus"></div>
       <div id="diskInfo">Disk: --</div>
     </div>
   </div>
@@ -506,6 +507,21 @@
         dbHtml += ' <a href="' + db.browser_url + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Explore database"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
       }
       $dbStatus.innerHTML = dbHtml;
+    }
+
+    // Telegram bot status
+    var $botStatus = document.getElementById('botStatus');
+    if ($botStatus) {
+      var bot = data.telegram_bot || {};
+      if (bot.running) {
+        var botHtml = dotHtml('green', 'Telegram Bot: Running');
+        if (bot.name) {
+          botHtml += ' <a href="https://t.me/' + bot.name + '" target="_blank" style="text-decoration:none;margin-left:4px;" title="Open @' + bot.name + '"><span class="icon icon-external-link icon-sm" style="vertical-align:-1px;"></span></a>';
+        }
+        $botStatus.innerHTML = botHtml;
+      } else {
+        $botStatus.innerHTML = dotHtml('gray', 'Telegram Bot: Not configured');
+      }
     }
 
     // Disk info

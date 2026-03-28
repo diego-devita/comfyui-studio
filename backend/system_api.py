@@ -345,6 +345,10 @@ async def system_status():
             "tables": _get_db_counts(),
             "browser_url": "http://localhost:8002/" if DEV_MODE else None,
         },
+        "telegram_bot": {
+            "running": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+            "name": os.environ.get("TELEGRAM_BOT_NAME", ""),
+        },
     }
 
 
@@ -741,6 +745,7 @@ _ENV_GROUPS = [
         ("CIVITAI_API_KEY", True,  "",                 "CivitAI API token — used for model downloads and metadata fetches"),
         ("HF_TOKEN",        True,  "",                 "HuggingFace token — required for gated models (Flux, WAN, etc.)"),
         ("TELEGRAM_BOT_TOKEN", True, "",               "Telegram bot token from @BotFather — enables Telegram bot for running presets"),
+        ("TELEGRAM_BOT_NAME",  False, "",              "Telegram bot username (without @) — used for link in home page"),
     ]),
     ("paths", "Paths", [
         ("STUDIO_DIR",        False, "/workspace/studio",   "Root directory for all Studio data on the volume"),
