@@ -2141,7 +2141,7 @@
     container.innerHTML = '<div style="color:var(--muted);font-size:12px;">Loading LoRAs...</div>';
 
     var allModels = null;
-    var currentBase = '';
+    var currentBase = input.base_model || manifest.base_model || '';
 
     Promise.all([
       apiFetch('/api/admin/models').then(function(r) { return r.json(); }),
