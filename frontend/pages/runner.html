@@ -631,6 +631,9 @@
         <option value="file">File</option>
         <option value="clipboard">Clipboard</option>
       </select>
+      <button class="btn btn--sm" id="savePresetBtn" type="button" style="margin-left:auto;">
+        <span class="icon icon-star-regular icon-sm" style="vertical-align:-1px;"></span> Save Preset
+      </button>
       <span id="ioStatus" style="font-family:var(--mono);font-size:11px;color:var(--success);opacity:0;transition:opacity 0.3s;"></span>
     </div>
 
@@ -2700,6 +2703,43 @@
         exportBuild(format);
       }
     });
+  });
+
+  // ── Save Preset ──
+  document.getElementById('savePresetBtn').addEventListener('click', async function() {
+    var params = gatherCurrentParams();
+    // Remove image-related params — preset doesn't include images
+    delete params.input_image;
+    delete params.image;
+
+    var id = prompt('Preset ID (alphanumeric, no spaces):');
+    if (!id) return;
+    var desc = prompt('Description (optional):') || '';
+
+    try {
+      var resp = await apiFetch('/api/admin/presets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          id: id,
+          name: (manifest.name || workflowId) + ' — ' + id,
+          description: desc,
+          workflow: {
+            workflow_id: workflowId,
+            workflow_name: manifest.name || workflowId,
+            params: params
+          }
+        })
+      });
+      if (resp.ok) {
+        showToast('Preset saved: ' + id, 3000, 'success');
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Error: ' + (err.detail || resp.status), 5000, 'error');
+      }
+    } catch(e) {
+      if (e.message !== 'auth') showToast('Save failed: ' + e.message, 5000, 'error');
+    }
   });
 
   // ── Telemetry ──

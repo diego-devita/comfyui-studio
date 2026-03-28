@@ -65,6 +65,11 @@ async def serve_llm_page():
     return HTMLResponse(_www("llm.html").read_text())
 
 
+@app.get("/admin/presets", response_class=HTMLResponse)
+async def serve_presets_page():
+    return HTMLResponse(_www("presets.html").read_text())
+
+
 @app.get("/run/{workflow_id}", response_class=HTMLResponse)
 async def serve_runner(workflow_id: str):
     return HTMLResponse(_www("runner.html").read_text())

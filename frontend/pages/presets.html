@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Studio — Presets</title>
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/icons.css">
+<style>
+  main { max-width: 1200px; margin: 0 auto; }
+  .preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .preset-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+    padding: 16px; cursor: pointer; transition: border-color 0.15s;
+  }
+  .preset-card:hover { border-color: var(--accent); }
+  .preset-card h3 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
+  .preset-card .desc { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .preset-card .wf-tag { font-size: 10px; color: var(--accent); }
+  .preset-card .actions { display: flex; gap: 6px; margin-top: 10px; }
+  .run-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 100; justify-content: center; align-items: center;
+  }
+  .run-overlay.visible { display: flex; }
+  .run-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+    padding: 24px; width: 500px; max-width: 90vw;
+  }
+  .run-box h2 { margin: 0 0 16px; font-size: 16px; }
+  .dropzone { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 24px; text-align: center; cursor: pointer; margin-bottom: 12px; position: relative; color: var(--muted); font-size: 12px; }
+  .dropzone.dragover { border-color: var(--accent); }
+  .dropzone img { max-height: 120px; border-radius: 4px; margin-top: 8px; }
+  .api-code { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--muted); max-height: 200px; overflow-y: auto; margin-top: 16px; position: relative; }
+</style>
+</head>
+<body>
+<nav class="main-nav">
+  <a href="/home" class="nav-link">Home</a>
+  <a href="/admin/nodes" class="nav-link">Nodes</a>
+  <a href="/admin/models" class="nav-link">Models</a>
+  <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/workflows" class="nav-link">Workflows</a>
+  <a href="/admin/presets" class="nav-link active">Presets</a>
+  <a href="/admin/queue" class="nav-link">Queue</a>
+  <a href="/admin/history" class="nav-link">History</a>
+  <a href="/admin/assets" class="nav-link">Assets</a>
+  <a href="/admin/llm" class="nav-link">LLM</a>
+  <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
+  <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
+</nav>
+
+<header>
+  <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <small>Presets</small></div>
+</header>
+
+<main>
+  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
+    <label class="btn btn--sm" style="cursor:pointer;">
+      <span class="icon icon-file-import icon-sm" style="vertical-align:-1px;"></span> Import Preset
+      <input type="file" id="importPresetInput" accept=".json" style="display:none;">
+    </label>
+  </div>
+
+  <div id="loadingState" style="color:var(--muted);font-size:12px;">Loading presets...</div>
+  <div class="preset-grid" id="presetGrid" style="display:none;"></div>
+  <div id="emptyState" style="display:none;color:var(--muted);font-size:13px;">No presets saved. Create one from a workflow runner page.</div>
+</main>
+
+<!-- Run overlay -->
+<div class="run-overlay" id="runOverlay">
+  <div class="run-box" id="runBox"></div>
+</div>
+
+<script src="/static/js/shared.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  var presets = [];
+  var $grid = document.getElementById('presetGrid');
+  var $loading = document.getElementById('loadingState');
+  var $empty = document.getElementById('emptyState');
+  var $overlay = document.getElementById('runOverlay');
+  var $runBox = document.getElementById('runBox');
+
+  async function loadPresets() {
+    try {
+      var resp = await apiFetch('/api/admin/presets');
+      if (!resp.ok) return;
+      presets = await resp.json();
+      render();
+      $loading.style.display = 'none';
+    } catch(e) {}
+  }
+
+  function render() {
+    $grid.innerHTML = '';
+    if (presets.length === 0) {
+      $grid.style.display = 'none';
+      $empty.style.display = '';
+      return;
+    }
+    $empty.style.display = 'none';
+    $grid.style.display = '';
+
+    presets.forEach(function(p) {
+      var card = document.createElement('div');
+      card.className = 'preset-card';
+      card.innerHTML =
+        '<h3>' + escHtml(p.name || p.id) + '</h3>' +
+        '<div class="desc">' + escHtml(p.description || '') + '</div>' +
+        '<div class="wf-tag">' + escHtml(p.workflow_name || p.workflow_id || '') + '</div>' +
+        '<div class="actions">' +
+          '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
+          '<button class="btn btn--sm export-btn" data-id="' + escHtml(p.id) + '"><span class="icon icon-file-export icon-sm"></span></button>' +
+          '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);">&times;</button>' +
+        '</div>';
+
+      card.querySelector('.run-btn').onclick = function(e) { e.stopPropagation(); openRunDialog(p.id); };
+      card.querySelector('.export-btn').onclick = function(e) { e.stopPropagation(); exportPreset(p.id); };
+      card.querySelector('.del-btn').onclick = function(e) {
+        e.stopPropagation();
+        studioConfirm('Delete preset "' + p.name + '"?', function() {
+          apiFetch('/api/admin/presets/' + p.id, {method: 'DELETE'}).then(function() { loadPresets(); });
+        });
+      };
+
+      $grid.appendChild(card);
+    });
+  }
+
+  async function openRunDialog(presetId) {
+    var resp = await apiFetch('/api/admin/presets/' + presetId);
+    if (!resp.ok) { showToast('Failed to load preset', 3000, 'error'); return; }
+    var preset = await resp.json();
+    var wf = preset.workflow || {};
+    var workflowId = wf.workflow_id || '';
+
+    $runBox.innerHTML =
+      '<button class="close-btn" onclick="document.getElementById(\'runOverlay\').classList.remove(\'visible\')">&times;</button>' +
+      '<h2>' + escHtml(preset.name || preset.id) + '</h2>' +
+      '<p style="color:var(--muted);font-size:11px;margin-bottom:16px;">' + escHtml(preset.description || '') + '</p>' +
+      '<div class="dropzone" id="presetDropzone">' +
+        '<input type="file" id="presetImageInput" accept="image/*" style="display:none;">' +
+        '<div>Drop image here or click to browse</div>' +
+        '<img id="presetImagePreview" style="display:none;">' +
+        '<div id="presetImageName" style="font-size:10px;margin-top:4px;color:var(--accent);"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">' +
+        '<label style="font-family:var(--mono);font-size:12px;color:var(--muted);">Seed:</label>' +
+        '<input type="number" id="presetSeed" value="-1" style="width:180px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;">' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;">' +
+        '<button class="btn btn--sm" id="presetCountDown" type="button">-</button>' +
+        '<span id="presetCount" style="font-family:var(--mono);font-size:14px;min-width:20px;text-align:center;">1</span>' +
+        '<button class="btn btn--sm" id="presetCountUp" type="button">+</button>' +
+        '<button class="btn" id="presetGenBtn" style="margin-left:12px;">Generate</button>' +
+        '<span id="presetStatus" style="font-family:var(--mono);font-size:11px;color:var(--success);opacity:0;transition:opacity 0.3s;"></span>' +
+      '</div>' +
+      '<div class="api-code" style="margin-top:20px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+          '<span style="color:var(--accent);">API Call</span>' +
+          '<span class="icon icon-copy icon-sm" style="cursor:pointer;opacity:0.5;" id="copyApiCode" title="Copy"></span>' +
+        '</div>' +
+        '<pre id="apiCodePre" style="margin:0;"></pre>' +
+      '</div>';
+
+    // Wire dropzone
+    var dz = document.getElementById('presetDropzone');
+    var fileInput = document.getElementById('presetImageInput');
+    var preview = document.getElementById('presetImagePreview');
+    var fname = document.getElementById('presetImageName');
+    var selectedFile = null;
+
+    dz.onclick = function() { fileInput.click(); };
+    dz.ondragover = function(e) { e.preventDefault(); dz.classList.add('dragover'); };
+    dz.ondragleave = function() { dz.classList.remove('dragover'); };
+    dz.ondrop = function(e) { e.preventDefault(); dz.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); };
+    fileInput.onchange = function() { if (fileInput.files[0]) handleFile(fileInput.files[0]); };
+
+    function handleFile(f) {
+      if (!f) return;
+      selectedFile = f;
+      fname.textContent = f.name;
+      var reader = new FileReader();
+      reader.onload = function(ev) { preview.src = ev.target.result; preview.style.display = ''; };
+      reader.readAsDataURL(f);
+    }
+
+    // Count stepper
+    var count = 1;
+    var $count = document.getElementById('presetCount');
+    document.getElementById('presetCountDown').onclick = function() { if (count > 1) { count--; $count.textContent = count; } };
+    document.getElementById('presetCountUp').onclick = function() { count++; $count.textContent = count; };
+
+    // Generate
+    document.getElementById('presetGenBtn').onclick = async function() {
+      var seed = parseInt(document.getElementById('presetSeed').value) || -1;
+      var btn = document.getElementById('presetGenBtn');
+      btn.disabled = true;
+      btn.textContent = 'Queuing...';
+      var status = document.getElementById('presetStatus');
+
+      for (var i = 0; i < count; i++) {
+        var params = JSON.parse(JSON.stringify(wf.params || {}));
+        if (seed !== -1) params.seed = seed + i;
+        else params.seed = -1;
+
+        var formData = new FormData();
+        formData.append('params', JSON.stringify(params));
+        if (selectedFile) formData.append('input_image', selectedFile);
+
+        try {
+          var resp = await apiFetch('/api/run/' + encodeURIComponent(workflowId) + '/execute', {
+            method: 'POST', body: formData
+          });
+          if (!resp.ok) {
+            var err = await resp.json().catch(function() { return {}; });
+            showToast('Error: ' + (err.detail || resp.status), 5000, 'error');
+          }
+        } catch(e) {
+          showToast('Error: ' + e.message, 5000, 'error');
+        }
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Generate';
+      status.textContent = count + ' job(s) queued';
+      status.style.opacity = '1';
+      setTimeout(function() { status.style.opacity = '0'; }, 3000);
+    };
+
+    // API code
+    var apiParams = JSON.parse(JSON.stringify(wf.params || {}));
+    apiParams.seed = -1;
+    var curlCode = '// JavaScript (fetch)\n' +
+      'const formData = new FormData();\n' +
+      'formData.append("params", JSON.stringify(' + JSON.stringify(apiParams, null, 2) + '));\n' +
+      'formData.append("input_image", fileInput.files[0]);\n\n' +
+      'const resp = await fetch("/api/run/' + workflowId + '/execute", {\n' +
+      '  method: "POST",\n' +
+      '  headers: {"Cookie": "session=YOUR_SESSION"},\n' +
+      '  body: formData\n' +
+      '});\n' +
+      'const result = await resp.json();';
+    document.getElementById('apiCodePre').textContent = curlCode;
+    document.getElementById('copyApiCode').onclick = function() {
+      copyToClipboard(curlCode);
+      showToast('Copied', 1500, 'success');
+    };
+
+    $overlay.classList.add('visible');
+  }
+
+  $overlay.addEventListener('click', function(e) {
+    if (e.target === $overlay) $overlay.classList.remove('visible');
+  });
+
+  function exportPreset(id) {
+    window.location = '/api/admin/presets/' + id + '/export';
+  }
+
+  // Import
+  document.getElementById('importPresetInput').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var formData = new FormData();
+    formData.append('file', file);
+    apiFetch('/api/admin/presets/import', { method: 'POST', body: formData })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        showToast('Preset imported: ' + (data.id || ''), 3000, 'success');
+        loadPresets();
+      })
+      .catch(function(err) {
+        if (err.message !== 'auth') showToast('Import failed: ' + err.message, 5000, 'error');
+      });
+    e.target.value = '';
+  });
+
+  loadPresets();
+})();
+</script>
+</body>
+</html>

@@ -49,6 +49,9 @@ LLM_MODELS_JSON = CATALOGS_DIR / "llm.json"
 # Workflows — working copy outside git (editable on pod)
 WORKFLOWS_DIR = STUDIO_DIR / "workflows"
 
+# Presets — saved job templates
+PRESETS_DIR = STUDIO_DIR / "presets"
+
 # Assets (input/output for ComfyUI)
 ASSETS_DIR = STUDIO_DIR / "assets"
 ASSETS_INPUT_DIR = ASSETS_DIR / "input"
