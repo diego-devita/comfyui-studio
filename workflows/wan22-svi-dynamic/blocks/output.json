@@ -11,7 +11,7 @@
         "dtype": "float32",
         "torch_compile": false,
         "batch_size": 1,
-        "frames": "{{final_images}}"
+        "frames": "{{images}}"
       },
       "class_type": "RIFE VFI",
       "_meta": {"title": "RIFE 2x (16fps to 32fps)"}
@@ -34,7 +34,7 @@
       "_meta": {"title": "Export 32fps MP4"}
     }
   },
-  "imports": ["final_images"],
+  "imports": ["images"],
   "exports": {
     "video": {"node": "video_out", "output": 0}
   },
