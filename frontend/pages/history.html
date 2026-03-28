@@ -424,7 +424,7 @@
       actionsHtml += '<button class="btn btn--sm" onclick="rerunJob(_detailJob)">&#8635; Re-run</button>';
     }
     actionsHtml += '<button class="btn btn--sm" onclick="exportJobJson(_detailJob)">&#128230; Export JSON</button>';
-    actionsHtml += '<button class="btn btn--sm" onclick="downloadJobPackage(_detailJob)">&#128230; Download Package</button>';
+    actionsHtml += '<button class="btn btn--sm" id="dlPkgBtn" onclick="downloadJobPackage(_detailJob,this)">&#128230; Download Package</button>';
     actionsHtml += '</div>';
 
     // Build plain-text summary for copy
@@ -606,13 +606,15 @@
   };
 
   // Download Package: ZIP with job.json + input + output
-  window.downloadJobPackage = function(job) {
+  window.downloadJobPackage = function(job, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Downloading...'; }
     var a = document.createElement('a');
     a.href = '/api/admin/history/' + encodeURIComponent(job.prompt_id) + '/package';
     a.download = '';
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    setTimeout(function() {
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#128230; Download Package'; }
+    }, 3000);
   };
 
   // Fullscreen image viewer (sits on top of detail overlay)
