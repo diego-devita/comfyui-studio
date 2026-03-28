@@ -1820,9 +1820,23 @@
     var allModels = null;
     var currentBase = '';
 
-    apiFetch('/api/admin/models')
-      .then(function(r) { return r.json(); })
-      .then(function(data) { allModels = data; rebuildPicker(); });
+    Promise.all([
+      apiFetch('/api/admin/models').then(function(r) { return r.json(); }),
+      apiFetch('/api/admin/loras').then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      allModels = results[0];
+      var lorasData = results[1];
+      // Merge: from models take only "loras" category, from loras take all categories
+      var merged = [];
+      (allModels.categories || []).forEach(function(cat) {
+        if (cat.id === 'loras') merged.push(cat);
+      });
+      (lorasData.categories || []).forEach(function(cat) {
+        merged.push(cat);
+      });
+      allModels = {categories: merged};
+      rebuildPicker();
+    });
 
     function baseMatches(loraBase) {
       if (!currentBase || !loraBase) return false;
@@ -1835,12 +1849,14 @@
       container.innerHTML = '';
       if (!allModels) return;
 
-      // Collect all present LoRAs grouped by base_model
+      // Collect all present LoRAs grouped by base_model — dedupe by file
+      var seen = {};
       var groups = {};
       (allModels.categories || []).forEach(function(cat) {
-        if (cat.id !== 'loras') return;
         (cat.models || []).forEach(function(m) {
           if (m.status !== 'present') return;
+          if (seen[m.file]) return;
+          seen[m.file] = true;
           var mb = m.civitai_base_model || m.base_model || 'Other';
           if (!groups[mb]) groups[mb] = [];
           groups[mb].push(m);
