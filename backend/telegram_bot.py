@@ -227,30 +227,24 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     preset = context.user_data.get("preset", {})
     image_bytes = context.user_data.get("image_bytes")
     image_name = context.user_data.get("image_name", "input.jpg")
-    wf = preset.get("workflow", {})
-    workflow_id = wf.get("workflow_id", "")
-    params = dict(wf.get("params", {}))
-    params["seed"] = -1
-
-    # Apply placeholder answers
     answers = context.user_data.get("placeholder_answers", {})
-    if answers:
-        from presets_api import apply_placeholders
-        params = apply_placeholders(params, answers)
+    preset_id = preset.get("id", "")
 
     status_msg = await query.edit_message_text("⏳ Uploading and queuing job...")
 
     try:
-        # Execute
+        # Execute via preset run endpoint
         files = {"input_image": (image_name, image_bytes, "image/jpeg")}
-        data = {"params": json.dumps(params)}
+        form_data = {"seed": "-1"}
+        if answers:
+            form_data["answers"] = json.dumps(answers)
 
         async with httpx.AsyncClient(timeout=60) as c:
             r = await c.post(
-                f"{STUDIO_URL}/api/run/{workflow_id}/execute",
+                f"{STUDIO_URL}/api/admin/presets/{preset_id}/run",
                 headers=HEADERS,
                 files=files,
-                data=data,
+                data=form_data,
             )
             r.raise_for_status()
             result = r.json()
@@ -281,6 +275,16 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
             percent = status.get("percent", 0)
             node = status.get("node_title", "")
             eta = status.get("eta_seconds")
+
+            # Queued — waiting for execution slot
+            if st in ("queued", "pending"):
+                if last_percent != -2:
+                    last_percent = -2
+                    try:
+                        await status_msg.edit_text("⏳ *In coda* — waiting for execution slot...", parse_mode="Markdown")
+                    except Exception:
+                        pass
+                continue
 
             if st == "completed":
                 # Get result
@@ -326,12 +330,15 @@ async def _launch_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Update progress (only if changed)
             if percent != last_percent:
                 last_percent = percent
-                eta_str = f"{eta}s" if eta else "?"
-                text = (
-                    f"⏳ *Running* — {percent}%\n"
-                    f"Node: {node}\n"
-                    f"ETA: {eta_str}"
-                )
+                if percent == 0 and not node:
+                    text = "⏳ *Loading models...*"
+                else:
+                    eta_str = f"{eta}s" if eta else "?"
+                    text = (
+                        f"⏳ *Running* — {percent}%\n"
+                        f"Node: {node}\n"
+                        f"ETA: {eta_str}"
+                    )
                 try:
                     await status_msg.edit_text(text, parse_mode="Markdown")
                 except Exception:
