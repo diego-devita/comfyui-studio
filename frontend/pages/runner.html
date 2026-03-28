@@ -613,10 +613,10 @@
     <!-- Dynamic form -->
     <!-- Import / Export -->
     <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
-      <label class="btn btn--sm" style="cursor:pointer;">
+      <button class="btn btn--sm" id="importBtn" type="button">
         <span class="icon icon-file-import icon-sm" style="vertical-align:-1px;"></span> Import Job
-        <input type="file" id="importJsonInput" accept=".json" style="display:none;">
-      </label>
+      </button>
+      <input type="file" id="importJsonInput" accept=".json" style="display:none;">
       <div style="position:relative;display:inline-block;" id="exportWrap">
         <button class="btn btn--sm" id="exportBtn" type="button">
           <span class="icon icon-file-export icon-sm" style="vertical-align:-1px;"></span> Export &#9662;
@@ -627,6 +627,11 @@
           <button class="export-opt" data-format="api" type="button" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer;">ComfyUI API</button>
         </div>
       </div>
+      <select id="ioTarget" style="padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;">
+        <option value="file">File</option>
+        <option value="clipboard">Clipboard</option>
+      </select>
+      <span id="ioStatus" style="font-family:var(--mono);font-size:11px;color:var(--success);opacity:0;transition:opacity 0.3s;"></span>
     </div>
 
     <div class="form-panel" id="formPanel"></div>
@@ -2556,38 +2561,59 @@
     }
   }
 
-  // Import JSON
+  // ── IO target + status ──
+  var $ioTarget = document.getElementById('ioTarget');
+  var $ioStatus = document.getElementById('ioStatus');
+  function flashStatus(msg) {
+    $ioStatus.textContent = msg;
+    $ioStatus.style.opacity = '1';
+    setTimeout(function() { $ioStatus.style.opacity = '0'; }, 2000);
+  }
+
+  function importJobData(jsonStr) {
+    try {
+      var job = JSON.parse(jsonStr);
+      var data = {params: job.params || {}, input_image: job.input_image || null};
+      if (job.seeds) {
+        if (data.params.scenes && Array.isArray(data.params.scenes)) {
+          data.params.scenes.forEach(function(s, i) {
+            var key = 'scene_' + (i + 1);
+            if (job.seeds[key] != null) s.seed = job.seeds[key];
+          });
+        }
+        for (var sid in job.seeds) {
+          if (/^scene_\d+$/.test(sid)) continue;
+          data.params[sid] = job.seeds[sid];
+        }
+      }
+      prefillForm(data);
+      document.getElementById('rerunBanner').style.display = 'block';
+      flashStatus('Imported');
+    } catch (err) {
+      showToast('Invalid JSON: ' + err.message, 5000, 'error');
+    }
+  }
+
+  // Import button
+  document.getElementById('importBtn').addEventListener('click', async function() {
+    if ($ioTarget.value === 'clipboard') {
+      try {
+        var text = await navigator.clipboard.readText();
+        importJobData(text);
+      } catch(err) {
+        showToast('Clipboard read failed: ' + err.message, 5000, 'error');
+      }
+    } else {
+      document.getElementById('importJsonInput').click();
+    }
+  });
+
+  // File import fallback
   document.getElementById('importJsonInput').addEventListener('change', function(e) {
     var file = e.target.files[0];
     if (!file) return;
     var reader = new FileReader();
-    reader.onload = async function(ev) {
-      try {
-        var job = JSON.parse(ev.target.result);
-        // Check if this job matches the current workflow
-        if (job.workflow_id && job.workflow_id !== workflowId) {
-          if (!await studioConfirm('This job was for "' + (job.workflow_name || job.workflow_id) + '" but you are on "' + workflowId + '". Pre-fill anyway?', {yes: 'Pre-fill anyway'})) return;
-        }
-        var data = {params: job.params || {}, input_image: job.input_image || null};
-        // Merge seeds
-        if (job.seeds) {
-          if (data.params.scenes && Array.isArray(data.params.scenes)) {
-            data.params.scenes.forEach(function(s, i) {
-              var key = 'scene_' + (i + 1);
-              if (job.seeds[key] != null) s.seed = job.seeds[key];
-            });
-          }
-          for (var sid in job.seeds) {
-            if (/^scene_\d+$/.test(sid)) continue;
-            data.params[sid] = job.seeds[sid];
-          }
-        }
-        prefillForm(data);
-        document.getElementById('rerunBanner').style.display = 'block';
-      } catch (err) {
-        showToast('Invalid JSON file: ' + err.message, 5000, 'error');
-      }
-    };
+    reader.onload = function(ev) { importJobData(ev.target.result); };
     reader.readAsText(file);
     e.target.value = '';
   });
@@ -2602,13 +2628,20 @@
   });
   document.addEventListener('click', function() { $exportMenu.style.display = 'none'; });
 
-  function downloadJson(data, filename) {
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  function outputJson(data, filename) {
+    var jsonStr = JSON.stringify(data, null, 2);
+    if ($ioTarget.value === 'clipboard') {
+      copyToClipboard(jsonStr);
+      flashStatus('Copied');
+    } else {
+      var blob = new Blob([jsonStr], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      flashStatus('Downloaded');
+    }
   }
 
   function gatherCurrentParams() {
@@ -2649,7 +2682,7 @@
         return;
       }
       var data = await resp.json();
-      downloadJson(data, workflowId + '_' + format + '.json');
+      outputJson(data, workflowId + '_' + format + '.json');
     } catch (e) {
       showToast('Export error: ' + e.message, 5000, 'error');
     }
@@ -2662,7 +2695,7 @@
       var format = btn.dataset.format;
       if (format === 'params') {
         var params = gatherCurrentParams();
-        downloadJson({ workflow_id: workflowId, params: params }, workflowId + '_params.json');
+        outputJson({ workflow_id: workflowId, params: params }, workflowId + '_params.json');
       } else {
         exportBuild(format);
       }
