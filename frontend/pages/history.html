@@ -423,9 +423,47 @@
     actionsHtml += '<button class="btn btn--sm" onclick="downloadJobPackage(_detailJob)">&#128230; Download Package</button>';
     actionsHtml += '</div>';
 
+    // Build plain-text summary for copy
+    var summary = job.workflow_name + ' (' + job.workflow_id + ')\n';
+    summary += 'Status: ' + job.status + '\n';
+    summary += 'Job ID: ' + job.prompt_id + '\n';
+    if (job.output_dir) summary += 'Output: comfyui-studio/' + job.output_dir + '/\n';
+    summary += 'Queued: ' + (job.queued_at || '--') + '\n';
+    if (job.started_at) summary += 'Started: ' + job.started_at + '\n';
+    if (job.finished_at) summary += 'Finished: ' + job.finished_at + '\n';
+    if (job.duration) summary += 'Duration: ' + job.duration + 's\n';
+    if (job.input_image) summary += 'Input Image: ' + job.input_image + '\n';
+    summary += '\n';
+    if (job.params) {
+      for (var sk in job.params) {
+        var sv = job.params[sk];
+        if (sk === 'scenes' && Array.isArray(sv)) {
+          sv.forEach(function(sc, si) {
+            var rsd = job.seeds && job.seeds['scene_' + (si+1)] ? job.seeds['scene_' + (si+1)] : sc.seed;
+            summary += 'Scene ' + (si+1) + ': ' + (sc.prompt || '') + ' (' + (sc.duration||'?') + 's, seed: ' + rsd + ')\n';
+          });
+        } else if (typeof sv === 'object') {
+          summary += sk + ': ' + JSON.stringify(sv) + '\n';
+        } else {
+          var displayVal = sv;
+          if (sk === 'seed' && sv == -1 && job.seeds && job.seeds.seed) displayVal = job.seeds.seed;
+          summary += sk + ': ' + displayVal + '\n';
+        }
+      }
+    }
+    if (job.seeds) {
+      var seedEntries = Object.entries(job.seeds).filter(function(e) { return e[0].startsWith('batch_'); });
+      if (seedEntries.length > 0) {
+        summary += '\nSeeds:\n';
+        seedEntries.forEach(function(e) { summary += '  ' + e[0] + ': ' + e[1] + '\n'; });
+      }
+    }
+    if (job.error) summary += '\nError: ' + job.error + '\n';
+    window._detailSummary = summary;
+
     $detailBox.innerHTML =
       '<button class="close-btn" onclick="document.getElementById(\'detailOverlay\').classList.remove(\'visible\')">&times;</button>' +
-      '<h2>Job Details</h2>' +
+      '<h2>Job Details <span class="icon icon-copy icon-sm" style="cursor:pointer;opacity:0.5;vertical-align:middle;margin-left:8px;" onclick="copyToClipboard(window._detailSummary);showToast(\'Job details copied\',2000,\'success\')" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.5" title="Copy job details"></span></h2>' +
       '<table class="detail-table">' + rows + '</table>' +
       outputHtml +
       actionsHtml;
