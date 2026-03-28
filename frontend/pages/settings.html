@@ -682,17 +682,37 @@
   $restartBtn.addEventListener('click', function() {
     studioConfirm('Restart the backend? Active jobs will be marked as stalled.', function() {
       $restartBtn.disabled = true;
-      $restartBtn.textContent = 'Restarting...';
+      $restartBtn.innerHTML = '<span class="spinner sm"></span> Restarting...';
       apiFetch('/api/admin/system/restart', { method: 'POST' })
-        .then(function() {
-          showToast('Backend restarting — page will reconnect automatically', 5000, 'info');
+        .then(async function() {
+          showToast('Backend restarting...', 0, 'info');
+          for (var i = 0; i < 30; i++) {
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            try {
+              var check = await apiFetch('/api/admin/system/status');
+              if (check.ok) { location.reload(); return; }
+            } catch (_) {}
+          }
+          showToast('Backend did not come back. Try refreshing manually.', 10000, 'error');
+          $restartBtn.disabled = false;
+          $restartBtn.textContent = 'Restart';
         })
         .catch(function(err) {
-          if (err.message !== 'auth') showToast('Restart failed: ' + err.message, 5000, 'error');
-        })
-        .finally(function() {
-          $restartBtn.disabled = false;
-          setTimeout(function() { $restartBtn.textContent = 'Restart'; }, 10000);
+          // Connection refused after restart is expected — start polling
+          if (err.message === 'auth') return;
+          (async function() {
+            showToast('Backend restarting...', 0, 'info');
+            for (var i = 0; i < 30; i++) {
+              await new Promise(function(r) { setTimeout(r, 2000); });
+              try {
+                var check = await apiFetch('/api/admin/system/status');
+                if (check.ok) { location.reload(); return; }
+              } catch (_) {}
+            }
+            showToast('Backend did not come back. Try refreshing manually.', 10000, 'error');
+            $restartBtn.disabled = false;
+            $restartBtn.textContent = 'Restart';
+          })();
         });
     });
   });
