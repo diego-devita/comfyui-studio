@@ -1185,6 +1185,91 @@ async def serve_gallery_thumb(item_id: str):
 
 
 # Legacy route: serves preview images (model card thumbnails in catalog list).
+_CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
+
+
+def download_single_civitai_image(civitai_image_id: int) -> dict | None:
+    """Download a single CivitAI image/video to the gallery store.
+
+    Uses tRPC image.get to fetch metadata + URL, then calls _gallery_download_one
+    which handles everything: download, ffmpeg thumbnail, metadata JSON, DB insert.
+
+    Returns the full gallery_images record from DB, or None on failure.
+    """
+    iid = str(civitai_image_id)
+
+    # Already downloaded?
+    if _gdb.image_exists(iid):
+        return _gdb.get_image(iid)
+
+    # Fetch image info from tRPC
+    key = _civitai_key()
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        inp = json.dumps({"json": {"id": civitai_image_id}})
+        r = httpx.get("https://civitai.com/api/trpc/image.get",
+                       params={"input": inp}, headers=headers, timeout=15)
+        if r.status_code != 200:
+            return None
+        data = r.json().get("result", {}).get("data", {}).get("json", {})
+    except Exception:
+        return None
+
+    if not data or not data.get("url"):
+        return None
+
+    # Build full URL from UUID
+    uuid = data["url"]
+    img_type = data.get("type", "image")
+    ext_hint = ".mp4" if img_type == "video" else ".jpeg"
+    if uuid.startswith("http"):
+        full_url = uuid
+    else:
+        full_url = f"{_CDN}{uuid}/original=true/{uuid}{ext_hint}"
+
+    # Build meta dict (same structure as _gallery_thread)
+    meta_data = data.get("metadata") or {}
+    meta = {
+        "civitai_id": data.get("id"),
+        "civitai_page": f"https://civitai.com/images/{civitai_image_id}",
+        "url": full_url,
+        "type": img_type,
+        "width": data.get("width"),
+        "height": data.get("height"),
+        "username": (data.get("user") or {}).get("username", ""),
+        "postId": data.get("postId"),
+        "postTitle": data.get("postTitle", ""),
+        "duration": meta_data.get("duration"),
+        "audio": meta_data.get("audio"),
+        "baseModel": data.get("baseModel"),
+        "createdAt": data.get("createdAt"),
+        "stats": data.get("stats"),
+        "_source": "community",
+    }
+
+    # Download using the existing gallery pipeline
+    stop = threading.Event()
+    result = _gallery_download_one(iid, full_url, meta, 0, None, True, stop)
+
+    if result == "ok" or result == "skipped":
+        return _gdb.get_image(iid)
+    return None
+
+
+@router.post("/api/admin/loras/gallery/download-single/{image_id}")
+async def gallery_download_single(image_id: int):
+    """Download a single CivitAI image/video to the gallery store by ID."""
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(download_single_civitai_image, image_id)
+        record = future.result(timeout=120)
+
+    if not record:
+        raise HTTPException(502, "Failed to download image from CivitAI")
+
+    return JSONResponse(dict(record))
+
+
 # These are NOT part of the gallery store — they stay in the old per-model directory.
 @router.get("/api/admin/loras/images/{model_id}/previews/{filename}")
 async def serve_preview(model_id: str, filename: str):

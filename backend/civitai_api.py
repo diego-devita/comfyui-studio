@@ -2,7 +2,6 @@
 
 import json
 import os
-import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -13,8 +12,6 @@ from fastapi.responses import JSONResponse
 
 from config import MODELS_BASE, MODELS_JSON, LORAS_JSON, _now_rome
 import catalogs as _catalogs
-from loras_api import _gallery_download_one, _url_to_id
-import gallery_db as _gdb
 
 router = APIRouter()
 
@@ -546,84 +543,3 @@ async def promote_to_style_lora(version_id: int):
                          "category": lora_cat_id})
 
 
-@router.post("/api/admin/civitai/download-asset/{image_id}")
-async def download_civitai_asset(image_id: int):
-    """Download a CivitAI image/video asset to the gallery flat store.
-
-    Reuses the existing gallery download infrastructure (_gallery_download_one).
-    Returns the local file path for linking in presets.
-    """
-    # Check if already downloaded
-    iid = str(image_id)
-    if _gdb.image_exists(iid):
-        row = _gdb.get_image(iid)
-        return JSONResponse({
-            "status": "exists",
-            "file_path": row["file_path"] if row else None,
-            "thumb_path": row.get("thumb_path") if row else None,
-        })
-
-    # Fetch image info from CivitAI REST API to get the URL
-    civitai_key = os.environ.get("CIVITAI_API_KEY", "")
-    headers = {"Authorization": f"Bearer {civitai_key}"} if civitai_key else {}
-
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"https://civitai.com/api/v1/images?id={image_id}&limit=1",
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(502, f"CivitAI API error: {e}")
-
-    items = data.get("items", [])
-    if not items:
-        raise HTTPException(404, "Image not found on CivitAI")
-
-    img = items[0]
-    url = img.get("url", "")
-    if not url:
-        raise HTTPException(404, "No URL for this image")
-
-    img_type = img.get("type", "image")
-    file_uuid = _url_to_id(url)
-
-    # Find model_id from the image's posted model (use 0 as fallback for unlinked images)
-    posted_model_id = 0
-    if img.get("meta") and isinstance(img["meta"], dict):
-        # REST meta sometimes has model info
-        pass
-
-    meta = {
-        "_source": "community",
-        "type": img_type,
-        "civitai_id": iid,
-        "url": url,
-        "width": img.get("width"),
-        "height": img.get("height"),
-    }
-
-    # Download using existing gallery infrastructure (sync, in a thread)
-    stop = threading.Event()
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(
-            _gallery_download_one,
-            iid, url, meta,
-            posted_model_id, None,
-            False, stop,
-        )
-        result = future.result(timeout=60)
-
-    if result == "failed":
-        raise HTTPException(502, "Failed to download asset")
-
-    # Get the saved file info from DB
-    row = _gdb.get_image(iid)
-    return JSONResponse({
-        "status": "downloaded" if result == "ok" else result,
-        "file_path": row["file_path"] if row else None,
-        "thumb_path": row.get("thumb_path") if row else None,
-    })
