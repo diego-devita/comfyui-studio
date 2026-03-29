@@ -99,6 +99,96 @@ def _enrich_resources(resources: list, civitai_map: dict) -> list:
     return enriched
 
 
+import re as _re
+
+
+def _parse_lora_tags(prompt: str) -> tuple[list[dict], str]:
+    """Parse <lora:Name:weight> tags from prompt. Returns (lora_list, clean_prompt)."""
+    loras = []
+    def _repl(m):
+        loras.append({"name": m.group(1), "weight": float(m.group(2)), "source": "prompt"})
+        return ""
+    clean = _re.sub(r"<lora:([^:>]+):([0-9.]+)>", _repl, prompt)
+    clean = _re.sub(r"\s{2,}", " ", clean).strip()  # collapse whitespace
+    clean = _re.sub(r"^[\s,]+|[\s,]+$", "", clean)   # trim leading/trailing commas
+    return loras, clean
+
+
+def _parse_embeddings(negative: str, meta_resources: list) -> list[dict]:
+    """Detect embedding names in negative prompt by matching against meta.resources."""
+    # Build hash lookup from meta.resources
+    hash_lookup = {}
+    for r in meta_resources:
+        if r.get("hash"):
+            hash_lookup[r.get("name", "").lower()] = r["hash"]
+
+    embeddings = []
+    for line in negative.split("\n"):
+        token = line.strip()
+        if not token:
+            continue
+        # Embedding names are typically single tokens with underscores, no commas
+        if _re.match(r"^[A-Za-z0-9_-]+$", token):
+            emb = {"name": token, "type": "embedding", "source": "negative_prompt"}
+            # Try to find hash
+            emb["hash"] = hash_lookup.get(token.lower(), "")
+            embeddings.append(emb)
+    return embeddings
+
+
+async def _resolve_by_hash(hash_val: str, client: httpx.AsyncClient, headers: dict) -> dict | None:
+    """Resolve a CivitAI model version by hash."""
+    if not hash_val:
+        return None
+    try:
+        resp = await client.get(f"https://civitai.com/api/v1/model-versions/by-hash/{hash_val}", headers=headers)
+        if resp.status_code == 200:
+            return resp.json()
+    except httpx.HTTPError:
+        pass
+    return None
+
+
+async def _resolve_detected_deps(detected: list, civitai_map: dict) -> list:
+    """Resolve detected dependencies via hash lookup, enrich with catalog status."""
+    civitai_key = os.environ.get("CIVITAI_API_KEY", "")
+    headers = {"Authorization": f"Bearer {civitai_key}"} if civitai_key else {}
+
+    enriched = []
+    async with httpx.AsyncClient(timeout=15) as client:
+        for dep in detected:
+            entry = dict(dep)
+
+            # Try hash resolution
+            resolved = await _resolve_by_hash(dep.get("hash", ""), client, headers)
+            if resolved:
+                entry["civitai_model_id"] = resolved.get("modelId")
+                entry["civitai_version_id"] = resolved.get("id")
+                entry["civitai_model_name"] = resolved.get("model", {}).get("name", "")
+                entry["civitai_version_name"] = resolved.get("name", "")
+                entry["civitai_base_model"] = resolved.get("baseModel", "")
+                entry["civitai_type"] = resolved.get("model", {}).get("type", "")
+                files = resolved.get("files", [])
+                primary = next((f for f in files if f.get("primary")), files[0] if files else {})
+                entry["civitai_file"] = primary.get("name", "")
+                entry["civitai_download_url"] = primary.get("downloadUrl", "")
+
+                # Check catalog
+                vid_str = str(resolved.get("id", ""))
+                catalog_entry = civitai_map.get(vid_str)
+                if catalog_entry:
+                    entry["catalog_status"] = catalog_entry["status"]
+                    entry["catalog_file"] = catalog_entry["file"]
+                    entry["catalog_dest"] = catalog_entry["dest"]
+                else:
+                    entry["catalog_status"] = "not_found"
+            else:
+                entry["catalog_status"] = "unknown"
+
+            enriched.append(entry)
+    return enriched
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -143,9 +233,45 @@ async def civitai_image_generation_data(image_id: int):
     enriched_resources = _enrich_resources(resources, civitai_map)
     detected_type = _detect_workflow_type(type_, process, techniques)
 
+    # Parse hidden dependencies from prompts
+    meta_resources = (meta or {}).get("resources", [])
+    prompt_text = (meta or {}).get("prompt", "")
+    negative_text = (meta or {}).get("negativePrompt", "")
+
+    prompt_loras, clean_prompt = _parse_lora_tags(prompt_text)
+    negative_embeddings = _parse_embeddings(negative_text, meta_resources)
+
+    # Also check if meta.resources has loras NOT in the top-level resources
+    top_level_names = {r.get("modelName", "").lower() for r in resources}
+    extra_from_meta = []
+    for mr in meta_resources:
+        mr_name = mr.get("name", "")
+        mr_type = mr.get("type", "").lower()
+        if mr_type in ("lora", "lycoris") and mr_name.lower() not in top_level_names:
+            # Not in structured resources — was only in meta
+            matched_prompt_lora = next((pl for pl in prompt_loras if pl["name"] == mr_name), None)
+            if not matched_prompt_lora:
+                extra_from_meta.append({
+                    "name": mr_name, "type": mr_type, "hash": mr.get("hash", ""),
+                    "source": "meta_resources",
+                })
+
+    all_detected = prompt_loras + negative_embeddings + extra_from_meta
+
+    # Add hashes from meta.resources to prompt loras
+    hash_lookup = {r.get("name", ""): r.get("hash", "") for r in meta_resources}
+    for dep in all_detected:
+        if not dep.get("hash"):
+            dep["hash"] = hash_lookup.get(dep["name"], "")
+
+    # Resolve all detected deps via CivitAI hash lookup
+    resolved_detected = await _resolve_detected_deps(all_detected, civitai_map)
+
     return JSONResponse({
         "raw": raw,
         "resources": enriched_resources,
+        "detected_deps": resolved_detected,
+        "clean_prompt": clean_prompt,
         "meta": meta,
         "type": type_,
         "process": process,
