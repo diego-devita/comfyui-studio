@@ -168,6 +168,10 @@
         '<div class="desc" style="margin-top:4px;">' + escHtml(p.description || '') + '</div>' +
         '<div class="actions">' +
           '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
+          (p.workflow && p.workflow.workflow_id
+            ? '<button class="btn btn--sm open-runner-btn" data-id="' + escHtml(p.id) + '" title="Open in Runner">&#9881; Open</button>' +
+              '<button class="btn btn--sm preview-json-btn" data-id="' + escHtml(p.id) + '" title="Preview compiled workflow">{}</button>'
+            : '') +
           '<button class="btn btn--sm export-btn" data-id="' + escHtml(p.id) + '"><span class="icon icon-file-export icon-sm"></span></button>' +
           '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);font-size:11px;">Delete</button>' +
         '</div>';
@@ -213,6 +217,10 @@
         idInput.onkeydown = nameInput.onkeydown;
       };
       card.querySelector('.run-btn').onclick = function(e) { e.stopPropagation(); openRunDialog(p.id); };
+      var openBtn = card.querySelector('.open-runner-btn');
+      if (openBtn) openBtn.onclick = function(e) { e.stopPropagation(); openInRunner(p); };
+      var previewBtn = card.querySelector('.preview-json-btn');
+      if (previewBtn) previewBtn.onclick = function(e) { e.stopPropagation(); previewWorkflowJson(p); };
       card.querySelector('.export-btn').onclick = function(e) { e.stopPropagation(); exportPreset(p.id); };
       card.querySelector('.del-btn').onclick = function(e) {
         e.stopPropagation();
@@ -464,6 +472,59 @@
   $overlay.addEventListener('click', function(e) {
     if (e.target === $overlay) $overlay.classList.remove('visible');
   });
+
+  function openInRunner(preset) {
+    if (!preset.workflow || !preset.workflow.workflow_id) {
+      showToast('No workflow linked to this preset', 3000, 'error');
+      return;
+    }
+    sessionStorage.setItem('preset_prefill', JSON.stringify(preset.workflow.params || {}));
+    window.open('/run/' + preset.workflow.workflow_id, '_blank');
+  }
+
+  async function previewWorkflowJson(preset) {
+    if (!preset.workflow || !preset.workflow.workflow_id) {
+      showToast('No workflow linked to this preset', 3000, 'error');
+      return;
+    }
+    try {
+      var resp = await apiFetch('/api/run/' + preset.workflow.workflow_id + '/build?format=api', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(preset.workflow.params || {}),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast(err.detail || 'Build failed: ' + resp.status, 5000, 'error');
+        return;
+      }
+      var json = await resp.json();
+      var dialog = document.createElement('dialog');
+      dialog.className = 'studio-dialog';
+      dialog.style.maxWidth = '700px';
+      dialog.innerHTML =
+        '<div class="studio-dialog-body">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+            '<strong>Compiled Workflow — ' + escHtml(preset.workflow.workflow_id) + '</strong>' +
+            '<button class="btn btn--sm" id="copyJsonBtn">Copy</button>' +
+          '</div>' +
+          '<pre class="api-code" style="max-height:60vh;overflow:auto;">' + escHtml(JSON.stringify(json, null, 2)) + '</pre>' +
+        '</div>' +
+        '<div class="studio-dialog-actions">' +
+          '<button class="studio-dialog-btn" id="closeJsonBtn">Close</button>' +
+        '</div>';
+      document.body.appendChild(dialog);
+      dialog.showModal();
+      dialog.querySelector('#closeJsonBtn').onclick = function() { dialog.close(); dialog.remove(); };
+      dialog.querySelector('#copyJsonBtn').onclick = function() {
+        navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+        showToast('Copied to clipboard', 2000);
+      };
+      dialog.addEventListener('click', function(e) { if (e.target === dialog) { dialog.close(); dialog.remove(); } });
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
+    }
+  }
 
   function exportPreset(id) {
     window.location = '/api/admin/presets/' + id + '/export';

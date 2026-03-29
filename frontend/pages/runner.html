@@ -785,6 +785,7 @@
     $content.style.display = '';
     $generateBtn.disabled = false;
     applyRerunData();
+    applyPresetPrefill();
   }
 
   function buildTechnicalNotes(tn) {
@@ -2560,6 +2561,20 @@
     history.replaceState(null, '', window.location.pathname);
     prefillForm(data);
     document.getElementById('rerunBanner').style.display = 'block';
+  }
+
+  function applyPresetPrefill() {
+    var raw = sessionStorage.getItem('preset_prefill');
+    if (!raw) return;
+    sessionStorage.removeItem('preset_prefill');
+    try {
+      var params = JSON.parse(raw);
+      prefillForm({ params: params });
+      document.getElementById('rerunBanner').style.display = 'block';
+      document.getElementById('rerunBanner').textContent = 'Pre-filled from preset';
+    } catch (e) {
+      console.warn('Failed to parse preset prefill:', e);
+    }
   }
 
   function prefillForm(data) {
