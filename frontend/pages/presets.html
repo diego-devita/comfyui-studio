@@ -185,11 +185,14 @@
       card.className = 'preset-card';
       var thumbHtml = '';
       if (p.civitai_image_id) {
-        var thumbUrl = '/api/admin/loras/gallery/thumb/' + p.civitai_image_id;
+        var isVideo = (p.detected_type === 'i2v' || p.detected_type === 't2v');
+        var thumbUrl = isVideo
+          ? '/api/admin/loras/gallery/thumb/' + p.civitai_image_id
+          : '/api/admin/loras/gallery/media/' + p.civitai_image_id;
         var mediaUrl = '/api/admin/loras/gallery/media/' + p.civitai_image_id;
-        thumbHtml = '<div class="preset-thumb" data-media="' + mediaUrl + '">' +
+        thumbHtml = '<div class="preset-thumb" data-media="' + mediaUrl + '" data-video="' + (isVideo ? '1' : '') + '">' +
           '<img src="' + thumbUrl + '" onerror="this.parentElement.style.display=\'none\'" loading="lazy">' +
-          (p.detected_type === 'i2v' || p.detected_type === 't2v' ? '<span class="preset-play">&#9654;</span>' : '') +
+          (isVideo ? '<span class="preset-play">&#9654;</span>' : '') +
         '</div>';
       }
 
@@ -219,7 +222,7 @@
           e.stopPropagation();
           var mediaUrl = thumb.dataset.media;
           var overlay = document.getElementById('mediaOverlay');
-          var isVideo = p.detected_type === 'i2v' || p.detected_type === 't2v';
+          var isVideo = !!thumb.dataset.video;
           if (isVideo) {
             overlay.innerHTML = '<video src="' + mediaUrl + '" controls autoplay style="max-width:90vw;max-height:90vh;border-radius:8px;"></video>';
           } else {
