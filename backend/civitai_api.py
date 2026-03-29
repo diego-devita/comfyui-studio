@@ -570,7 +570,7 @@ async def download_civitai_asset(image_id: int):
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
-                f"https://civitai.com/api/v1/images?imageId={image_id}&limit=1",
+                f"https://civitai.com/api/v1/images?id={image_id}&limit=1",
                 headers=headers,
             )
             resp.raise_for_status()
