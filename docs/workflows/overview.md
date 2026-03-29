@@ -29,7 +29,7 @@ workflows/wan22-i2v-fp8/
 - You want a direct 1:1 mapping between a ComfyUI graph and a Studio form
 - The number of nodes is fixed (no repeating or conditional sections)
 
-**Current static workflows:** WAN 2.2 I2V (FP8, Kijai, LightX2V)
+**Current static workflows:** WAN 2.2 I2V (FP8, Kijai, LightX2V) -- 3 workflows
 
 ### Dynamic Workflows
 
@@ -50,7 +50,21 @@ workflows/t2i-batch/
 - Sections of the graph repeat N times (e.g., multiple scenes, batch processing)
 - You want to compose reusable building blocks
 
-**Current dynamic workflows:** SVI Pro Multi-Scene, Text to Image, T2I Batch, I2I Batch, IP-Adapter Batch, FaceID Batch
+**Current dynamic workflows (9):**
+
+| ID | Name | Group |
+|----|------|-------|
+| `wan22-svi-dynamic` | SVI Pro Multi-Scene | Original |
+| `t2i-dynamic` | Text to Image | Original |
+| `t2i-batch` | T2I Batch | Original |
+| `t2i-unified` | T2I Unified | Unified |
+| `i2i-batch` | I2I Batch | Original |
+| `inpainting` | Inpainting | Original |
+| `ipa-batch` | IP-Adapter Batch | Original |
+| `ipa-unified` | IP-Adapter Unified | Unified |
+| `faceid-batch` | FaceID Batch | Original |
+
+Workflow groups: **Original** workflows were built first. **Unified** workflows consolidate multiple generation modes into a single form with conditional inputs.
 
 ## How They're Stored
 
@@ -60,11 +74,12 @@ The workflow registry lists all available workflows with their versions:
 
 ```json
 {
-  "version": 32,
-  "date": "2026-03-24 03:56",
+  "version": 44,
+  "date": "2026-03-29 17:00",
   "workflows": [
     {"id": "wan22-i2v-fp8", "version": 4, "date": "2026-03-23 01:40"},
-    {"id": "t2i-batch", "version": 3, "date": "2026-03-23 01:05"}
+    {"id": "t2i-batch", "version": 3, "date": "2026-03-23 01:05"},
+    {"id": "inpainting", "version": 1, "date": "2026-03-28 10:00"}
   ]
 }
 ```

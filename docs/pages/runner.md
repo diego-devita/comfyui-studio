@@ -6,11 +6,12 @@ The execution form at `/run/{workflow_id}`. Renders a dynamic form based on the 
 
 1. **Back link** -- "Back to Workflows" navigation
 2. **Workflow header** -- name, version badge, category badge, description
-3. **Form panel** -- input controls generated from the manifest
-4. **Generate row** -- multi-generate stepper and Generate button
-5. **Export dropdown** -- three export formats
-6. **Progress panel** -- shown during execution
-7. **Result panel** -- shown after completion
+3. **Saved prompts** -- quick-load dropdown of previously saved prompt sets
+4. **Form panel** -- input controls generated from the manifest
+5. **Generate row** -- multi-generate stepper and Generate button
+6. **Save Preset / Export dropdown** -- save as preset or export in three formats
+7. **Progress panel** -- shown during execution
+8. **Result panel** -- shown after completion
 
 ## Data Loading
 
@@ -149,6 +150,22 @@ After clicking Generate, a progress panel appears below the form showing:
 - **Percentage text** -- numeric percentage
 
 The panel uses an indeterminate animation (sliding gradient) while waiting for the first progress update, then switches to a determinate bar as node execution progresses.
+
+## Save Preset
+
+The runner form includes a "Save Preset" option that saves the current form values as a [preset](../presets/overview.md). The saved preset captures the workflow ID and all parameter values. See [Creating Presets](../presets/creating.md).
+
+## Prefill from Preset
+
+When navigating to the runner from the Presets page, the preset's parameters are stored in `sessionStorage`. On page load, the runner checks for prefill data and populates the form fields automatically. This allows running a preset with the option to modify parameters before executing.
+
+## Multi-Image Input
+
+For workflows that support multiple image inputs (such as inpainting), the form renders multiple image upload zones. Each zone follows the same drag-and-drop pattern as the single image input, with its own preview and file picker. Inpainting workflows include a separate mask image input.
+
+## Saved Prompts
+
+The runner supports saving and loading prompt sets. Saved prompts store text field values (positive prompt, negative prompt) so they can be quickly recalled without creating a full preset.
 
 ## Result Panel
 

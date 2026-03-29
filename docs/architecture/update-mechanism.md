@@ -102,8 +102,11 @@ The local `version.json` is updated with remote versions, **except** for skipped
 ### Step 9: Reload or Restart
 
 - If catalogs changed: `_reload_models()` refreshes in-memory catalog data
-- If backend changed: schedule `os.execv(uvicorn)` — the process replaces itself with a fresh uvicorn, loading the new code
+- If backend changed: schedule restart via `subprocess.Popen` + `os._exit(0)` -- spawns a new uvicorn process and terminates the current one
 - If no restart needed: exit maintenance mode immediately
+
+!!! note "Restart mechanism"
+    The backend restart no longer uses `os.execv`. Instead, it spawns a new uvicorn process with `subprocess.Popen(start_new_session=True)` and then calls `os._exit(0)` to terminate the current process. This avoids issues with `os.execv` and signal handlers in the uvicorn worker.
 
 ## Component Update Toggles
 
@@ -132,6 +135,7 @@ Certain files in the repository trigger a Docker image rebuild on GitHub Actions
 | `workflows/**` | No |
 | `version.json` | No |
 | `*.md` | No |
+| `chrome-extension/**` | No |
 | `docs/**` | No |
 | `mkdocs.yml` | No |
 

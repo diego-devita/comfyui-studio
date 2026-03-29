@@ -19,23 +19,28 @@ The root of all Studio data. Every path below is relative to this.
 │   ├── workflows/                  Latest workflow files from repo
 │   └── version.json                Latest version manifest from repo
 │
-├── backend/                        Working copy — served by uvicorn
+├── backend/                        Working copy — served by uvicorn (22 modules, ~9800 lines)
 │   ├── main.py                     Entry point, imports all modules
 │   ├── config.py                   All paths, env vars, app instance
 │   ├── auth.py                     Cookie auth, middleware, maintenance mode
 │   ├── catalogs.py                 Catalog loading, file resolver, version helper
-│   ├── db.py                       SQLite database layer
+│   ├── db.py                       SQLite database layer (jobs, settings, events, saved_prompts)
 │   ├── download.py                 Download queue, HF/CivitAI auth injection
 │   ├── events.py                   EventBus, WS pusher, startup tasks
 │   ├── runner.py                   ComfyUI WS listener, progress tracking
 │   ├── runner_api.py               Execute, upload, build, status endpoints
 │   ├── jobs_api.py                 Queue, history, assets, nodes endpoints
-│   ├── models_api.py               Model/LoRA download, delete, import, metadata
+│   ├── models_api.py               Model/LoRA download, delete, import, metadata, civitai-map
+│   ├── loras_api.py                LoRA CivitAI lookup, gallery download/serve, tag sync
+│   ├── civitai_api.py              CivitAI proxy: generation data, catalog add, promote-to-lora
+│   ├── gallery_db.py               Gallery image store SQLite (gallery.db)
+│   ├── presets_api.py              Preset save/load/delete/run, placeholder system
+│   ├── telegram_bot.py             Telegram bot: daemon thread, preset runner
 │   ├── llm_api.py                  LLM model catalog, server control, chat
 │   ├── llm_server.py               llama-server process manager
 │   ├── workflows_api.py            Workflow list, readiness check
 │   ├── workflows.py                Workflow loading, dynamic assembly, conversion
-│   ├── system_api.py               Status, update, telemetry, settings
+│   ├── system_api.py               Status, update, telemetry, settings, restart, telegram, chrome ext
 │   └── pages.py                    HTML page serve routes
 │
 ├── frontend/                       Working copy — served by backend
@@ -45,15 +50,17 @@ The root of all Studio data. Every path below is relative to this.
 │   │   └── icons.css               Font Awesome icons via CSS mask-image
 │   ├── js/
 │   │   └── shared.js               Shared utilities (apiFetch, showToast, etc.)
-│   └── pages/
+│   └── pages/                      13 pages
 │       ├── home.html               Dashboard
 │       ├── models.html             Model Manager
 │       ├── loras.html              LoRA Manager
 │       ├── llm.html                LLM Assistant
 │       ├── workflows.html          Workflow Manager
+│       ├── presets.html            Preset Manager
 │       ├── queue.html              Job Queue
 │       ├── history.html            Job History
 │       ├── assets.html             Asset Manager
+│       ├── nodes.html              Custom Nodes
 │       ├── settings.html           Settings
 │       ├── runner.html             Workflow Runner
 │       └── login.html              Login page
@@ -63,7 +70,7 @@ The root of all Studio data. Every path below is relative to this.
 │   ├── loras.json                  Style LoRA catalog (currently empty)
 │   └── llm.json                    LLM GGUF model catalog (3 models)
 │
-├── workflows/
+├── workflows/                      12 workflows
 │   ├── index.json                  Workflow registry with versions
 │   ├── wan22-i2v-lightx2v/         Static workflow (manifest + workflow.json)
 │   ├── wan22-i2v-fp8/              Static workflow
@@ -71,23 +78,41 @@ The root of all Studio data. Every path below is relative to this.
 │   ├── wan22-svi-dynamic/          Dynamic workflow (manifest + blocks/)
 │   ├── t2i-dynamic/                Dynamic workflow
 │   ├── t2i-batch/                  Dynamic workflow
+│   ├── t2i-unified/                Dynamic workflow
 │   ├── i2i-batch/                  Dynamic workflow
+│   ├── inpainting/                 Dynamic workflow (inpainting with mask)
 │   ├── ipa-batch/                  Dynamic workflow
+│   ├── ipa-unified/                Dynamic workflow
 │   └── faceid-batch/               Dynamic workflow
+│
+├── presets/                        Saved workflow configurations
+│   └── {preset_id}.json            One JSON file per preset
 │
 ├── assets/
 │   ├── input/                      Images uploaded as workflow inputs
-│   └── output/                     Generated outputs, organized by job
-│       └── comfyui-studio/
-│           └── {job_id}/
-│               ├── video/          Final video outputs
-│               ├── image/          Final image outputs
-│               ├── preview/        Preview images
-│               ├── intermediate/   Intermediate outputs
-│               └── .incomplete     Marker file during generation
+│   ├── output/                     Generated outputs, organized by job
+│   │   └── comfyui-studio/
+│   │       └── {job_id}/
+│   │           ├── video/          Final video outputs
+│   │           ├── image/          Final image outputs
+│   │           ├── preview/        Preview images
+│   │           ├── intermediate/   Intermediate outputs
+│   │           └── .incomplete     Marker file during generation
+│   └── images/                     Gallery image store (CivitAI images)
+│       ├── gallery.db              SQLite index for gallery images
+│       ├── lookup/{model_id}/      LoRA preview thumbnails
+│       │   └── previews/
+│       ├── models/{model_id}/      Original/card images grouped by model
+│       │   ├── {id}.mp4            Media file
+│       │   ├── {id}.thumb.jpg      Video thumbnail
+│       │   └── {id}.json           Full CivitAI metadata
+│       └── media/NNN/NNN/          Community images (sharded)
+│           ├── {id}.mp4
+│           ├── {id}.thumb.jpg
+│           └── {id}.json
 │
-├── db/
-│   └── studio.db                   SQLite database (jobs, events, settings)
+├── database/
+│   └── studio.db                   SQLite database (jobs, events, settings, saved_prompts)
 │
 ├── jobs/                           Legacy job records (JSON files, migrating to SQLite)
 │

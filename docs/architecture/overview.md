@@ -48,12 +48,16 @@ ComfyUI has **no authentication**. It is bound to `0.0.0.0` so the Studio backen
 
 The web application. A Python FastAPI backend with an HTML/JS frontend. It provides:
 
-- **Authentication** — cookie-based session auth with HMAC signing
-- **Model management** — catalog, download queue, disk status
-- **Workflow runner** — form-based execution with parameter mapping
-- **Job tracking** — queue, history, retry, export
-- **Real-time updates** — WebSocket for progress, preview frames, events
-- **LLM chat** — llama-server process management and chat API
+- **Authentication** -- cookie-based session auth with HMAC signing
+- **Model management** -- catalog, download queue, disk status
+- **Workflow runner** -- form-based execution with parameter mapping
+- **Presets** -- saved workflow configurations, runnable from web UI, Telegram, or API
+- **CivitAI integration** -- model lookup, generation data proxy, dependency detection
+- **Job tracking** -- queue, history, retry, export
+- **Real-time updates** -- WebSocket for progress, preview frames, events
+- **LLM chat** -- llama-server process management and chat API
+- **Telegram bot** -- daemon thread for running presets from Telegram
+- **Gallery system** -- CivitAI image storage with SQLite index
 
 The backend is a single uvicorn process with one worker. It communicates with ComfyUI on `localhost:8188` for all generation tasks.
 
@@ -99,8 +103,8 @@ The RunPod proxy handles HTTPS termination. Inside the container, all communicat
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Python 3.12, FastAPI, uvicorn |
-| Frontend | Vanilla HTML, CSS, JavaScript (no framework) |
+| Backend | Python 3.12, FastAPI, uvicorn (22 modules, ~9800 lines) |
+| Frontend | Vanilla HTML, CSS, JavaScript -- no framework (13 pages) |
 | Database | SQLite (WAL mode) |
 | Generation | ComfyUI (PyTorch, CUDA) |
 | LLM | llama.cpp (CUDA) |

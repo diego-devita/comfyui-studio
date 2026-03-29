@@ -110,3 +110,60 @@ When `both` is set, the LoRA handles all noise levels. When `high` and `low` are
 curl https://your-pod.runpod.io/api/admin/loras/compatible/WAN%202.1 \
   -H "X-API-Key: your-api-key"
 ```
+
+---
+
+## POST /api/admin/loras/gallery/download-single/{image_id}
+
+Download a single CivitAI image by its ID and add it to the gallery store. Used to add specific images without downloading an entire gallery.
+
+**Auth:** Required
+
+**Path parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `image_id` | CivitAI image ID |
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "downloaded",
+  "civitai_id": "12345678"
+}
+```
+
+```bash
+curl -X POST https://your-pod.runpod.io/api/admin/loras/gallery/download-single/12345678 \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## POST /api/admin/loras/gallery/to-input/{image_id}
+
+Copy a gallery image to the ComfyUI input directory so it can be used as an input image in workflows.
+
+**Auth:** Required
+
+**Path parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `image_id` | CivitAI image ID (from the gallery database) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "filename": "gallery_12345678.jpg"
+}
+```
+
+The returned `filename` is the ComfyUI-relative path that can be used in workflow execute calls.
+
+```bash
+curl -X POST https://your-pod.runpod.io/api/admin/loras/gallery/to-input/12345678 \
+  -H "X-API-Key: your-api-key"
+```

@@ -34,48 +34,48 @@ Dashboard data including component versions, ComfyUI status, node count, and dis
 
 ```json
 {
-  "app_version": "12.2.0",
-  "date": "2026-03-24 09:56",
+  "app_version": "20.4.2",
+  "date": "2026-03-30 10:00",
   "repo_url": "https://github.com/diego-devita/comfyui-studio.git",
-  "runtime_version": 2,
+  "runtime_version": 3,
   "min_runtime": 0,
   "components": {
     "runtime": {
-      "version": 2,
-      "date": "2026-03-20 14:00",
-      "status": "Docker image v2",
+      "version": 3,
+      "date": "2026-03-28 14:00",
+      "status": "Docker image v3",
       "updatable": false
     },
     "backend": {
-      "version": "12.2.0",
-      "date": "2026-03-24 09:56",
+      "version": "20.4.2",
+      "date": "2026-03-30 10:00",
       "status": "running"
     },
     "frontend": {
-      "version": "12.0.2",
-      "date": "2026-03-22 11:30",
+      "version": "20.2.0",
+      "date": "2026-03-29 15:00",
       "status": "loaded"
     },
     "models": {
-      "version": 21,
-      "date": "2026-03-23 15:00",
-      "status": "85 models",
-      "count": 85,
-      "present": 12
+      "version": 28,
+      "date": "2026-03-29 12:00",
+      "status": "126 models",
+      "count": 126,
+      "present": 15
     },
     "loras": {
-      "version": 2,
-      "date": "2026-03-20 10:00",
-      "status": "15 loras"
+      "version": 5,
+      "date": "2026-03-28 10:00",
+      "status": "8 loras"
     },
     "llm_models": {
       "version": 3,
       "date": "2026-03-21 08:00",
-      "status": "5 llm models"
+      "status": "3 llm models"
     },
     "workflows": {
-      "version": 32,
-      "date": "2026-03-24 09:00",
+      "version": 44,
+      "date": "2026-03-29 17:00",
       "status": "12 workflows",
       "count": 12
     }
@@ -84,12 +84,25 @@ Dashboard data including component versions, ComfyUI status, node count, and dis
     "status": "running"
   },
   "nodes": {
-    "total_packages": 28
+    "total_packages": 38
   },
   "disk": {
     "total_bytes": 107374182400,
     "used_bytes": 53687091200,
     "free_bytes": 53687091200
+  },
+  "database": {
+    "tables": {
+      "jobs": 150,
+      "events": 500,
+      "settings": 5,
+      "saved_prompts": 3
+    },
+    "browser_url": null
+  },
+  "telegram_bot": {
+    "running": true,
+    "name": "MyStudioBot"
   }
 }
 ```
@@ -98,6 +111,10 @@ Dashboard data including component versions, ComfyUI status, node count, and dis
 |-------|-------------|
 | `comfyui.status` | `"running"`, `"error"`, or `"unreachable"` |
 | `disk.total_bytes` | Network volume size from RunPod API (0 if unavailable) |
+| `database.tables` | Row counts for each SQLite table |
+| `database.browser_url` | URL to the database browser (only in DEV_MODE) |
+| `telegram_bot.running` | Whether the Telegram bot token is configured |
+| `telegram_bot.name` | Telegram bot display name |
 
 ```bash
 curl https://your-pod.runpod.io/api/admin/system/status \
@@ -211,7 +228,7 @@ Valid component names: `backend`, `frontend`, `models`, `loras`, `llm_models`, `
 }
 ```
 
-When `restart_needed` is `true`, the backend will restart itself via `os.execv` after a 1-second delay. The frontend should expect the connection to drop and auto-reconnect.
+When `restart_needed` is `true`, the backend will restart itself after a 1-second delay by spawning a new uvicorn process via `subprocess.Popen` and calling `os._exit(0)`. The frontend should expect the connection to drop and auto-reconnect.
 
 ```bash
 # Update all components
@@ -334,35 +351,103 @@ curl -X PUT https://your-pod.runpod.io/api/admin/settings \
 
 ---
 
-## GET /api/admin/settings/env
+## GET /api/admin/system/uptime
 
-List environment variables relevant to the application. Sensitive values are masked.
+Get the backend start time and uptime.
 
 **Auth:** Required
 
 **Response:** `200 OK`
 
 ```json
-[
-  {
-    "key": "API_KEY",
-    "value": "chan***geme",
-    "sensitive": true,
-    "set": true
-  },
-  {
-    "key": "CIVITAI_API_KEY",
-    "value": "",
-    "sensitive": true,
-    "set": false
-  },
-  {
-    "key": "COMFYUI_DIR",
-    "value": "/workspace/ComfyUI",
-    "sensitive": false,
-    "set": true
-  }
-]
+{
+  "started_at": "2026-03-30 14:30:00",
+  "uptime_seconds": 3600
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `started_at` | Backend start time in Italian timezone (Europe/Rome) |
+| `uptime_seconds` | Seconds since the backend started |
+
+```bash
+curl https://your-pod.runpod.io/api/admin/system/uptime \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## POST /api/admin/system/restart
+
+Restart the uvicorn backend process. Flushes SQLite databases (WAL checkpoint) before restarting.
+
+**Auth:** Required
+
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Restarting..."
+}
+```
+
+After responding, the backend spawns a new uvicorn process and exits. The connection will drop; clients should auto-reconnect after ~2 seconds.
+
+```bash
+curl -X POST https://your-pod.runpod.io/api/admin/system/restart \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## GET /api/admin/system/chrome-extension
+
+Download the Chrome extension as a ZIP file.
+
+**Auth:** Required
+
+**Response:** `200 OK` with `application/zip` content type and `Content-Disposition: attachment` header.
+
+The ZIP contains the extension source files from `chrome-extension/src/` packaged for loading as an unpacked Chrome extension.
+
+**Error:** `404 Not Found` if the chrome-extension directory does not exist.
+
+```bash
+curl -o extension.zip https://your-pod.runpod.io/api/admin/system/chrome-extension \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## GET /api/admin/settings/env
+
+List environment variables relevant to the application, grouped by category. Sensitive values are masked.
+
+**Auth:** Required
+
+**Response:** `200 OK`
+
+```json
+{
+  "groups": [
+    {
+      "id": "auth",
+      "label": "Authentication & API Tokens",
+      "vars": [
+        {
+          "key": "API_KEY",
+          "value": "chan***geme",
+          "sensitive": true,
+          "set": true,
+          "default": "changeme",
+          "description": "Web UI password and X-API-Key header",
+          "editable": true
+        }
+      ]
+    }
+  ]
+}
 ```
 
 | Field | Description |
@@ -370,10 +455,85 @@ List environment variables relevant to the application. Sensitive values are mas
 | `value` | Masked (first 4 + `***` + last 4) if `sensitive` is true |
 | `sensitive` | Whether the value is a secret |
 | `set` | Whether the env var has a non-empty value |
+| `editable` | Whether this variable can be changed at runtime via `PUT /api/admin/settings/env` |
+| `default` | Default value |
+| `description` | Human-readable description |
 
-Tracked environment variables: `API_KEY`, `CIVITAI_API_KEY`, `HF_TOKEN`, `RUNPOD_API_KEY`, `COMFYUI_DIR`, `COMFYUI_PORT`, `REPO_URL`, `MAX_CONCURRENT_DOWNLOADS`, `RUNPOD_POD_ID`, `RUNPOD_DC_ID`, `RUNPOD_VOLUME_ID`, `PUBLIC_KEY`.
+Variables are organized into groups: authentication, configurable, read-only, and RunPod-specific (only shown on RunPod).
+
+Editable variables: `API_KEY`, `CIVITAI_API_KEY`, `HF_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_NAME`.
 
 ```bash
 curl https://your-pod.runpod.io/api/admin/settings/env \
   -H "X-API-Key: your-api-key"
+```
+
+---
+
+## PUT /api/admin/settings/env
+
+Update an editable environment variable at runtime. The value is saved to both `os.environ` and the SQLite database.
+
+**Auth:** Required
+
+**Request body:**
+
+```json
+{
+  "key": "CIVITAI_API_KEY",
+  "value": "your-new-key"
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "key": "CIVITAI_API_KEY",
+  "value": "your-new-key"
+}
+```
+
+**Error:** `400 Bad Request` if the variable is not editable.
+
+```bash
+curl -X PUT https://your-pod.runpod.io/api/admin/settings/env \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "CIVITAI_API_KEY", "value": "your-new-key"}'
+```
+
+---
+
+## POST /api/admin/settings/reveal
+
+Reveal the full unmasked values of all sensitive environment variables. Requires the API key as a second authentication factor.
+
+**Auth:** Required
+
+**Request body:**
+
+```json
+{
+  "api_key": "your-api-key"
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "API_KEY": "your-full-api-key",
+  "CIVITAI_API_KEY": "your-full-civitai-key",
+  "HF_TOKEN": "your-full-hf-token"
+}
+```
+
+**Error:** `403 Forbidden` if the provided API key does not match.
+
+```bash
+curl -X POST https://your-pod.runpod.io/api/admin/settings/reveal \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"api_key": "your-api-key"}'
 ```

@@ -1,5 +1,5 @@
 site_name: ComfyUI Studio
-site_description: Web management platform for ComfyUI on RunPod — models, workflows, job queue, LLM chat
+site_description: Web management platform for ComfyUI on RunPod — models, workflows, presets, CivitAI integration, Chrome extension, Telegram bot, job queue, LLM chat
 site_url: https://diego-devita.github.io/comfyui-studio/
 repo_url: https://github.com/diego-devita/comfyui-studio
 repo_name: diego-devita/comfyui-studio
@@ -99,6 +99,38 @@ nav:
     - Base Models: models/base-models.md
     - LoRA Pairing: models/lora-pairing.md
     - Supported Models: models/supported-models.md
+  - Presets:
+    - presets/index.md
+    - Overview: presets/overview.md
+    - Preset Format: presets/format.md
+    - Creating Presets: presets/creating.md
+    - Placeholder Syntax: presets/placeholders.md
+    - Running Presets: presets/running.md
+  - Chrome Extension:
+    - chrome-extension/index.md
+    - Overview: chrome-extension/overview.md
+    - Installation: chrome-extension/installation.md
+    - RunPod Tab: chrome-extension/runpod-tab.md
+    - CivitAI Tab: chrome-extension/civitai-tab.md
+    - Settings Tab: chrome-extension/settings-tab.md
+  - CivitAI Integration:
+    - civitai/index.md
+    - Overview: civitai/overview.md
+    - Catalog Integration: civitai/catalog-integration.md
+    - Image Generation Data: civitai/image-generation-data.md
+    - Dependency Detection: civitai/dependency-detection.md
+    - Workflow Type Detection: civitai/workflow-type-detection.md
+  - Telegram Bot:
+    - telegram/index.md
+    - Overview: telegram/overview.md
+    - Configuration: telegram/configuration.md
+    - Commands: telegram/commands.md
+  - Gallery & Image Store:
+    - gallery/index.md
+    - Overview: gallery/overview.md
+    - Storage Structure: gallery/storage-structure.md
+    - Download Pipeline: gallery/download-pipeline.md
+    - Endpoints: gallery/endpoints.md
   - Pages:
     - pages/index.md
     - Home: pages/home.md
@@ -106,6 +138,7 @@ nav:
     - LoRA Manager: pages/loras.md
     - LLM Assistant: pages/llm.md
     - Workflow Manager: pages/workflows.md
+    - Presets: pages/presets.md
     - Job Queue: pages/queue.md
     - Job History: pages/history.md
     - Asset Manager: pages/assets.md
@@ -120,6 +153,9 @@ nav:
     - LLM: api/llm.md
     - Workflows: api/workflows.md
     - Runner: api/runner.md
+    - Presets: api/presets.md
+    - CivitAI: api/civitai.md
+    - Telegram: api/telegram.md
     - Jobs: api/jobs.md
     - Assets: api/assets.md
     - Events: api/events.md

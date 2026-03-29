@@ -18,6 +18,7 @@ paths-ignore:
   - 'backend/**'
   - 'frontend/**'
   - 'catalogs/**'
+  - 'chrome-extension/**'
   - 'version.json'
   - '*.md'
   - 'docs/**'
@@ -32,6 +33,7 @@ paths-ignore:
 | `frontend/**` | HTML/JS/CSS frontend |
 | `catalogs/**` | Model, LoRA, and LLM catalogs |
 | `workflows/**` | Workflow definitions and manifests |
+| `chrome-extension/**` | Chrome browser extension |
 | `version.json` | Version metadata |
 | `*.md` | Markdown files (README, etc.) |
 | `docs/**` | Documentation site |

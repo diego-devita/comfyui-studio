@@ -220,6 +220,77 @@ curl -X DELETE https://your-pod.runpod.io/api/admin/models/juggernautXL_v9.safet
 
 ---
 
+## GET /api/admin/models/civitai-map
+
+Return a compact double-indexed map of all CivitAI version and model IDs across both the models and loras catalogs. Used by the Chrome extension for fast model status lookups.
+
+**Auth:** Required
+
+**Response:** `200 OK`
+
+```json
+{
+  "by_version": {
+    "123456": {
+      "file": "juggernautXL_v9.safetensors",
+      "dest": "checkpoints",
+      "name": "Juggernaut XL v9 [SDXL FP16]",
+      "base_model": "SDXL 1.0",
+      "status": "present",
+      "civitai_model_id": 789,
+      "catalog": "models"
+    }
+  },
+  "by_model": {
+    "789": [123456, 123457]
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `by_version` | Map keyed by `civitai_version_id` string |
+| `by_model` | Map keyed by `civitai_model_id` string, values are arrays of version IDs |
+| `status` | `"present"` (file on disk) or `"missing"` (catalog entry only) |
+| `catalog` | `"models"` or `"loras"` -- which catalog the entry is in |
+
+```bash
+curl https://your-pod.runpod.io/api/admin/models/civitai-map \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
+## DELETE /api/admin/models/{filename}/catalog
+
+Remove a model entry from the `models.json` catalog. The model file must not exist on disk.
+
+**Auth:** Required
+
+**Path parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `filename` | The model filename |
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "removed",
+  "file": "old_model.safetensors"
+}
+```
+
+**Error:** `404 Not Found` if not in catalog. `409 Conflict` if the file exists on disk (delete the file first).
+
+```bash
+curl -X DELETE https://your-pod.runpod.io/api/admin/models/old_model.safetensors/catalog \
+  -H "X-API-Key: your-api-key"
+```
+
+---
+
 ## POST /api/admin/models/import
 
 Import models from a JSON file. New models are added to the catalog with an `"imported"` tag. Existing models (matched by filename) are skipped.

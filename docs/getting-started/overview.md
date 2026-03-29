@@ -4,10 +4,15 @@
 
 ComfyUI Studio is a web application that sits on top of [ComfyUI](https://github.com/comfyanonymous/ComfyUI), the node-based AI image and video generation tool. It provides a management layer that lets you:
 
-- **Download and manage AI models** from HuggingFace and CivitAI through a visual catalog
-- **Run generation workflows** through simple forms instead of building node graphs
+- **Download and manage AI models** from HuggingFace and CivitAI through a visual catalog of 126 models
+- **Run generation workflows** through simple forms instead of building node graphs (12 workflows including inpainting)
+- **Save and reuse presets** -- workflow configurations that can be run from the web UI, Telegram, or the API
+- **CivitAI integration** -- check model status, fetch generation data, detect dependencies, create presets from CivitAI images
+- **Chrome extension** -- manage RunPod pods and browse CivitAI with catalog cross-referencing from the browser toolbar
+- **Telegram bot** -- run presets by sending photos from your phone
 - **Track jobs** with real-time progress, live preview frames, and ETA
 - **Browse results** with an asset manager for inputs and outputs
+- **Gallery system** -- download and browse CivitAI images for LoRA model galleries
 - **Chat with LLMs** running locally on the GPU
 
 It is designed to run on cloud GPU machines (RunPod, or any NVIDIA GPU server) as a Docker container. The Docker image includes ComfyUI, 38 custom nodes, and all performance optimizations pre-configured. The web application itself updates live from the Git repository — you don't need to rebuild the Docker image when the application changes.

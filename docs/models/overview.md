@@ -80,11 +80,23 @@ loras.json ──┘                          compatibility filtering
 llm.json ─────→ (standalone)  ──→ LLM server management
 ```
 
+## CivitAI Integration
+
+Models can be added to the catalog directly from CivitAI:
+
+- **Add from CivitAI** (`POST /api/admin/civitai/add/{version_id}`) -- fetches a model version's metadata and adds it to `models.json` without downloading the file
+- **CivitAI Map** (`GET /api/admin/models/civitai-map`) -- returns a double-indexed map of all catalog entries with CivitAI version IDs, used by the Chrome extension
+- **Remove from Catalog** (`DELETE /api/admin/models/{filename}/catalog`) -- removes a catalog entry for a model that is not downloaded
+
+See [CivitAI Catalog Integration](../civitai/catalog-integration.md) for details.
+
 ## API Endpoints
 
 | Endpoint | Catalog | Module |
 |----------|---------|--------|
 | `GET /api/admin/models` | models.json | models_api.py |
+| `GET /api/admin/models/civitai-map` | models + loras | models_api.py |
+| `DELETE /api/admin/models/{filename}/catalog` | models.json | models_api.py |
 | `GET /api/admin/loras` | loras.json | models_api.py |
 | `GET /api/admin/loras/compatible/{base_model}` | models + loras merged | models_api.py |
 | `GET /api/admin/llm/models` | llm.json | llm_api.py |

@@ -12,8 +12,14 @@ These are the variables you set when creating your RunPod pod or Docker containe
 | `CIVITAI_API_KEY` | _(empty)_ | **Yes** | Your CivitAI API token. Required to download models hosted on CivitAI and to fetch model metadata (descriptions, preview images, tags). Without this, CivitAI downloads fail silently. Get your token from [civitai.com/user/account](https://civitai.com/user/account) → API Keys. |
 | `HF_TOKEN` | _(empty)_ | **Yes** | Your HuggingFace access token. Required to download gated models — Flux, WAN, HunyuanVideo, and many others require accepting a license on HuggingFace before downloading. Without this token, gated model downloads return 401 errors. Get your token from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) → New token → Read access is sufficient. |
 
+| `TELEGRAM_BOT_TOKEN` | _(empty)_ | No | Telegram bot token from [@BotFather](https://t.me/BotFather). When set, the Telegram bot starts automatically on boot. The bot lets you run presets from Telegram by sending photos. See [Telegram Bot](../telegram/overview.md). |
+| `TELEGRAM_BOT_NAME` | _(empty)_ | No | Display name for the Telegram bot (informational only, shown in the Settings page). |
+
 !!! note "Where tokens are used"
-    These tokens are stored as environment variables on the pod. The backend injects them into download requests automatically — `HF_TOKEN` as a Bearer header for HuggingFace URLs, `CIVITAI_API_KEY` as a query parameter for CivitAI URLs. They are never sent to any other service.
+    These tokens are stored as environment variables on the pod. The backend injects them into download requests automatically -- `HF_TOKEN` as a Bearer header for HuggingFace URLs, `CIVITAI_API_KEY` as a query parameter for CivitAI URLs. They are never sent to any other service.
+
+!!! note "Runtime-editable auth settings"
+    `API_KEY`, `CIVITAI_API_KEY`, `HF_TOKEN`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_BOT_NAME` can be edited at runtime from the Settings page without restarting the backend. When edited, the new values are persisted to both `os.environ` and the SQLite database. On subsequent boots, database values override environment variable defaults.
 
 ## Configurable
 
@@ -48,6 +54,7 @@ These are set by the Docker image or the RunPod platform. Do not change them man
 
 | Variable | Default | Set by | Description |
 |----------|---------|--------|-------------|
+| `HOSTING` | _(auto)_ | config.py | Hosting platform identifier. Auto-detected as `"runpod"` when `RUNPOD_POD_ID` is present. Affects which environment variable groups are shown in Settings and how disk usage is calculated. |
 | `RUNTIME_VERSION` | `3` | Dockerfile | The Docker image version number. The application checks this against `min_runtime` in `version.json` to ensure compatibility. If your image is older than what the application requires, you'll see a "Runtime Incompatible" message and need to pull a newer image. This number is incremented when the Docker image includes breaking changes (new dependencies, new custom nodes, updated CUDA). |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Dockerfile | The Git repository URL used by the bootstrap script and update mechanism. The application clones this repo on first boot and fetches from it when checking for updates. |
 | `REPO_BRANCH` | `main` | config.py | The Git branch to track. Default `main` for production pods. Set to `dev` to point a test pod at the development branch. Used by bootstrap (clone) and the update mechanism (fetch/reset). |
