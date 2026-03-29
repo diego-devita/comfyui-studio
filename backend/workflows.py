@@ -8,9 +8,9 @@ from pathlib import Path
 import httpx
 import yaml
 
-from config import (, _now_rome
+from config import (
     COMFY_URL, COMFYUI_DIR, MODELS_BASE,
-    WORKFLOWS_DIR,
+    WORKFLOWS_DIR, _now_rome,
 )
 from catalogs import _all_categories
 
