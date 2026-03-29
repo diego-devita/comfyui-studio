@@ -13,12 +13,17 @@
   .preset-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
     padding: 16px; cursor: pointer; transition: border-color 0.15s;
+    display: flex; flex-direction: column;
   }
   .preset-card:hover { border-color: var(--accent); }
   .preset-card h3 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
-  .preset-card .desc { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .preset-card .desc {
+    font-size: 11px; color: var(--muted); margin-bottom: 8px;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    flex: 1;
+  }
   .preset-card .wf-tag { font-size: 10px; color: var(--accent); }
-  .preset-card .actions { display: flex; gap: 6px; margin-top: 10px; }
+  .preset-card .actions { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; }
   .run-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
     z-index: 100; justify-content: center; align-items: center;
