@@ -202,7 +202,7 @@ header { min-height: 110px; }
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
-.nav-logout, .nav-activity, .nav-link:has(.icon-gear) {
+.nav-logout, .nav-activity, .nav-link:has(.icon-gear), #docsLink {
   display: flex; align-items: center;
 }
 .nav-logout { margin-left: auto; color: var(--error); }
