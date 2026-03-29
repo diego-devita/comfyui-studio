@@ -202,6 +202,9 @@ header { min-height: 110px; }
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.nav-logout, .nav-activity, .nav-link:has(.icon-gear) {
+  display: flex; align-items: center;
+}
 .nav-logout { margin-left: auto; color: var(--error); }
 .nav-logout:hover { color: #ff6688; }
 
