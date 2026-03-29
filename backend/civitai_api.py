@@ -141,7 +141,7 @@ async def _resolve_by_hash(hash_val: str, client: httpx.AsyncClient, headers: di
     if not hash_val:
         return None
     try:
-        resp = await client.get(f"https://civitai.com/api/v1/model-versions/by-hash/{hash_val}", headers=headers)
+        resp = await client.get(f"https://civitai.com/api/v1/model-versions/by-hash/{hash_val.upper()}", headers=headers)
         if resp.status_code == 200:
             return resp.json()
     except httpx.HTTPError:
