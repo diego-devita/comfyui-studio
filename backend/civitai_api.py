@@ -1,14 +1,16 @@
-"""ComfyUI Studio — CivitAI proxy endpoints (generation data, resource cross-reference)."""
+"""ComfyUI Studio — CivitAI proxy endpoints (generation data, resource cross-reference, catalog add)."""
 
+import json
+import os
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-import os
-from config import MODELS_BASE
+from config import MODELS_BASE, MODELS_JSON, LORAS_JSON
 import catalogs as _catalogs
 
 router = APIRouter()
@@ -148,3 +150,209 @@ async def civitai_image_generation_data(image_id: int):
         "tools": tools,
         "detected_type": detected_type,
     })
+
+
+# ── CivitAI type → catalog category mapping ─────────────────────────────────
+
+# CivitAI model.type values → (category_id, dest subfolder)
+_TYPE_TO_CATEGORY = {
+    "Checkpoint":        ("checkpoints", "checkpoints"),
+    "LORA":              ("loras", "loras"),
+    "VAE":               ("vae", "vae"),
+    "TextualInversion":  ("embeddings", "embeddings"),
+    "Controlnet":        ("controlnet", "controlnet"),
+    "Upscaler":          ("upscalers", "upscale_models"),
+    "AestheticGradient": ("embeddings", "embeddings"),
+    "Poses":             ("controlnet", "controlnet"),
+}
+
+# Some CivitAI baseModels hint at diffusion_models instead of checkpoints
+_DIFFUSION_BASE_MODELS = {"Flux.1 D", "Flux.1 S", "Wan Video", "Hunyuan Video", "LTX Video", "CogVideoX"}
+
+
+def _civitai_to_catalog_entry(ver_data: dict) -> dict:
+    """Build a models.json entry from CivitAI model-version API response."""
+    model_info = ver_data.get("model", {})
+    model_type = model_info.get("type", "Checkpoint")
+    base_model = ver_data.get("baseModel", "")
+
+    # Pick category and dest
+    cat_id, dest = _TYPE_TO_CATEGORY.get(model_type, ("checkpoints", "checkpoints"))
+
+    # Diffusion models override: some base models go to diffusion_models instead of checkpoints
+    if cat_id == "checkpoints" and base_model in _DIFFUSION_BASE_MODELS:
+        cat_id = "diffusion_models"
+        dest = "diffusion_models"
+
+    # Pick the primary file
+    files = ver_data.get("files", [])
+    primary = next((f for f in files if f.get("primary")), files[0] if files else {})
+    filename = primary.get("name", "")
+    size_kb = primary.get("sizeKB", 0)
+    fp = primary.get("metadata", {}).get("fp", "")
+
+    # Clean name: "ModelName VersionName [BaseModel FP]"
+    model_name = model_info.get("name", "")
+    ver_name = ver_data.get("name", "")
+    name_parts = [model_name]
+    if ver_name and ver_name.lower() != model_name.lower():
+        name_parts.append(ver_name)
+    suffix = base_model
+    if fp:
+        suffix += f" {fp.upper()}"
+    name = " ".join(name_parts) + f" [{suffix}]" if suffix else " ".join(name_parts)
+
+    entry = {
+        "name": name,
+        "file": filename,
+        "dest": dest,
+        "source": "civitai",
+        "civitai_version_id": ver_data.get("id"),
+        "civitai_model_id": ver_data.get("modelId"),
+        "civitai_file_id": primary.get("id"),
+        "size_gb": round(size_kb / 1_000_000, 3),
+        "base_model": base_model,
+        "tags": [],
+    }
+
+    trigger = ver_data.get("trainedWords", [])
+    if trigger:
+        entry["trigger_words"] = trigger
+
+    stats = ver_data.get("stats", {})
+    if stats.get("downloadCount"):
+        entry["downloads"] = stats["downloadCount"]
+
+    sha = primary.get("hashes", {}).get("SHA256", "")
+    if sha:
+        entry["hash"] = sha
+
+    return entry, cat_id
+
+
+def _save_models_json():
+    """Persist _models_data to disk."""
+    now = datetime.now(timezone(timedelta(hours=2)))
+    _catalogs._models_data["version"] = _catalogs._models_data.get("version", 0) + 1
+    _catalogs._models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
+    MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
+    MODELS_JSON.write_text(json.dumps(_catalogs._models_data, indent=2, ensure_ascii=False))
+
+
+def _save_loras_json():
+    """Persist _loras_data to disk."""
+    now = datetime.now(timezone(timedelta(hours=2)))
+    _catalogs._loras_data["version"] = _catalogs._loras_data.get("version", 0) + 1
+    _catalogs._loras_data["date"] = now.strftime("%Y-%m-%d %H:%M")
+    LORAS_JSON.parent.mkdir(parents=True, exist_ok=True)
+    LORAS_JSON.write_text(json.dumps(_catalogs._loras_data, indent=2, ensure_ascii=False))
+
+
+@router.post("/api/admin/civitai/add/{version_id}")
+async def add_from_civitai(version_id: int):
+    """Fetch a CivitAI model version and add it to models.json catalog (no download)."""
+    # Check not already in catalog
+    _catalogs._reload_models()
+    existing = set()
+    for cat in _catalogs._models_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m.get("civitai_version_id") == version_id:
+                return JSONResponse({"status": "already_exists", "file": m.get("file", "")})
+            existing.add(m.get("file", ""))
+
+    # Fetch from CivitAI
+    url = f"https://civitai.com/api/v1/model-versions/{version_id}"
+    civitai_key = os.environ.get("CIVITAI_API_KEY", "")
+    headers = {}
+    if civitai_key:
+        headers["Authorization"] = f"Bearer {civitai_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            ver_data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"CivitAI API returned {e.response.status_code}")
+    except httpx.RequestError as e:
+        raise HTTPException(502, f"Failed to reach CivitAI: {str(e)}")
+
+    entry, cat_id = _civitai_to_catalog_entry(ver_data)
+
+    if entry["file"] in existing:
+        return JSONResponse({"status": "already_exists", "file": entry["file"]})
+
+    # Find or create category
+    cat_map = {c["id"]: c for c in _catalogs._models_data.get("categories", [])}
+    if cat_id not in cat_map:
+        new_cat = {"id": cat_id, "name": cat_id.replace("_", " ").title(), "models": []}
+        _catalogs._models_data.setdefault("categories", []).append(new_cat)
+        cat_map[cat_id] = new_cat
+
+    cat_map[cat_id]["models"].append(entry)
+    _save_models_json()
+
+    return JSONResponse({"status": "added", "file": entry["file"], "name": entry["name"],
+                         "category": cat_id, "dest": entry["dest"]})
+
+
+@router.post("/api/admin/civitai/promote-to-lora/{version_id}")
+async def promote_to_style_lora(version_id: int):
+    """Move a LoRA from models.json to loras.json (promote to style LoRA)."""
+    _catalogs._reload_models()
+
+    # Find the entry in models.json
+    found_entry = None
+    found_cat = None
+    for cat in _catalogs._models_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m.get("civitai_version_id") == version_id:
+                found_entry = m
+                found_cat = cat
+                break
+        if found_entry:
+            break
+
+    if not found_entry:
+        raise HTTPException(404, "Version not found in models catalog")
+
+    if found_entry.get("dest") != "loras":
+        raise HTTPException(400, "Only LoRA entries can be promoted to style LoRAs")
+
+    # Check not already in loras.json
+    for cat in _catalogs._loras_data.get("categories", []):
+        for m in cat.get("models", []):
+            if m.get("civitai_version_id") == version_id:
+                return JSONResponse({"status": "already_exists"})
+
+    # Determine loras.json category by base_model
+    base = found_entry.get("base_model", "")
+    lora_cat_id = "other_loras"
+    lora_cat_name = "Other LoRAs"
+    base_lower = base.lower()
+    if "wan" in base_lower:
+        lora_cat_id, lora_cat_name = "wan_loras", "WAN LoRAs"
+    elif "flux" in base_lower:
+        lora_cat_id, lora_cat_name = "flux_loras", "Flux LoRAs"
+    elif "sdxl" in base_lower or "pony" in base_lower or "illustrious" in base_lower:
+        lora_cat_id, lora_cat_name = "sdxl_loras", "SDXL / Pony / Illustrious LoRAs"
+    elif "sd 1" in base_lower or "sd1" in base_lower:
+        lora_cat_id, lora_cat_name = "sd15_loras", "SD 1.5 LoRAs"
+
+    # Add to loras.json
+    lora_cat_map = {c["id"]: c for c in _catalogs._loras_data.get("categories", [])}
+    if lora_cat_id not in lora_cat_map:
+        new_cat = {"id": lora_cat_id, "name": lora_cat_name, "models": []}
+        _catalogs._loras_data.setdefault("categories", []).append(new_cat)
+        lora_cat_map[lora_cat_id] = new_cat
+
+    lora_cat_map[lora_cat_id]["models"].append(dict(found_entry))
+
+    # Remove from models.json
+    found_cat["models"].remove(found_entry)
+
+    _save_models_json()
+    _save_loras_json()
+
+    return JSONResponse({"status": "promoted", "file": found_entry.get("file", ""),
+                         "category": lora_cat_id})
