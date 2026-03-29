@@ -149,6 +149,36 @@ async def _resolve_by_hash(hash_val: str, client: httpx.AsyncClient, headers: di
     return None
 
 
+async def _resolve_by_name(name: str, dep_type: str, client: httpx.AsyncClient, headers: dict) -> dict | None:
+    """Fallback: search CivitAI by name + type. Returns first match's first version."""
+    type_map = {"lora": "LORA", "lycoris": "LORA", "embedding": "TextualInversion"}
+    civitai_type = type_map.get(dep_type, "")
+    params = {"query": name, "limit": "3"}
+    if civitai_type:
+        params["types"] = civitai_type
+    try:
+        resp = await client.get("https://civitai.com/api/v1/models", params=params, headers=headers)
+        if resp.status_code != 200:
+            return None
+        items = resp.json().get("items", [])
+        # Try exact-ish name match
+        for item in items:
+            if name.lower() in item.get("name", "").lower() or item.get("name", "").lower() in name.lower():
+                versions = item.get("modelVersions", [])
+                if versions:
+                    ver = versions[0]
+                    ver["model"] = {"name": item.get("name", ""), "type": item.get("type", "")}
+                    return ver
+        # Fallback: just return first result
+        if items:
+            ver = items[0].get("modelVersions", [{}])[0]
+            ver["model"] = {"name": items[0].get("name", ""), "type": items[0].get("type", "")}
+            return ver
+    except httpx.HTTPError:
+        pass
+    return None
+
+
 async def _resolve_detected_deps(detected: list, civitai_map: dict) -> list:
     """Resolve detected dependencies via hash lookup, enrich with catalog status."""
     civitai_key = os.environ.get("CIVITAI_API_KEY", "")
@@ -159,8 +189,10 @@ async def _resolve_detected_deps(detected: list, civitai_map: dict) -> list:
         for dep in detected:
             entry = dict(dep)
 
-            # Try hash resolution
+            # Try hash resolution, fallback to name search
             resolved = await _resolve_by_hash(dep.get("hash", ""), client, headers)
+            if not resolved:
+                resolved = await _resolve_by_name(dep["name"], dep.get("type", "lora"), client, headers)
             if resolved:
                 entry["civitai_model_id"] = resolved.get("modelId")
                 entry["civitai_version_id"] = resolved.get("id")
