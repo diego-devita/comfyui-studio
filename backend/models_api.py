@@ -411,6 +411,46 @@ async def models_status():
     )
 
 
+@router.get("/api/admin/models/civitai-map")
+async def civitai_map():
+    """Return a compact double-indexed map of all CivitAI version/model IDs across models and loras catalogs."""
+    by_version = {}
+    by_model = {}
+
+    for catalog_name, catalog_data in [("models", _catalogs._models_data), ("loras", _catalogs._loras_data)]:
+        for cat in catalog_data.get("categories", []):
+            for m in cat.get("models", []):
+                vid = m.get("civitai_version_id")
+                if not vid:
+                    continue
+                vid_str = str(vid)
+                mid = m.get("civitai_model_id")
+
+                dest = m.get("dest", "")
+                fname = m.get("file", "")
+                disk_path = Path(MODELS_BASE) / dest / fname if dest else Path(MODELS_BASE) / fname
+                status = "present" if disk_path.exists() else "missing"
+
+                by_version[vid_str] = {
+                    "file": fname,
+                    "dest": dest,
+                    "name": m.get("name", ""),
+                    "base_model": m.get("base_model") or m.get("civitai_base_model") or "",
+                    "status": status,
+                    "civitai_model_id": mid,
+                    "catalog": catalog_name,
+                }
+
+                if mid:
+                    mid_str = str(mid)
+                    if mid_str not in by_model:
+                        by_model[mid_str] = []
+                    if vid not in by_model[mid_str]:
+                        by_model[mid_str].append(vid)
+
+    return JSONResponse({"by_version": by_version, "by_model": by_model})
+
+
 @router.delete("/api/admin/models/{filename}")
 async def models_delete(filename: str):
     _reload_models()
