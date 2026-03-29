@@ -18,6 +18,8 @@ CIVITAI_API_KEY = os.environ.get("CIVITAI_API_KEY", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 RUNTIME_VERSION = int(os.environ.get("RUNTIME_VERSION", "0"))
 HOSTING = os.environ.get("HOSTING", "").lower().strip()
+if not HOSTING and os.environ.get("RUNPOD_POD_ID"):
+    HOSTING = "runpod"
 
 # ── Studio directory ─────────────────────────────────────────────────────────
 
