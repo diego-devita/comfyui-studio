@@ -469,12 +469,14 @@ async def _build_workflow(
                 r.raise_for_status()
                 uploaded_name = r.json()["name"]
 
+            # Assign uploaded image only to the FIRST image input that has no form value
             for inp in manifest.get("inputs", []):
-                if inp["type"] == "image":
+                if inp["type"] == "image" and inp["id"] not in form_params:
                     node_id = str(inp["node_id"])
                     field = inp["field"]
                     if node_id in workflow:
                         workflow[node_id]["inputs"][field] = uploaded_name
+                    break  # only the first unset image input
 
     if not is_dynamic:
         # Apply form parameters (static workflows only)

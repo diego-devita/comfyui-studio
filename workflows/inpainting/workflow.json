@@ -1,0 +1,87 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "mask.png"
+    }
+  },
+  "9": {
+    "class_type": "ImageToMask",
+    "inputs": {
+      "image": ["2", 0],
+      "channel": "red"
+    }
+  },
+  "3": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "bigLove_xl4.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": ["3", 1]
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": ["3", 1]
+    }
+  },
+  "6": {
+    "class_type": "ToBasicPipe",
+    "inputs": {
+      "model": ["3", 0],
+      "clip": ["3", 1],
+      "vae": ["3", 2],
+      "positive": ["4", 0],
+      "negative": ["5", 0]
+    }
+  },
+  "7": {
+    "class_type": "MaskDetailerPipe",
+    "inputs": {
+      "image": ["1", 0],
+      "mask": ["9", 0],
+      "basic_pipe": ["6", 0],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "mask_mode": true,
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 20,
+      "cfg": 12,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1.0,
+      "feather": 5,
+      "crop_factor": 3,
+      "drop_size": 10,
+      "refiner_ratio": 0.2,
+      "batch_size": 1,
+      "cycle": 1,
+      "inpaint_model": true,
+      "noise_mask_feather": 20,
+      "pre_dilation": true,
+      "bbox_fill": true
+    }
+  },
+  "8": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["7", 0],
+      "filename_prefix": "inpaint"
+    }
+  }
+}

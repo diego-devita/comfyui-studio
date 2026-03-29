@@ -1,0 +1,170 @@
+id: inpainting
+category: inpainting
+name: "Inpainting (SDXL/Pony)"
+version: 1
+date: "2026-03-29 21:30"
+description: "Inpaint masked areas of an image using SDXL/Pony checkpoints. Upload an image and a mask (white = inpaint, black = keep), describe what to generate in the masked area. Based on Impact Pack MaskDetailerPipe."
+author: "Based on CivitAI SDXL NSFW Inpainting workflow"
+group: "original"
+
+workflow_file: "workflow.json"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    node_id: "1"
+    field: "image"
+    required: true
+    tooltip: "The image to inpaint. The masked area will be regenerated."
+
+  - id: mask_image
+    name: "Mask"
+    type: image
+    node_id: "2"
+    field: "image"
+    required: true
+    tooltip: "Black and white mask. White = area to inpaint, Black = area to keep. Must be same size as the input image."
+
+  - id: checkpoint
+    name: "Checkpoint"
+    type: checkpoint_picker
+    node_id: "3"
+    field: "ckpt_name"
+    required: true
+    tooltip: "SDXL or Pony checkpoint. Recommended: Babes By Stable Yogi, Big Love XL, Lustify SDXL."
+
+  - id: positive_prompt
+    name: "Positive Prompt"
+    type: text
+    node_id: "4"
+    field: "text"
+    required: true
+    default: ""
+    placeholder: "Describe what to generate in the masked area..."
+    tooltip: "What to generate in the white area of the mask. Be specific about the subject, pose, and details."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    node_id: "5"
+    field: "text"
+    required: false
+    default: "(worst quality:1.4), deformed, bad anatomy, extra limbs, disfigured, blurry"
+    tooltip: "What to avoid generating."
+
+  - id: seed
+    name: "Seed"
+    type: seed
+    node_id: "7"
+    field: "seed"
+    default: -1
+    tooltip: "Random seed. Use -1 for random, or a fixed number to reproduce results."
+
+  - id: steps
+    name: "Steps"
+    type: int
+    node_id: "7"
+    field: "steps"
+    min: 1
+    max: 50
+    default: 20
+    advanced: true
+    tooltip: "Denoising steps. 15-25 works well."
+
+  - id: cfg
+    name: "CFG Scale"
+    type: float
+    node_id: "7"
+    field: "cfg"
+    min: 1.0
+    max: 30.0
+    step: 0.5
+    default: 12.0
+    advanced: true
+    tooltip: "Prompt adherence. 8-15 for inpainting. Higher = follows prompt more closely."
+
+  - id: sampler_name
+    name: "Sampler"
+    type: select
+    node_id: "7"
+    field: "sampler_name"
+    options:
+      - {label: "Euler", value: "euler"}
+      - {label: "Euler Ancestral", value: "euler_ancestral"}
+      - {label: "DPM++ 2M", value: "dpmpp_2m"}
+      - {label: "DPM++ SDE", value: "dpmpp_sde"}
+      - {label: "DPM++ 2M SDE", value: "dpmpp_2m_sde"}
+    default: "euler"
+    advanced: true
+    tooltip: "Denoising algorithm."
+
+  - id: scheduler
+    name: "Scheduler"
+    type: select
+    node_id: "7"
+    field: "scheduler"
+    options:
+      - {label: "Normal", value: "normal"}
+      - {label: "Karras", value: "karras"}
+      - {label: "Exponential", value: "exponential"}
+    default: "normal"
+    advanced: true
+    tooltip: "Noise schedule."
+
+  - id: denoise
+    name: "Denoise"
+    type: float
+    node_id: "7"
+    field: "denoise"
+    min: 0.1
+    max: 1.0
+    step: 0.05
+    default: 1.0
+    advanced: true
+    tooltip: "How much to regenerate. 1.0 = fully regenerate the masked area. Lower values preserve more of the original."
+
+  - id: feather
+    name: "Feather"
+    type: int
+    node_id: "7"
+    field: "feather"
+    min: 0
+    max: 50
+    default: 5
+    advanced: true
+    tooltip: "Mask edge feathering. Higher = softer blend between inpainted and original areas."
+
+outputs:
+  - id: image
+    name: "Output Image"
+    type: image
+    node_id: "8"
+
+technical_notes:
+  pipeline: "LoadImage (input) + LoadImage (mask) → ImageToMask → CheckpointLoaderSimple → 2x CLIPTextEncode (pos+neg) → ToBasicPipe → MaskDetailerPipe (inpaint with mask) → SaveImage"
+  model_loading:
+    checkpoint: "SDXL/Pony checkpoint — any works, NSFW checkpoints recommended for NSFW content"
+  sampling:
+    method: "MaskDetailerPipe — crop-and-stitch inpainting from Impact Pack"
+    sampler: "User-configurable"
+    cfg: "Default 12 — higher than normal t2i because inpainting needs stronger guidance"
+    denoise: "1.0 = full regeneration in mask. Lower preserves original structure."
+  notes:
+    - "Based on CivitAI SDXL NSFW Inpainting workflow (https://civitai.com/models/1964991)"
+    - "Mask must be same resolution as input image"
+    - "White = inpaint, Black = keep"
+    - "guide_size=512 crops the masked area to 512px for processing, then stitches back"
+    - "inpaint_model=true uses the checkpoint's inpainting capabilities"
+    - "For adding a person: mask the area, prompt with detailed description of the subject"
+
+required_models: []
+
+required_nodes:
+  - "LoadImage"
+  - "ImageToMask"
+  - "CheckpointLoaderSimple"
+  - "CLIPTextEncode"
+  - "ToBasicPipe"
+  - "MaskDetailerPipe"
+  - "SaveImage"
