@@ -546,14 +546,15 @@ async def system_update(request: Request):
         if restart_needed:
             async def _restart():
                 await asyncio.sleep(1)
-                os.chdir(str(BACKEND_DIR))
-                import sys
-                os.execv(
-                    sys.executable,
+                import sys, subprocess
+                port = os.environ.get("STUDIO_PORT", "8000")
+                subprocess.Popen(
                     [sys.executable, "-m", "uvicorn", "main:app",
-                     "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"),
-                     "--workers", "1"],
+                     "--host", "0.0.0.0", "--port", port, "--workers", "1"],
+                    cwd=str(BACKEND_DIR),
+                    start_new_session=True,
                 )
+                os._exit(0)
             asyncio.get_event_loop().create_task(_restart())
 
         return result
@@ -606,14 +607,15 @@ async def restart_backend():
 
     async def _do_restart():
         await asyncio.sleep(1)
-        import sys
-        os.chdir(str(BACKEND_DIR))
-        os.execv(
-            sys.executable,
+        import sys, subprocess
+        port = os.environ.get("STUDIO_PORT", "8000")
+        subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "main:app",
-             "--host", "0.0.0.0", "--port", os.environ.get("STUDIO_PORT", "8000"),
-             "--workers", "1"],
+             "--host", "0.0.0.0", "--port", port, "--workers", "1"],
+            cwd=str(BACKEND_DIR),
+            start_new_session=True,
         )
+        os._exit(0)
 
     asyncio.get_event_loop().create_task(_do_restart())
     return {"message": "Restarting..."}
