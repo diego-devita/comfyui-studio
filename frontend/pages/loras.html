@@ -904,6 +904,7 @@
       '<div class="card-actions">' +
         '<button class="btn btn--sm" data-ref="galleryBtn" style="display:none">Gallery</button>' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
+        '<button class="btn btn--sm btn--danger" data-ref="removeBtn" style="display:none;font-size:10px;">Remove</button>' +
       '</div>';
 
     // Cache refs
@@ -964,6 +965,14 @@
     refs.tags.innerHTML = '';
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+    refs.removeBtn.addEventListener('click', async () => {
+      if (!await studioConfirm('Remove "' + m.name + '" from catalog?', {danger: true, yes: 'Remove'})) return;
+      try {
+        const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(m.file) + '/catalog', { method: 'DELETE' });
+        if (resp.ok) { showToast('Removed from catalog', 3000); loadLoras(); }
+        else { const err = await resp.json().catch(() => ({})); showToast(err.detail || 'Remove failed', 5000, 'error'); }
+      } catch (e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
+    });
 
     if (m.civitai_model_id && m.status === 'present') {
       refs.galleryBtn.style.display = '';
@@ -1008,6 +1017,7 @@
 
     // Reset compact progress
     el.style.setProperty('--compact-progress', '0%');
+    if (refs.removeBtn) refs.removeBtn.style.display = 'none';
 
     switch (m.status) {
       case 'present':
@@ -1030,6 +1040,7 @@
         progress.classList.remove('visible');
         fill.classList.remove('indeterminate');
         errorEl.classList.remove('visible');
+        if (refs.removeBtn) refs.removeBtn.style.display = '';
         break;
 
       case 'queued':

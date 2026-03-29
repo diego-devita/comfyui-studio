@@ -472,6 +472,44 @@ async def models_delete(filename: str):
     return JSONResponse({"status": "deleted", "file": filename})
 
 
+@router.delete("/api/admin/models/{filename}/catalog")
+async def models_remove_from_catalog(filename: str):
+    """Remove a model entry from models.json catalog. File must not exist on disk."""
+    _reload_models()
+    model = _find_model(filename)
+    if not model:
+        raise HTTPException(404, f"Model '{filename}' not found in catalog")
+
+    dest_path = Path(MODELS_BASE) / model["dest"] / filename
+    if dest_path.exists():
+        raise HTTPException(409, "Cannot remove from catalog while file exists on disk. Delete the file first.")
+
+    # Remove from models.json
+    for cat in _catalogs._models_data.get("categories", []):
+        models_list = cat.get("models", [])
+        for i, m in enumerate(models_list):
+            if m.get("file") == filename:
+                models_list.pop(i)
+                MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
+                MODELS_JSON.write_text(json.dumps(_catalogs._models_data, indent=2, ensure_ascii=False))
+                _events.emit("model.removed", f"Removed from catalog: {filename}", data={"filename": filename})
+                return JSONResponse({"status": "removed", "file": filename})
+
+    # Remove from loras.json
+    for cat in _catalogs._loras_data.get("categories", []):
+        models_list = cat.get("models", [])
+        for i, m in enumerate(models_list):
+            if m.get("file") == filename:
+                models_list.pop(i)
+                from config import LORAS_JSON
+                LORAS_JSON.parent.mkdir(parents=True, exist_ok=True)
+                LORAS_JSON.write_text(json.dumps(_catalogs._loras_data, indent=2, ensure_ascii=False))
+                _events.emit("model.removed", f"Removed from catalog: {filename}", data={"filename": filename})
+                return JSONResponse({"status": "removed", "file": filename})
+
+    raise HTTPException(404, "Entry not found in catalog")
+
+
 @router.post("/api/admin/models/import")
 async def import_models(file: UploadFile = File(...)):
     """Import models from a JSON file. Adds new models with 'imported' tag."""

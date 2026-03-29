@@ -594,6 +594,7 @@
       '<div class="card-error" data-ref="error"></div>' +
       '<div class="card-actions">' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
+        '<button class="btn btn--sm btn--danger" data-ref="removeBtn" style="display:none;font-size:10px;">Remove</button>' +
       '</div>';
 
     // Cache refs
@@ -652,6 +653,7 @@
     refs.tags.innerHTML = '';
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
+    refs.removeBtn.addEventListener('click', () => handleRemoveFromCatalog(m.file, m.name));
 
     const grid = document.querySelector('[data-grid="' + catId + '"]');
     if (grid) grid.appendChild(card);
@@ -681,6 +683,7 @@
     // Reset status classes
     el.classList.remove('status-downloading', 'status-error', 'status-present', 'status-missing', 'status-queued');
     el.classList.add('status-' + m.status);
+    if (refs.removeBtn) refs.removeBtn.style.display = 'none';
 
     badge.className = 'status-badge ' + m.status;
 
@@ -708,6 +711,7 @@
         progress.classList.remove('visible');
         fill.classList.remove('indeterminate');
         errorEl.classList.remove('visible');
+        if (refs.removeBtn) refs.removeBtn.style.display = '';
         break;
 
       case 'queued':
@@ -769,6 +773,22 @@
           errorEl.classList.remove('visible');
         }
         break;
+    }
+  }
+
+  async function handleRemoveFromCatalog(filename, name) {
+    if (!await studioConfirm('Remove "' + name + '" from catalog?', {danger: true, yes: 'Remove'})) return;
+    try {
+      const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(filename) + '/catalog', { method: 'DELETE' });
+      if (resp.ok) {
+        showToast('Removed from catalog', 3000);
+        loadModels();
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        showToast(err.detail || 'Remove failed', 5000, 'error');
+      }
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
     }
   }
 
