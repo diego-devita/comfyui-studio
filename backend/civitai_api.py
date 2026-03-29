@@ -49,11 +49,15 @@ def _build_civitai_map() -> dict:
     return by_version
 
 
-def _detect_workflow_type(type_: str, process: str | None, techniques: list) -> str:
-    """Heuristic detection of workflow type from CivitAI generation data."""
+def _detect_workflow_type(type_: str, process: str | None, techniques: list,
+                          meta: dict | None = None, resources: list | None = None) -> str:
+    """Heuristic detection of workflow type from CivitAI generation data.
+
+    Uses multiple signals: type, process, techniques, meta.workflow, resource baseModels.
+    """
     # techniques can be [{name: "txt2img"}, ...] or ["txt2img", ...]
     techniques_lower = []
-    for t in techniques:
+    for t in (techniques or []):
         if isinstance(t, dict):
             techniques_lower.append((t.get("name") or "").lower())
         elif isinstance(t, str):
@@ -61,13 +65,32 @@ def _detect_workflow_type(type_: str, process: str | None, techniques: list) -> 
         else:
             techniques_lower.append("")
     process_lower = (process or "").lower()
+    meta_workflow = ((meta or {}).get("workflow") or "").lower()
+
+    # Check resource baseModels for i2v/t2v hints
+    base_models_lower = []
+    for r in (resources or []):
+        bm = (r.get("baseModel") or "").lower()
+        if bm:
+            base_models_lower.append(bm)
 
     if type_ == "video":
+        # meta.workflow is very reliable when present
+        if "img2vid" in meta_workflow or "i2v" in meta_workflow:
+            return "i2v"
+        if "txt2vid" in meta_workflow or "t2v" in meta_workflow:
+            return "t2v"
+        # techniques
         if "img2vid" in techniques_lower:
             return "i2v"
         if "txt2vid" in techniques_lower:
             return "t2v"
-        return "t2v"
+        # baseModel hints (e.g. "Wan Video 14B i2v 720p")
+        if any("i2v" in bm for bm in base_models_lower):
+            return "i2v"
+        if any("t2v" in bm for bm in base_models_lower):
+            return "t2v"
+        return "t2v"  # default for video
 
     if process_lower == "txt2img" or "txt2img" in techniques_lower:
         return "t2i"
@@ -262,7 +285,7 @@ async def civitai_image_generation_data(image_id: int):
 
     civitai_map = _build_civitai_map()
     enriched_resources = _enrich_resources(resources, civitai_map)
-    detected_type = _detect_workflow_type(type_, process, techniques)
+    detected_type = _detect_workflow_type(type_, process, techniques, meta, resources)
 
     # Parse hidden dependencies from prompts
     meta_resources = (meta or {}).get("resources", [])
