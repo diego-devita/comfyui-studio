@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>ComfyUI Studio</h1>
+  <span class="dot dot-gray" id="studioDot" title="Studio status"></span>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="pods">Pods</button>
+  <button class="tab" data-tab="storage">Storage</button>
+  <button class="tab" data-tab="launch">Launch</button>
+  <button class="tab" data-tab="settings">Settings</button>
+</div>
+
+<div class="content">
+  <div id="statusMsg" class="status-msg"></div>
+
+  <!-- Pods -->
+  <div class="panel active" id="panel-pods">
+    <div id="podsList" class="loading">Loading pods...</div>
+  </div>
+
+  <!-- Storage -->
+  <div class="panel" id="panel-storage">
+    <div id="storageList" class="loading">Loading storage...</div>
+  </div>
+
+  <!-- Launch -->
+  <div class="panel" id="panel-launch">
+    <div class="input-group">
+      <label class="input-label">GPU Type</label>
+      <select class="input" id="gpuSelect">
+        <option value="">Loading GPUs...</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Cloud Type</label>
+      <select class="input" id="cloudType">
+        <option value="COMMUNITY">Community</option>
+        <option value="SECURE">Secure</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Volume (Network Storage)</label>
+      <select class="input" id="volumeSelect">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Template ID</label>
+      <input class="input" id="templateId" type="text" placeholder="e.g. abc123xyz">
+    </div>
+    <button class="btn btn-accent" id="launchBtn" style="width:100%;margin-top:4px;">Launch Pod</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="panel" id="panel-settings">
+    <div class="input-group">
+      <label class="input-label">RunPod API Key</label>
+      <input class="input" id="runpodKey" type="password" placeholder="rpa_...">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Studio URL</label>
+      <input class="input" id="studioUrl" type="text" placeholder="https://PODID-8000.proxy.runpod.net">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Studio API Key</label>
+      <input class="input" id="studioKey" type="password" placeholder="Your Studio password">
+    </div>
+    <button class="btn btn-accent" id="saveSettingsBtn" style="width:100%;margin-top:4px;">Save</button>
+    <div style="margin-top:12px;font-size:10px;color:var(--muted);text-align:center;">
+      Keys are stored locally in Chrome. Never sent to third parties.
+    </div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
