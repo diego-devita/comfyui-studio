@@ -26,13 +26,17 @@
   .unlock-bar .status-text { color: var(--muted); flex: 1; }
   .unlock-bar .status-text.revealed { color: var(--accent); }
   .unlock-bar .countdown-wrap {
+    display: inline-block;
     width: 120px;
     height: 4px;
     background: var(--border);
     border-radius: 2px;
     overflow: hidden;
+    vertical-align: middle;
   }
   .unlock-bar .countdown-fill {
+    display: block;
+    width: 100%;
     height: 100%;
     background: var(--accent);
     border-radius: 2px;
