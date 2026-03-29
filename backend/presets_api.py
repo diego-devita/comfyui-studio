@@ -40,13 +40,17 @@ async def list_presets():
     for f in sorted(_presets_dir().glob("*.json")):
         try:
             data = json.loads(f.read_text())
-            presets.append({
+            entry = {
                 "id": data.get("id", f.stem),
                 "name": data.get("name", f.stem),
                 "description": data.get("description", ""),
+                "private": data.get("private", False),
                 "workflow_id": data.get("workflow", {}).get("workflow_id", ""),
                 "workflow_name": data.get("workflow", {}).get("workflow_name", ""),
-            })
+            }
+            if "source" in data:
+                entry["source"] = data["source"]
+            presets.append(entry)
         except Exception:
             pass
     return presets
@@ -58,6 +62,7 @@ async def get_preset(preset_id: str):
     data = _load_preset(preset_id)
     if not data:
         raise HTTPException(404, f"Preset '{preset_id}' not found")
+    data.setdefault("private", False)
     return data
 
 
@@ -75,8 +80,11 @@ async def save_preset(request: Request):
         "id": preset_id,
         "name": body.get("name", preset_id),
         "description": body.get("description", ""),
+        "private": bool(body.get("private", False)),
         "workflow": body.get("workflow", {}),
     }
+    if body.get("source") and isinstance(body["source"], dict):
+        preset["source"] = body["source"]
 
     p = _presets_dir() / f"{preset_id}.json"
     p.write_text(json.dumps(preset, indent=2, ensure_ascii=False))
@@ -99,6 +107,8 @@ async def rename_preset(preset_id: str, request: Request):
         data["name"] = new_name
     if new_desc is not None:
         data["description"] = new_desc
+    if "private" in body:
+        data["private"] = bool(body["private"])
 
     old_path = _presets_dir() / f"{preset_id}.json"
 
@@ -312,6 +322,7 @@ async def export_preset(preset_id: str):
     data = _load_preset(preset_id)
     if not data:
         raise HTTPException(404)
+    data.setdefault("private", False)
     return JSONResponse(
         content=data,
         headers={"Content-Disposition": f'attachment; filename="{preset_id}.json"'},
