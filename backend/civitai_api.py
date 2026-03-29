@@ -277,6 +277,11 @@ async def add_from_civitai(version_id: int):
     except httpx.RequestError as e:
         raise HTTPException(502, f"Failed to reach CivitAI: {str(e)}")
 
+    # Check download restriction
+    usage_control = ver_data.get("usageControl", "")
+    if usage_control and usage_control != "Download":
+        return JSONResponse({"status": "restricted", "reason": f"This model is '{usage_control}' only — download not allowed by the creator"}, status_code=200)
+
     entry, cat_id = _civitai_to_catalog_entry(ver_data)
 
     if entry["file"] in existing:
