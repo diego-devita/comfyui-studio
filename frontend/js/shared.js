@@ -366,15 +366,18 @@ document.addEventListener('DOMContentLoaded', function() {
   // ── Docs link ──
   var _docsLink = document.getElementById('docsLink');
   if (_docsLink) {
-    fetch('/api/admin/system/status', {credentials: 'include'})
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(data) {
-        if (data && data.docs_url) {
-          _docsLink.href = data.docs_url;
-        } else {
-          _docsLink.style.display = 'none';
-        }
-      })
-      .catch(function() { _docsLink.style.display = 'none'; });
+    _docsLink.style.display = 'none';
+    try {
+      apiFetch('/api/admin/system/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.docs_url) {
+            _docsLink.href = data.docs_url;
+            _docsLink.style.display = 'flex';
+            _docsLink.style.alignItems = 'center';
+          }
+        })
+        .catch(function() {});
+    } catch(e) {}
   }
 });
