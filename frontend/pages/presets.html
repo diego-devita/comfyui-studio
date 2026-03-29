@@ -168,7 +168,7 @@
         '<div class="desc" style="margin-top:4px;">' + escHtml(p.description || '') + '</div>' +
         '<div class="actions">' +
           '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
-          (p.workflow && p.workflow.workflow_id
+          (p.workflow_id
             ? '<button class="btn btn--sm open-runner-btn" data-id="' + escHtml(p.id) + '" title="Open in Runner">&#9881; Open</button>' +
               '<button class="btn btn--sm preview-json-btn" data-id="' + escHtml(p.id) + '" title="Preview compiled workflow">{}</button>'
             : '') +
@@ -473,25 +473,36 @@
     if (e.target === $overlay) $overlay.classList.remove('visible');
   });
 
-  function openInRunner(preset) {
-    if (!preset.workflow || !preset.workflow.workflow_id) {
-      showToast('No workflow linked to this preset', 3000, 'error');
-      return;
-    }
-    sessionStorage.setItem('preset_prefill', JSON.stringify(preset.workflow.params || {}));
-    window.open('/run/' + preset.workflow.workflow_id, '_blank');
-  }
-
-  async function previewWorkflowJson(preset) {
-    if (!preset.workflow || !preset.workflow.workflow_id) {
+  async function openInRunner(preset) {
+    if (!preset.workflow_id) {
       showToast('No workflow linked to this preset', 3000, 'error');
       return;
     }
     try {
-      var resp = await apiFetch('/api/run/' + preset.workflow.workflow_id + '/build?format=api', {
+      var resp = await apiFetch('/api/admin/presets/' + preset.id);
+      if (!resp.ok) { showToast('Failed to load preset', 3000, 'error'); return; }
+      var full = await resp.json();
+      sessionStorage.setItem('preset_prefill', JSON.stringify((full.workflow || {}).params || {}));
+      window.open('/run/' + preset.workflow_id, '_blank');
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 3000, 'error');
+    }
+  }
+
+  async function previewWorkflowJson(preset) {
+    if (!preset.workflow_id) {
+      showToast('No workflow linked to this preset', 3000, 'error');
+      return;
+    }
+    try {
+      var fullResp = await apiFetch('/api/admin/presets/' + preset.id);
+      if (!fullResp.ok) { showToast('Failed to load preset', 3000, 'error'); return; }
+      var full = await fullResp.json();
+      var params = (full.workflow || {}).params || {};
+      var resp = await apiFetch('/api/run/' + preset.workflow_id + '/build?format=api', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(preset.workflow.params || {}),
+        body: JSON.stringify(params),
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
@@ -505,7 +516,7 @@
       dialog.innerHTML =
         '<div class="studio-dialog-body">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-            '<strong>Compiled Workflow — ' + escHtml(preset.workflow.workflow_id) + '</strong>' +
+            '<strong>Compiled Workflow — ' + escHtml(preset.workflow_id) + '</strong>' +
             '<button class="btn btn--sm" id="copyJsonBtn">Copy</button>' +
           '</div>' +
           '<pre class="api-code" style="max-height:60vh;overflow:auto;">' + escHtml(JSON.stringify(json, null, 2)) + '</pre>' +
