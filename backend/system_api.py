@@ -624,22 +624,31 @@ async def restart_backend():
 
 @router.get("/api/admin/telegram/status")
 async def telegram_bot_status():
-    from telegram_bot import bot_status
-    return bot_status()
+    try:
+        from telegram_bot import bot_status
+        return bot_status()
+    except ImportError:
+        return {"running": False, "name": "", "started_at": None, "error": "python-telegram-bot not installed"}
 
 
 @router.post("/api/admin/telegram/start")
 async def telegram_bot_start():
-    from telegram_bot import start_bot
-    result = start_bot()
-    return {"result": result}
+    try:
+        from telegram_bot import start_bot
+        result = start_bot()
+        return {"result": result}
+    except ImportError:
+        raise HTTPException(500, "python-telegram-bot not installed. Run: pip install python-telegram-bot")
 
 
 @router.post("/api/admin/telegram/stop")
 async def telegram_bot_stop():
-    from telegram_bot import stop_bot
-    result = stop_bot()
-    return {"result": result}
+    try:
+        from telegram_bot import stop_bot
+        result = stop_bot()
+        return {"result": result}
+    except ImportError:
+        raise HTTPException(500, "python-telegram-bot not installed")
 
 
 # ── Telemetry ────────────────────────────────────────────────────────────────
