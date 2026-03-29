@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from config import STUDIO_DIR
+from config import STUDIO_DIR, _now_rome
 
 DB_PATH = STUDIO_DIR / "database" / "studio.db"
 _local = threading.local()
@@ -491,7 +491,7 @@ def _row_to_workflow(row: sqlite3.Row) -> dict:
 
 
 def _now_italian() -> str:
-    return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S")
+    return _now_rome().strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def upsert_download(filename: str, dest: str, status: str, source: str = None, error: str = None):

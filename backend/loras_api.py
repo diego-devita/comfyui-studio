@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
-from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE
+from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE, _now_rome
 
 def _civitai_key():
     return os.environ.get("_civitai_key()", "")
@@ -367,7 +367,7 @@ async def add_civitai(body: AddCivitaiRequest):
     if added:
         loras_data["version"] = loras_data.get("version", 0) + 1
         from datetime import datetime, timezone, timedelta
-        loras_data["date"] = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d %H:%M")
+        loras_data["date"] = _now_rome().strftime("%Y-%m-%d %H:%M")
         LORAS_JSON.parent.mkdir(parents=True, exist_ok=True)
         LORAS_JSON.write_text(json.dumps(loras_data, indent=2, ensure_ascii=False))
         if images_to_dl:

@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from config import app, STUDIO_DIR
+from config import app, STUDIO_DIR, _now_rome
 
 
 # ── Event Bus ───────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ class EventBus:
         event = {
             "id": f"evt_{uuid.uuid4().hex[:8]}",
             "type": event_type,
-            "timestamp": datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S"),
+            "timestamp": _now_rome().strftime("%Y-%m-%dT%H:%M:%S"),
             "severity": severity,
             "message": message,
             "data": data or {},

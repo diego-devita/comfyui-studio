@@ -584,8 +584,8 @@ _backend_started_at = time.time()
 @router.get("/api/admin/system/uptime")
 async def backend_uptime():
     """Return backend start time and uptime."""
-    from datetime import datetime, timezone, timedelta
-    started = datetime.fromtimestamp(_backend_started_at, tz=timezone(timedelta(hours=1)))
+    from config import _now_rome, _TZ_ROME
+    started = datetime.fromtimestamp(_backend_started_at, tz=_TZ_ROME)
     uptime_secs = int(time.time() - _backend_started_at)
     return {
         "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),

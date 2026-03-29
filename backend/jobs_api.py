@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import COMFY_URL, COMFYUI_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR, DEV_MODE
+from config import COMFY_URL, COMFYUI_DIR, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR, DEV_MODE, _now_rome
 from events import _events
 from runner import _exec_progress, _save_job, _pick_best_output, _start_ws_listener
 from workflows import _make_input_filename
@@ -128,7 +128,7 @@ async def retry_job(request: Request):
     )
 
     from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     client_id = uuid.uuid4().hex
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -402,7 +402,7 @@ async def download_outputs():
         raise HTTPException(404, "Output directory not found")
 
     from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     filename = f"outputs_{now.strftime('%Y%m%d_%H%M%S')}.zip"
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")

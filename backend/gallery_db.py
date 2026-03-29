@@ -40,7 +40,7 @@ import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from config import CATALOGS_DIR
+from config import CATALOGS_DIR, _now_rome
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -591,4 +591,4 @@ def tag_count() -> int:
 
 def _now_italian() -> str:
     """Current timestamp in Italian timezone, ISO format."""
-    return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%dT%H:%M:%S")
+    return _now_rome().strftime("%Y-%m-%dT%H:%M:%S")

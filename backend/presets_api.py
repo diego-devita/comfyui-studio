@@ -48,8 +48,12 @@ async def list_presets():
                 "workflow_id": data.get("workflow", {}).get("workflow_id", ""),
                 "workflow_name": data.get("workflow", {}).get("workflow_name", ""),
             }
-            if "source" in data:
-                entry["source"] = data["source"]
+            if "source" in data and isinstance(data["source"], dict):
+                src = data["source"]
+                entry["source_type"] = src.get("type", "")
+                entry["civitai_image_id"] = src.get("civitai_image_id")
+                entry["civitai_url"] = src.get("civitai_url", "")
+                entry["detected_type"] = src.get("detected_type", "")
             presets.append(entry)
         except Exception:
             pass

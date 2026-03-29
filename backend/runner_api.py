@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Q
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
-from config import app, COMFY_URL, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR
+from config import app, COMFY_URL, ASSETS_INPUT_DIR, ASSETS_OUTPUT_DIR, _now_rome
 from auth import COOKIE_NAME, _verify_cookie
 from events import _events
 from runner import (
@@ -123,7 +123,7 @@ async def execute_workflow(
     prompt_id = data["prompt_id"]
 
     from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     is_dynamic = manifest.get("type") == "dynamic"
     input_image_name = None
     if is_dynamic:

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-from config import (
+from config import (, _now_rome
     COMFY_URL, COMFYUI_DIR, MODELS_BASE,
     WORKFLOWS_DIR,
 )
@@ -27,7 +27,7 @@ def _make_input_filename(original_filename: str) -> str:
     """Generate a descriptive input filename: YYYYMMDD_HHMMSS_originalname.ext"""
     import re
     from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     ts = now.strftime("%Y%m%d_%H%M%S")
 
     original = original_filename or "image.png"

@@ -23,6 +23,28 @@
     flex: 1;
   }
   .preset-card .wf-tag { font-size: 10px; color: var(--accent); }
+  .preset-thumb {
+    position: relative; cursor: pointer; margin-bottom: 8px;
+    border-radius: var(--radius-sm); overflow: hidden;
+    max-height: 180px;
+  }
+  .preset-thumb img { width: 100%; display: block; object-fit: cover; max-height: 180px; }
+  .preset-thumb .preset-play {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 28px; color: white; background: rgba(0,0,0,0.5);
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  /* Expanded media overlay */
+  .media-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    z-index: 200; justify-content: center; align-items: center; cursor: pointer;
+  }
+  .media-overlay.visible { display: flex; }
+  .media-overlay img, .media-overlay video {
+    max-width: 90vw; max-height: 90vh; border-radius: 8px;
+  }
   .preset-card .actions { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; }
   .run-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
@@ -100,6 +122,9 @@
   <div id="emptyState" style="display:none;color:var(--muted);font-size:13px;">No presets saved. Create one from a workflow runner page.</div>
 </main>
 
+<!-- Media overlay -->
+<div class="media-overlay" id="mediaOverlay" onclick="this.classList.remove('visible');var v=this.querySelector('video');if(v)v.pause();"></div>
+
 <!-- Run overlay -->
 <div class="run-overlay" id="runOverlay">
   <div class="run-box" id="runBox"></div>
@@ -158,10 +183,22 @@
       var targetGrid = p.private ? $privateGrid : $publicGrid;
       var card = document.createElement('div');
       card.className = 'preset-card';
+      var thumbHtml = '';
+      if (p.civitai_image_id) {
+        var thumbUrl = '/api/admin/loras/gallery/thumb/' + p.civitai_image_id;
+        var mediaUrl = '/api/admin/loras/gallery/media/' + p.civitai_image_id;
+        thumbHtml = '<div class="preset-thumb" data-media="' + mediaUrl + '">' +
+          '<img src="' + thumbUrl + '" onerror="this.parentElement.style.display=\'none\'" loading="lazy">' +
+          (p.detected_type === 'i2v' || p.detected_type === 't2v' ? '<span class="preset-play">&#9654;</span>' : '') +
+        '</div>';
+      }
+
       card.innerHTML =
+        thumbHtml +
         '<div style="display:flex;align-items:center;gap:6px;">' +
           '<h3 class="preset-name" style="flex:1;margin:0;">' + escHtml(p.name || p.id) + '</h3>' +
           (p.private ? '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(107,107,128,0.2);color:var(--muted);text-transform:uppercase;">Private</span>' : '') +
+          (p.detected_type ? '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(232,255,71,0.12);color:var(--accent);text-transform:uppercase;">' + escHtml(p.detected_type) + '</span>' : '') +
           '<span class="preset-edit" style="cursor:pointer;opacity:0.3;font-size:12px;" title="Edit">&#9998;</span>' +
         '</div>' +
         '<div class="preset-id" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">id: ' + escHtml(p.id) + '</div>' +
@@ -175,6 +212,22 @@
           '<button class="btn btn--sm export-btn" data-id="' + escHtml(p.id) + '"><span class="icon icon-file-export icon-sm"></span></button>' +
           '<button class="btn btn--sm del-btn" data-id="' + escHtml(p.id) + '" style="color:var(--error);font-size:11px;">Delete</button>' +
         '</div>';
+
+      var thumb = card.querySelector('.preset-thumb');
+      if (thumb) {
+        thumb.onclick = function(e) {
+          e.stopPropagation();
+          var mediaUrl = thumb.dataset.media;
+          var overlay = document.getElementById('mediaOverlay');
+          var isVideo = p.detected_type === 'i2v' || p.detected_type === 't2v';
+          if (isVideo) {
+            overlay.innerHTML = '<video src="' + mediaUrl + '" controls autoplay style="max-width:90vw;max-height:90vh;border-radius:8px;"></video>';
+          } else {
+            overlay.innerHTML = '<img src="' + mediaUrl + '" style="max-width:90vw;max-height:90vh;border-radius:8px;">';
+          }
+          overlay.classList.add('visible');
+        };
+      }
 
       card.querySelector('.preset-edit').onclick = function(e) {
         e.stopPropagation();

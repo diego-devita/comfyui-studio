@@ -3,7 +3,9 @@
 import json
 import random
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+from config import _now_rome
 
 import httpx
 from fastapi import HTTPException, UploadFile
@@ -83,8 +85,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
     def _mark_failed(reason="WebSocket listener terminated unexpectedly", status="failed"):
         """Mark the job as failed/stalled in DB if it never completed."""
         if job_record and job_record.get("status") in ("queued", "running"):
-            from datetime import datetime, timezone, timedelta
-            now = datetime.now(timezone(timedelta(hours=1)))
+
+            now = _now_rome()
             job_record["status"] = status
             job_record["error"] = reason
             job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
@@ -126,8 +128,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                             break
                     _mark_failed(f"ComfyUI error: {(err_msg or str(msgs))[:200]}")
                 else:
-                    from datetime import datetime, timezone, timedelta as _td
-                    _now = datetime.now(timezone(_td(hours=1)))
+
+                    _now = _now_rome()
                     if job_record:
                         job_record["status"] = "completed"
                         job_record["finished_at"] = _now.strftime("%Y-%m-%dT%H:%M:%S")
@@ -181,8 +183,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                 state["status"] = "running"
                 _exec_start = _time.time()
                 if job_record:
-                    from datetime import datetime, timezone, timedelta
-                    real_start = datetime.now(timezone(timedelta(hours=1)))
+        
+                    real_start = _now_rome()
                     job_record["status"] = "running"
                     job_record["started_at"] = real_start.strftime("%Y-%m-%dT%H:%M:%S")
                     _save_job(job_record)
@@ -211,8 +213,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                     state["eta_seconds"] = 0
                     _exec_progress[prompt_id] = state
                     if job_record:
-                        from datetime import datetime, timezone, timedelta
-                        now = datetime.now(timezone(timedelta(hours=1)))
+            
+                        now = _now_rome()
                         job_record["status"] = "completed"
                         job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
                         if not job_record.get("started_at"):
@@ -322,8 +324,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                 err_title = node_titles.get(str(err_node), str(err_node)) if err_node else ""
                 full_err = f"[{err_title}] {err_msg}" if err_title else err_msg
                 if job_record:
-                    from datetime import datetime, timezone, timedelta
-                    now = datetime.now(timezone(timedelta(hours=1)))
+        
+                    now = _now_rome()
                     job_record["status"] = "failed"
                     job_record["error"] = full_err
                     job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
@@ -362,8 +364,8 @@ def _start_ws_listener(client_id: str, prompt_id: str, workflow: dict, job_recor
                         _mark_failed(f"ComfyUI error: {err_msg[:200]}")
                     elif status_info.get("status_str") == "success":
                         # Completed but WS missed it — mark completed
-                        from datetime import datetime, timezone, timedelta
-                        now = datetime.now(timezone(timedelta(hours=1)))
+            
+                        now = _now_rome()
                         job_record["status"] = "completed"
                         job_record["finished_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
                         hist_outputs = hist.get("outputs", {})
@@ -402,8 +404,7 @@ async def _build_workflow(
     dynamic_seeds = {}
 
     # Generate output_dir early -- needed by assemblers
-    from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     output_dir = now.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
 
     if is_dynamic:

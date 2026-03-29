@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from config import MODELS_BASE, MODELS_JSON, LORAS_JSON
+from config import MODELS_BASE, MODELS_JSON, LORAS_JSON, _now_rome
 import catalogs as _catalogs
 from loras_api import _gallery_download_one, _url_to_id
 import gallery_db as _gdb
@@ -415,7 +415,7 @@ def _civitai_to_catalog_entry(ver_data: dict) -> dict:
 
 def _save_models_json():
     """Persist _models_data to disk."""
-    now = datetime.now(timezone(timedelta(hours=2)))
+    now = _now_rome()
     _catalogs._models_data["version"] = _catalogs._models_data.get("version", 0) + 1
     _catalogs._models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
     MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -424,7 +424,7 @@ def _save_models_json():
 
 def _save_loras_json():
     """Persist _loras_data to disk."""
-    now = datetime.now(timezone(timedelta(hours=2)))
+    now = _now_rome()
     _catalogs._loras_data["version"] = _catalogs._loras_data.get("version", 0) + 1
     _catalogs._loras_data["date"] = now.strftime("%Y-%m-%d %H:%M")
     LORAS_JSON.parent.mkdir(parents=True, exist_ok=True)

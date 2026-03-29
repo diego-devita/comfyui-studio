@@ -389,7 +389,7 @@ def start_bot() -> str:
     def _run():
         global _bot_app, _bot_started_at
         from datetime import datetime, timezone, timedelta
-        _bot_started_at = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d %H:%M:%S")
+        _bot_started_at = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
             # Create a new event loop for this thread

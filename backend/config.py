@@ -1,7 +1,15 @@
 """ComfyUI Studio — Configuration, constants, paths, env vars, app instance."""
 
 import os
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+_TZ_ROME = ZoneInfo("Europe/Rome")
+
+def _now_rome():
+    """Current time in Italian timezone (handles CET/CEST automatically)."""
+    return datetime.now(_TZ_ROME)
 
 from fastapi import FastAPI
 

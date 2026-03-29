@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from config import MODELS_BASE, MODELS_JSON, REPO_DIR
+from config import MODELS_BASE, MODELS_JSON, REPO_DIR, _now_rome
 import catalogs as _catalogs
 from catalogs import (
     _reload_models,
@@ -51,7 +51,7 @@ _activity_log: list = []
 
 def _log_activity(message: str, level: str = "info"):
     from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=1)))
+    now = _now_rome()
     _activity_log.append({"time": now.strftime("%H:%M:%S"), "message": message, "level": level})
 
 
@@ -557,7 +557,7 @@ async def import_models(file: UploadFile = File(...)):
     if added:
         _catalogs._models_data["version"] = _catalogs._models_data.get("version", 0) + 1
         from datetime import datetime, timezone, timedelta
-        now = datetime.now(timezone(timedelta(hours=1)))
+        now = _now_rome()
         _catalogs._models_data["date"] = now.strftime("%Y-%m-%d %H:%M")
 
         MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
