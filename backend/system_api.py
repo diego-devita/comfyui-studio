@@ -880,6 +880,7 @@ _EDITABLE_VARS = {
     "HF_TOKEN": ("_env", str),
     "TELEGRAM_BOT_TOKEN": ("_env", str),
     "TELEGRAM_BOT_NAME": ("_env", str),
+    "HOSTING": ("config.HOSTING", str),
     "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
     "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
 }
