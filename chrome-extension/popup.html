@@ -63,7 +63,10 @@
   <div class="panel" id="panel-settings">
     <div class="input-group">
       <label class="input-label">RunPod API Key</label>
-      <input class="input" id="runpodKey" type="password" placeholder="rpa_...">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input class="input" id="runpodKey" type="password" placeholder="rpa_..." style="flex:1;">
+        <button class="btn btn-sm toggle-vis" data-target="runpodKey" style="padding:5px 8px;font-size:12px;line-height:1;">&#128065;</button>
+      </div>
     </div>
     <div class="input-group">
       <label class="input-label">Studio URL</label>
@@ -75,7 +78,10 @@
     </div>
     <div class="input-group">
       <label class="input-label">Studio API Key</label>
-      <input class="input" id="studioKey" type="password" placeholder="Your Studio password">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input class="input" id="studioKey" type="password" placeholder="Your Studio password" style="flex:1;">
+        <button class="btn btn-sm toggle-vis" data-target="studioKey" style="padding:5px 8px;font-size:12px;line-height:1;">&#128065;</button>
+      </div>
     </div>
     <button class="btn btn-accent" id="saveSettingsBtn" style="width:100%;margin-top:4px;">Save</button>
     <div style="margin-top:12px;font-size:10px;color:var(--muted);text-align:center;">

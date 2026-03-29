@@ -25,8 +25,10 @@ async function runpodQuery(query, variables = {}) {
     },
     body: JSON.stringify({ query, variables }),
   });
+  if (!r.ok) throw new Error('RunPod API error: ' + r.status);
   const data = await r.json();
   if (data.errors) throw new Error(data.errors[0].message);
+  if (!data.data) throw new Error('No data returned — check your API key');
   return data.data;
 }
 
@@ -97,7 +99,7 @@ async function loadPods() {
         }
       }
     }`);
-    const pods = data.myself.pods;
+    const pods = data.myself?.pods || [];
     if (!pods.length) {
       el.innerHTML = '<div class="empty">No pods found</div>';
       return;
@@ -172,7 +174,7 @@ async function loadStorage() {
         networkVolumes { id name size dataCenterId }
       }
     }`);
-    const vols = data.myself.networkVolumes;
+    const vols = data.myself?.networkVolumes || [];
     if (!vols.length) {
       el.innerHTML = '<div class="empty">No network volumes</div>';
       return;
@@ -284,7 +286,7 @@ $('findPodBtn').addEventListener('click', async () => {
         }
       }
     }`);
-    const running = (data.myself.pods || []).filter(p => p.desiredStatus === 'RUNNING');
+    const running = (data.myself?.pods || []).filter(p => p.desiredStatus === 'RUNNING');
 
     if (!running.length) {
       showStatus('No running pods found', 'error');
@@ -355,7 +357,16 @@ async function checkStudio() {
   }
 }
 
-// ── Init ──
+// ── Toggle password visibility ──
+
+document.querySelectorAll('.toggle-vis').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = $(btn.dataset.target);
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+});
+
+// ─�� Init ──
 
 loadPods();
 loadStorage();
