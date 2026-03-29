@@ -204,6 +204,7 @@
         '</div>' +
         '<div class="preset-id" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">id: ' + escHtml(p.id) + '</div>' +
         '<div class="desc" style="margin-top:4px;">' + escHtml(p.description || '') + '</div>' +
+        (p.civitai_url ? '<a href="' + escHtml(p.civitai_url) + '" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;">CivitAI source ↗</a>' : '') +
         '<div class="actions">' +
           '<button class="btn btn--sm run-btn" data-id="' + escHtml(p.id) + '">&#9654; Run</button>' +
           (p.workflow_id
