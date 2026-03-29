@@ -969,7 +969,7 @@
       if (!await studioConfirm('Remove "' + m.name + '" from catalog?', {danger: true, yes: 'Remove'})) return;
       try {
         const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(m.file) + '/catalog', { method: 'DELETE' });
-        if (resp.ok) { showToast('Removed from catalog', 3000); loadLoras(); }
+        if (resp.ok) { showToast('Removed from catalog', 3000); initialLoad(); }
         else { const err = await resp.json().catch(() => ({})); showToast(err.detail || 'Remove failed', 5000, 'error'); }
       } catch (e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
     });

@@ -782,7 +782,7 @@
       const resp = await apiFetch('/api/admin/models/' + encodeURIComponent(filename) + '/catalog', { method: 'DELETE' });
       if (resp.ok) {
         showToast('Removed from catalog', 3000);
-        loadModels();
+        initialLoad();
       } else {
         const err = await resp.json().catch(() => ({}));
         showToast(err.detail || 'Remove failed', 5000, 'error');
