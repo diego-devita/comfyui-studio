@@ -363,7 +363,7 @@ def _civitai_to_catalog_entry(ver_data: dict) -> dict:
     cat_id, dest = _TYPE_TO_CATEGORY.get(model_type, ("checkpoints", "checkpoints"))
 
     # Diffusion models override: some base models go to diffusion_models instead of checkpoints
-    if cat_id == "checkpoints" and base_model in _DIFFUSION_BASE_MODELS:
+    if cat_id == "checkpoints" and any(dm.lower() in base_model.lower() for dm in _DIFFUSION_BASE_MODELS):
         cat_id = "diffusion_models"
         dest = "diffusion_models"
 
