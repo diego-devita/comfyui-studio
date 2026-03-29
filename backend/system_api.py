@@ -651,6 +651,50 @@ async def telegram_bot_stop():
         raise HTTPException(500, "python-telegram-bot not installed")
 
 
+# ── Chrome Extension download ────────────────────────────────────────────────
+
+
+@router.get("/api/admin/system/chrome-extension")
+async def download_chrome_extension():
+    """Download the Chrome extension as a ZIP file."""
+    import tempfile, zipfile
+    ext_dir = STUDIO_DIR / "chrome-extension"
+    if not ext_dir.exists():
+        # Try repo dir
+        ext_dir = REPO_DIR / "chrome-extension"
+    if not ext_dir.exists():
+        raise HTTPException(404, "Chrome extension not found")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in ext_dir.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f"comfyui-studio-extension/{f.relative_to(ext_dir)}")
+        tmp.close()
+
+        def stream():
+            try:
+                with open(tmp.name, "rb") as fh:
+                    while chunk := fh.read(1024 * 1024):
+                        yield chunk
+            finally:
+                import os
+                os.unlink(tmp.name)
+
+        from starlette.responses import StreamingResponse
+        return StreamingResponse(
+            stream(),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="comfyui-studio-extension.zip"'},
+        )
+    except Exception:
+        tmp.close()
+        import os
+        os.unlink(tmp.name)
+        raise
+
+
 # ── Telemetry ────────────────────────────────────────────────────────────────
 
 

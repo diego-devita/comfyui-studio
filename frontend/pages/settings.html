@@ -345,6 +345,25 @@
     </div>
   </div>
 
+  <div class="action-card">
+    <span class="icon icon-external-link action-card-icon"></span>
+    <div class="action-card-text">
+      <h3>Chrome Extension</h3>
+      <p>Manage RunPod pods, storage and GPU launches from your browser toolbar.</p>
+      <details style="margin-top:6px;font-size:10px;color:var(--muted);">
+        <summary style="cursor:pointer;color:var(--accent);">How to install</summary>
+        <ol style="margin:6px 0 0 16px;line-height:1.8;">
+          <li>Download and unzip the file</li>
+          <li>Open <code>chrome://extensions</code></li>
+          <li>Enable <strong>Developer mode</strong> (top right)</li>
+          <li>Click <strong>Load unpacked</strong></li>
+          <li>Select the unzipped folder</li>
+        </ol>
+      </details>
+    </div>
+    <button class="btn" id="downloadExtBtn">Download</button>
+  </div>
+
   <!-- Environment Variables (accordion) -->
   <div class="settings-accordion">
     <button class="accordion-toggle" id="envAccordionToggle">
@@ -773,6 +792,11 @@
     refreshTelegramStatus();
     checkTelegramStartEnabled();
   }, 1000);
+
+  // ── Chrome Extension download ──
+  document.getElementById('downloadExtBtn').addEventListener('click', function() {
+    window.location = '/api/admin/system/chrome-extension';
+  });
 
   // ── Uptime ──
   apiFetch('/api/admin/system/uptime')
