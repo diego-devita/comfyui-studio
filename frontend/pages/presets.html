@@ -553,7 +553,12 @@
         } catch (e) { /* non-blocking */ }
       }
 
-      sessionStorage.setItem('preset_prefill', JSON.stringify(params));
+      var prefillData = { params: params };
+      if (params.input_image) {
+        prefillData.input_image = params.input_image;
+        delete params.input_image;
+      }
+      sessionStorage.setItem('preset_prefill', JSON.stringify(prefillData));
       window.open('/run/' + preset.workflow_id, '_blank');
     } catch (e) {
       if (e.message !== 'auth') showToast('Error: ' + e.message, 3000, 'error');

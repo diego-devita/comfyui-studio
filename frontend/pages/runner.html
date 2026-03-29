@@ -2568,8 +2568,10 @@
     if (!raw) return;
     sessionStorage.removeItem('preset_prefill');
     try {
-      var params = JSON.parse(raw);
-      prefillForm({ params: params });
+      var data = JSON.parse(raw);
+      // Support both {params: ...} and flat params format
+      if (!data.params) data = { params: data };
+      prefillForm(data);
       document.getElementById('rerunBanner').style.display = 'block';
       document.getElementById('rerunBanner').textContent = 'Pre-filled from preset';
     } catch (e) {
