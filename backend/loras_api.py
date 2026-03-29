@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
-from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE, _now_rome
+from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE, IMAGES_DIR, _now_rome
 
 def _civitai_key():
     return os.environ.get("_civitai_key()", "")
@@ -23,7 +23,6 @@ from models_api import _clean_civitai_name
 
 router = APIRouter()
 
-IMAGES_DIR = CATALOGS_DIR / ".images"
 
 # Gallery store: flat sharded media + SQLite index
 # Imported here so download workers can use it.

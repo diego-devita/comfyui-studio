@@ -3,8 +3,9 @@
 This module manages gallery images and videos from CivitAI with two storage
 areas under a single SQLite index:
 
-  catalogs/.images/
+  assets/images/
   ├── gallery.db                 ← SQLite index (this module)
+  ├── lookup/{model_id}/previews/ ← Add LoRA preview thumbnails
   ├── models/{model_id}/         ← original/card images, grouped by model
   │   ├── {id}.mp4               ← media file
   │   ├── {id}.thumb.jpg         ← ffmpeg thumbnail (video only)
@@ -40,11 +41,10 @@ import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from config import CATALOGS_DIR, _now_rome
+from config import IMAGES_DIR, _now_rome
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-IMAGES_DIR = CATALOGS_DIR / ".images"
 GALLERY_DB_PATH = IMAGES_DIR / "gallery.db"
 
 _local = threading.local()
