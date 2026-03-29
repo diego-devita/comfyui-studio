@@ -161,19 +161,18 @@ async def _resolve_by_name(name: str, dep_type: str, client: httpx.AsyncClient, 
         if resp.status_code != 200:
             return None
         items = resp.json().get("items", [])
-        # Try exact-ish name match
+        # Only match if significant overlap in words
+        name_words = set(name.lower().replace("_", " ").split())
         for item in items:
-            if name.lower() in item.get("name", "").lower() or item.get("name", "").lower() in name.lower():
+            item_words = set(item.get("name", "").lower().replace("_", " ").split())
+            overlap = name_words & item_words
+            # Require at least 60% word overlap
+            if len(overlap) >= max(2, len(name_words) * 0.6):
                 versions = item.get("modelVersions", [])
                 if versions:
                     ver = versions[0]
                     ver["model"] = {"name": item.get("name", ""), "type": item.get("type", "")}
                     return ver
-        # Fallback: just return first result
-        if items:
-            ver = items[0].get("modelVersions", [{}])[0]
-            ver["model"] = {"name": items[0].get("name", ""), "type": items[0].get("type", "")}
-            return ver
     except httpx.HTTPError:
         pass
     return None
