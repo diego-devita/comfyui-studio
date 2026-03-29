@@ -277,7 +277,8 @@ document.addEventListener('DOMContentLoaded', function() {
     allLinks.forEach(function(link) {
       if (link.classList.contains('nav-activity') ||
           link.classList.contains('nav-logout') ||
-          link.querySelector('.icon-gear')) {
+          link.querySelector('.icon-gear') ||
+          link.id === 'docsLink') {
         keepInRow.push(link);
       } else {
         drawerLinks.push(link);
