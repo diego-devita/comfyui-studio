@@ -382,7 +382,7 @@ async def add_civitai(body: AddCivitaiRequest):
 def _download_preview_images(items: list):
     """Background: download preview images and save metadata."""
     for model_id, image_id, url, meta in items:
-        dest = IMAGES_DIR / str(model_id) / "previews" / f"{image_id}.jpeg"
+        dest = IMAGES_DIR / "lookup" / str(model_id) / "previews" / f"{image_id}.jpeg"
         if dest.exists():
             continue
         if _download_image(url, dest) and meta:
@@ -1276,7 +1276,10 @@ async def serve_preview(model_id: str, filename: str):
     """Serve a preview image (used by the LoRA catalog cards, not gallery)."""
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid path")
-    path = IMAGES_DIR / model_id / "previews" / filename
+    # Try new location first, fallback to legacy
+    path = IMAGES_DIR / "lookup" / model_id / "previews" / filename
+    if not path.exists():
+        path = IMAGES_DIR / model_id / "previews" / filename
     if not path.exists():
         raise HTTPException(404, "Preview not found")
     media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"
