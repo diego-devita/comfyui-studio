@@ -3,76 +3,130 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="icons.css">
 </head>
 <body>
 
 <div class="header">
-  <h1>ComfyUI Studio</h1>
+  <h1 id="headerTitle">ComfyUI <span style="color:var(--accent);">Studio</span></h1>
+  <div class="header-tabs">
+    <button class="header-tab active" data-tab="runpod">RunPod</button>
+    <button class="header-tab" data-tab="studio">CivitAI</button>
+    <button class="header-tab" data-tab="settings">Settings</button>
+  </div>
+  <a id="studioLink" href="#" target="_blank" class="studio-link" style="display:none;">↗</a>
   <span class="dot dot-gray" id="studioDot" title="Studio status"></span>
-</div>
-
-<div class="tabs">
-  <button class="tab active" data-tab="pods">Pods</button>
-  <button class="tab" data-tab="storage">Storage</button>
-  <button class="tab" data-tab="launch">Launch</button>
-  <button class="tab" data-tab="settings">Settings</button>
 </div>
 
 <div class="content">
   <div id="statusMsg" class="status-msg"></div>
 
-  <!-- Pods -->
-  <div class="panel active" id="panel-pods">
-    <div id="podsList" class="loading">Loading pods...</div>
+  <!-- ── RUNPOD ── -->
+  <div class="tab-panel active" id="panel-runpod">
+    <div id="runpodNoKey" class="empty" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted);">
+      Enter a valid RunPod API Key in Settings to get started.
+    </div>
+    <div id="runpodContent">
+      <div class="subtabs">
+        <button class="subtab active" data-subtab="billing" data-group="runpod">Billing</button>
+        <button class="subtab" data-subtab="pods" data-group="runpod">Pods</button>
+        <button class="subtab" data-subtab="storage" data-group="runpod">Storage</button>
+        <button class="subtab" data-subtab="launch" data-group="runpod">Launch</button>
+      </div>
+
+      <div class="subpanel active" id="subpanel-billing">
+        <div id="accountSummary" class="account-summary"></div>
+        <div id="storageSummary" class="account-summary"></div>
+      </div>
+      <div class="subpanel" id="subpanel-pods">
+        <div id="podsList" class="loading">Loading pods...</div>
+      </div>
+      <div class="subpanel" id="subpanel-storage">
+        <div id="storageList" class="loading">Loading storage...</div>
+      </div>
+      <div class="subpanel" id="subpanel-launch">
+        <div class="input-group">
+          <label class="input-label">Template</label>
+          <select class="input" id="templateSelect">
+            <option value="">Loading templates...</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Volume (Network Storage)</label>
+          <select class="input" id="volumeSelect">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Region</label>
+          <select class="input" id="regionSelect">
+            <option value="">Any region</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Cloud Type</label>
+          <select class="input" id="cloudType">
+            <option value="SECURE">Secure</option>
+            <option value="COMMUNITY">Community</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">GPU Type</label>
+          <div style="display:flex;gap:4px;margin-bottom:4px;">
+            <select class="input" id="gpuSort" style="flex:1;font-size:10px;padding:3px 6px;">
+              <option value="price">Sort: Price</option>
+              <option value="memory">Sort: Memory</option>
+              <option value="name">Sort: Name</option>
+            </select>
+            <button class="btn btn-sm" id="gpuSortDir" style="padding:3px 8px;font-size:12px;" title="Toggle sort direction">&#9650;</button>
+          </div>
+          <select class="input" id="gpuSelect">
+            <option value="">Loading GPUs...</option>
+          </select>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+            <button class="btn btn-sm" id="checkAvailBtn" style="flex:1;">Check Availability</button>
+            <span id="availResult" style="font-size:11px;"></span>
+          </div>
+        </div>
+        <button class="btn btn-accent" id="launchBtn" style="width:100%;margin-top:4px;">Launch Pod</button>
+      </div>
+    </div><!-- /runpodContent -->
   </div>
 
-  <!-- Storage -->
-  <div class="panel" id="panel-storage">
-    <div id="storageList" class="loading">Loading storage...</div>
+  <!-- ── STUDIO ── -->
+  <div class="tab-panel" id="panel-studio">
+    <div id="studioNoConnect" class="empty" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted);">
+      Connect to a Studio instance in Settings first.
+    </div>
+    <div id="studioContent" style="display:none;">
+      <div id="civitaiDetect" class="civitai-detect"></div>
+      <div id="civitaiModelPanel" style="display:none;">
+        <div id="modelVersionsList"></div>
+      </div>
+      <div id="civitaiImagePanel" style="display:none;">
+        <div id="imageGenData"></div>
+      </div>
+      <div id="civitaiNone" class="empty" style="font-size:12px;color:var(--muted);padding:8px;text-align:center;">
+        Navigate to a <a href="https://civitai.com" target="_blank" style="color:var(--accent);text-decoration:none;">CivitAI</a> model or image page, then open the extension.
+      </div>
+    </div>
   </div>
 
-  <!-- Launch -->
-  <div class="panel" id="panel-launch">
-    <div class="input-group">
-      <label class="input-label">GPU Type</label>
-      <select class="input" id="gpuSelect">
-        <option value="">Loading GPUs...</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label class="input-label">Cloud Type</label>
-      <select class="input" id="cloudType">
-        <option value="COMMUNITY">Community</option>
-        <option value="SECURE">Secure</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label class="input-label">Volume (Network Storage)</label>
-      <select class="input" id="volumeSelect">
-        <option value="">Loading...</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label class="input-label">Template ID</label>
-      <input class="input" id="templateId" type="text" placeholder="e.g. abc123xyz">
-    </div>
-    <button class="btn btn-accent" id="launchBtn" style="width:100%;margin-top:4px;">Launch Pod</button>
-  </div>
-
-  <!-- Settings -->
-  <div class="panel" id="panel-settings">
+  <!-- ── SETTINGS ── -->
+  <div class="tab-panel" id="panel-settings">
     <div class="input-group">
       <label class="input-label">RunPod API Key</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input class="input" id="runpodKey" type="password" placeholder="rpa_..." style="flex:1;">
-        <button class="btn btn-sm toggle-vis" data-target="runpodKey" style="padding:5px 8px;font-size:12px;line-height:1;">&#128065;</button>
+        <button class="btn btn-sm toggle-vis" data-target="runpodKey" style="padding:5px 8px;line-height:1;"><span class="icon icon-eye" style="width:12px;height:12px;"></span></button>
       </div>
     </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0;">
     <div class="input-group">
       <label class="input-label">Studio URL</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input class="input" id="studioUrl" type="text" placeholder="https://PODID-8000.proxy.runpod.net" style="flex:1;">
-        <button class="btn btn-sm" id="findPodBtn" title="Find running pod" style="padding:5px 8px;font-size:14px;line-height:1;">&#128269;</button>
+        <button class="btn btn-sm" id="findPodBtn" title="Find running pod" style="padding:5px 8px;line-height:1;"><span class="icon icon-search" style="width:12px;height:12px;"></span></button>
       </div>
       <select class="input" id="podPicker" style="display:none;margin-top:4px;"></select>
     </div>
@@ -80,7 +134,7 @@
       <label class="input-label">Studio API Key</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input class="input" id="studioKey" type="password" placeholder="Your Studio password" style="flex:1;">
-        <button class="btn btn-sm toggle-vis" data-target="studioKey" style="padding:5px 8px;font-size:12px;line-height:1;">&#128065;</button>
+        <button class="btn btn-sm toggle-vis" data-target="studioKey" style="padding:5px 8px;line-height:1;"><span class="icon icon-eye" style="width:12px;height:12px;"></span></button>
       </div>
     </div>
     <button class="btn btn-accent" id="saveSettingsBtn" style="width:100%;margin-top:4px;">Save</button>
@@ -89,6 +143,8 @@
     </div>
   </div>
 </div>
+
+<div id="statusBar" class="status-bar"></div>
 
 <script src="popup.js"></script>
 </body>
