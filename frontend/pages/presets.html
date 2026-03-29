@@ -81,7 +81,17 @@
   </div>
 
   <div id="loadingState" style="color:var(--muted);font-size:12px;">Loading presets...</div>
-  <div class="preset-grid" id="presetGrid" style="display:none;"></div>
+
+  <div id="publicSection" style="display:none;">
+    <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;font-family:var(--mono);">Public</h2>
+    <div class="preset-grid" id="publicGrid"></div>
+  </div>
+
+  <div id="privateSection" style="display:none;">
+    <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-family:var(--mono);">Private</h2>
+    <div class="preset-grid" id="privateGrid"></div>
+  </div>
+
   <div id="emptyState" style="display:none;color:var(--muted);font-size:13px;">No presets saved. Create one from a workflow runner page.</div>
 </main>
 
@@ -96,7 +106,10 @@
   'use strict';
 
   var presets = [];
-  var $grid = document.getElementById('presetGrid');
+  var $publicSection = document.getElementById('publicSection');
+  var $privateSection = document.getElementById('privateSection');
+  var $publicGrid = document.getElementById('publicGrid');
+  var $privateGrid = document.getElementById('privateGrid');
   var $loading = document.getElementById('loadingState');
   var $empty = document.getElementById('emptyState');
   var $overlay = document.getElementById('runOverlay');
@@ -116,20 +129,28 @@
   $showPrivate.addEventListener('change', render);
 
   function render() {
-    $grid.innerHTML = '';
+    $publicGrid.innerHTML = '';
+    $privateGrid.innerHTML = '';
     var showPrivate = $showPrivate.checked;
-    var filtered = presets.filter(function(p) {
-      return showPrivate || !p.private;
-    });
-    if (filtered.length === 0) {
-      $grid.style.display = 'none';
+
+    var publicPresets = presets.filter(function(p) { return !p.private; });
+    var privatePresets = presets.filter(function(p) { return !!p.private; });
+
+    if (publicPresets.length === 0 && (!showPrivate || privatePresets.length === 0)) {
+      $publicSection.style.display = 'none';
+      $privateSection.style.display = 'none';
       $empty.style.display = '';
       return;
     }
     $empty.style.display = 'none';
-    $grid.style.display = '';
 
-    filtered.forEach(function(p) {
+    $publicSection.style.display = publicPresets.length ? '' : 'none';
+    $privateSection.style.display = (showPrivate && privatePresets.length) ? '' : 'none';
+
+    var allVisible = publicPresets.concat(showPrivate ? privatePresets : []);
+
+    allVisible.forEach(function(p) {
+      var targetGrid = p.private ? $privateGrid : $publicGrid;
       var card = document.createElement('div');
       card.className = 'preset-card';
       card.innerHTML =
@@ -196,7 +217,7 @@
         });
       };
 
-      $grid.appendChild(card);
+      targetGrid.appendChild(card);
     });
   }
 
