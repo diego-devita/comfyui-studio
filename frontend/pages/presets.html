@@ -539,7 +539,21 @@
       var resp = await apiFetch('/api/admin/presets/' + preset.id);
       if (!resp.ok) { showToast('Failed to load preset', 3000, 'error'); return; }
       var full = await resp.json();
-      sessionStorage.setItem('preset_prefill', JSON.stringify((full.workflow || {}).params || {}));
+      var params = (full.workflow || {}).params || {};
+
+      // For i2v/t2v presets with CivitAI source, copy the preview image to ComfyUI input
+      var dt = preset.detected_type || '';
+      if ((dt === 'i2v' || dt === 't2v') && preset.civitai_image_id) {
+        try {
+          var imgResp = await apiFetch('/api/admin/loras/gallery/to-input/' + preset.civitai_image_id, { method: 'POST' });
+          if (imgResp.ok) {
+            var imgData = await imgResp.json();
+            params.input_image = imgData.filename;
+          }
+        } catch (e) { /* non-blocking */ }
+      }
+
+      sessionStorage.setItem('preset_prefill', JSON.stringify(params));
       window.open('/run/' + preset.workflow_id, '_blank');
     } catch (e) {
       if (e.message !== 'auth') showToast('Error: ' + e.message, 3000, 'error');

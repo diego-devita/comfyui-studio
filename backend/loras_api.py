@@ -1183,8 +1183,49 @@ async def serve_gallery_thumb(item_id: str):
     return FileResponse(path, media_type="image/jpeg")
 
 
-# Legacy route: serves preview images (model card thumbnails in catalog list).
 _CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
+
+
+@router.post("/api/admin/loras/gallery/to-input/{image_id}")
+async def gallery_to_input(image_id: str):
+    """Copy a gallery image/thumb to ComfyUI input dir for use as workflow input.
+
+    For videos: copies the .thumb.jpg (first frame).
+    For images: copies the jpeg directly.
+    Returns the filename in ComfyUI's input dir.
+    """
+    row = _gdb.get_image(image_id)
+    if not row:
+        raise HTTPException(404, "Image not found in gallery")
+
+    if row.get("ext") == ".mp4" and row.get("thumb_path"):
+        src = _gdb.abs_path(row["thumb_path"])
+    elif row.get("file_path"):
+        src = _gdb.abs_path(row["file_path"])
+    else:
+        raise HTTPException(404, "No file found for this image")
+
+    if not src.exists():
+        raise HTTPException(404, f"File not found on disk")
+
+    from config import COMFY_URL
+    filename = f"civitai_{image_id}.jpg"
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            with open(src, "rb") as f:
+                r = await client.post(
+                    f"{COMFY_URL}/upload/image",
+                    files={"image": (filename, f, "image/jpeg")},
+                    data={"overwrite": "true"},
+                )
+                r.raise_for_status()
+                uploaded = r.json()["name"]
+        return {"filename": uploaded}
+    except Exception as e:
+        raise HTTPException(500, f"Upload to ComfyUI failed: {e}")
+
+
+# Legacy route: serves preview images (model card thumbnails in catalog list).
 
 
 def download_single_civitai_image(civitai_image_id: int) -> dict | None:
