@@ -364,17 +364,17 @@ document.addEventListener('DOMContentLoaded', function() {
   initActivityPanel();
 
   // ── Docs link ──
-  (function() {
-    var link = document.getElementById('docsLink');
-    if (!link) return;
-    apiFetch('/api/admin/system/status').then(function(r) {
-      return r.json();
-    }).then(function(data) {
-      var url = data.docs_url;
-      if (url) {
-        link.href = url;
-        link.style.display = '';
-      }
-    }).catch(function() {});
-  })();
+  var _docsLink = document.getElementById('docsLink');
+  if (_docsLink) {
+    fetch('/api/admin/system/status', {credentials: 'include'})
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data && data.docs_url) {
+          _docsLink.href = data.docs_url;
+        } else {
+          _docsLink.style.display = 'none';
+        }
+      })
+      .catch(function() { _docsLink.style.display = 'none'; });
+  }
 });
