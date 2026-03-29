@@ -267,6 +267,55 @@ $('launchBtn').addEventListener('click', async () => {
   }
 });
 
+// ── Find running pod ──
+
+$('findPodBtn').addEventListener('click', async () => {
+  const btn = $('findPodBtn');
+  const picker = $('podPicker');
+  btn.disabled = true;
+  btn.innerHTML = '&#8987;';
+
+  try {
+    const data = await runpodQuery(`query {
+      myself {
+        pods {
+          id name desiredStatus
+          machine { podHostId }
+        }
+      }
+    }`);
+    const running = (data.myself.pods || []).filter(p => p.desiredStatus === 'RUNNING');
+
+    if (!running.length) {
+      showStatus('No running pods found', 'error');
+      picker.style.display = 'none';
+      return;
+    }
+
+    picker.innerHTML = '<option value="">-- Select pod --</option>';
+    running.forEach(pod => {
+      const o = document.createElement('option');
+      const url = 'https://' + pod.id + '-8000.proxy.runpod.net';
+      o.value = url;
+      o.textContent = (pod.name || pod.id);
+      picker.appendChild(o);
+    });
+    picker.style.display = '';
+
+    picker.onchange = function() {
+      if (picker.value) {
+        $('studioUrl').value = picker.value;
+        picker.style.display = 'none';
+      }
+    };
+  } catch (e) {
+    showStatus('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#128269;';
+  }
+});
+
 // ── Settings panel ──
 
 $('saveSettingsBtn').addEventListener('click', async () => {

@@ -67,7 +67,11 @@
     </div>
     <div class="input-group">
       <label class="input-label">Studio URL</label>
-      <input class="input" id="studioUrl" type="text" placeholder="https://PODID-8000.proxy.runpod.net">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input class="input" id="studioUrl" type="text" placeholder="https://PODID-8000.proxy.runpod.net" style="flex:1;">
+        <button class="btn btn-sm" id="findPodBtn" title="Find running pod" style="padding:5px 8px;font-size:14px;line-height:1;">&#128269;</button>
+      </div>
+      <select class="input" id="podPicker" style="display:none;margin-top:4px;"></select>
     </div>
     <div class="input-group">
       <label class="input-label">Studio API Key</label>
