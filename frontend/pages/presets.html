@@ -150,7 +150,7 @@
     $empty.style.display = 'none';
 
     $publicSection.style.display = publicPresets.length ? '' : 'none';
-    $privateSection.style.display = (showPrivate && privatePresets.length) ? '' : 'none';
+    $privateSection.style.display = showPrivate ? '' : 'none';
 
     var allVisible = publicPresets.concat(showPrivate ? privatePresets : []);
 
