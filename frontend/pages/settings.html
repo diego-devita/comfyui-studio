@@ -494,7 +494,11 @@
           var placeholder = '';
           if (v.key === 'TELEGRAM_BOT_TOKEN') placeholder = 'Bot token from @BotFather';
           else if (v.key === 'TELEGRAM_BOT_NAME') placeholder = 'Bot username (no @)';
-          valHtml = '<input type="text" class="env-edit-input" data-key="' + escHtml(v.key) + '" value="' + escHtml(v.value) + '" placeholder="' + placeholder + '">';
+          var isRevealed = v.sensitive && revealedValues && revealedValues[v.key] !== undefined;
+          var inputVal = isRevealed ? revealedValues[v.key] : (v.sensitive ? '' : v.value);
+          var inputType = (v.sensitive && !isRevealed) ? 'password' : 'text';
+          var disabled = v.sensitive && !isRevealed;
+          valHtml = '<input type="' + inputType + '" class="env-edit-input' + (isRevealed ? ' revealed' : '') + '" data-key="' + escHtml(v.key) + '" value="' + escHtml(inputVal) + '" placeholder="' + (disabled ? 'Reveal to edit' : placeholder) + '"' + (disabled ? ' disabled' : '') + '>';
         } else {
           valHtml = '<span class="' + valClass + '">' + escHtml(valText) + '</span>';
         }

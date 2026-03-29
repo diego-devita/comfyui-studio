@@ -862,10 +862,12 @@ _ENV_GROUPS = [
 
 
 def _mask(val):
-    if not val or val == "changeme":
+    if not val:
         return val
-    if len(val) <= 8:
+    if len(val) <= 4:
         return "***"
+    if len(val) <= 8:
+        return val[:2] + "***"
     return val[:4] + "***" + val[-4:]
 
 
