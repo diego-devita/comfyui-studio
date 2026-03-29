@@ -388,11 +388,14 @@ def start_bot() -> str:
 
     def _run():
         global _bot_app, _bot_started_at
-        import time as _t
         from datetime import datetime, timezone, timedelta
         _bot_started_at = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d %H:%M:%S")
 
         try:
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
             _bot_app = Application.builder().token(BOT_TOKEN).build()
             _bot_app.add_handler(CommandHandler("start", cmd_start))
             _bot_app.add_handler(CommandHandler("presets", cmd_start))
@@ -400,7 +403,20 @@ def start_bot() -> str:
             _bot_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
             _bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
             logger.info(f"Bot starting — Studio: {STUDIO_URL}")
-            _bot_app.run_polling()
+
+            # Manual polling — run_polling() requires main thread
+            async def _poll():
+                await _bot_app.initialize()
+                await _bot_app.start()
+                await _bot_app.updater.start_polling()
+                # Keep running until stopped
+                while _bot_app and _bot_started_at:
+                    await asyncio.sleep(1)
+                await _bot_app.updater.stop()
+                await _bot_app.stop()
+                await _bot_app.shutdown()
+
+            loop.run_until_complete(_poll())
         except Exception as e:
             logger.error(f"Bot crashed: {e}")
         finally:
