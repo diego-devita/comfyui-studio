@@ -201,10 +201,10 @@ async def _start_event_consumer():
             print(f"[startup] Tag sync failed: {e}", flush=True)
     _threading.Thread(target=_bg_tag_sync, daemon=True).start()
 
-    # Restore persisted settings from DB into os.environ
+    # Restore persisted settings from DB into os.environ (DB always wins)
     import os as _os
     for _sk, _sv in _db.get_all_settings().items():
-        if _sv and not _os.environ.get(_sk):
+        if _sv:
             _os.environ[_sk] = _sv
 
     # Mark any jobs that were running/queued as stalled
