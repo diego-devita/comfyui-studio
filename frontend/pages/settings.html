@@ -621,9 +621,10 @@
     $revealSubmit.disabled = true;
     $revealError.textContent = '';
     try {
-      var resp = await apiFetch('/api/admin/settings/reveal', {
+      var resp = await fetch('/api/admin/settings/reveal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ api_key: key }),
       });
       if (!resp.ok) {
