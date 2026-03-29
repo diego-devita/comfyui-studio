@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ComfyUI Studio",
   "version": "1.1.0",
-  "description": "Manage RunPod GPU pods and browse CivitAI models with ComfyUI Studio integration — check model status, download dependencies, and create presets from CivitAI images.",
+  "description": "RunPod pod manager + CivitAI browser for ComfyUI Studio. Check models, download deps, create presets.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://api.runpod.io/*",
