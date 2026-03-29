@@ -660,10 +660,12 @@ async def telegram_bot_stop():
 async def download_chrome_extension():
     """Download the Chrome extension as a ZIP file."""
     import tempfile, zipfile
-    ext_dir = STUDIO_DIR / "chrome-extension"
+    ext_dir = STUDIO_DIR / "chrome-extension" / "src"
     if not ext_dir.exists():
-        # Try repo dir
-        ext_dir = REPO_DIR / "chrome-extension"
+        ext_dir = REPO_DIR / "chrome-extension" / "src"
+    if not ext_dir.exists():
+        # Fallback to old flat structure
+        ext_dir = STUDIO_DIR / "chrome-extension"
     if not ext_dir.exists():
         raise HTTPException(404, "Chrome extension not found")
 
