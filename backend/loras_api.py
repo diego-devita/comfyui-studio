@@ -1,6 +1,7 @@
 """ComfyUI Studio — LoRA CivitAI integration: lookup, add, gallery, image serving."""
 
 import json
+import os
 import re
 import threading
 import time
@@ -11,7 +12,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
-from config import CATALOGS_DIR, LORAS_JSON, CIVITAI_API_KEY, MODELS_BASE
+from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE
+
+def _civitai_key():
+    return os.environ.get("_civitai_key()", "")
 import catalogs
 from download import _enqueue_download
 from events import _events
@@ -153,12 +157,12 @@ def _extract_image_meta(meta: dict | None) -> dict:
 
 def _fetch_generation_data(image_id: int) -> dict | None:
     """Fetch generation data from CivitAI tRPC endpoint."""
-    if not image_id or not CIVITAI_API_KEY:
+    if not image_id or not _civitai_key():
         return None
     try:
         params = json.dumps({"json": {"id": image_id, "authed": True}})
         r = httpx.get(f"https://civitai.com/api/trpc/image.getGenerationData?input={params}",
-                      headers={"Authorization": f"Bearer {CIVITAI_API_KEY}",
+                      headers={"Authorization": f"Bearer {_civitai_key()}",
                                "Content-Type": "application/json"},
                       timeout=15)
         if r.status_code == 200:
@@ -205,14 +209,14 @@ def _download_image(url: str, dest: Path, timeout: int = 30) -> bool:
 @router.post("/api/admin/loras/lookup-civitai")
 async def lookup_civitai(body: LookupRequest):
     """Lookup a CivitAI model by URL and return structured data."""
-    if not CIVITAI_API_KEY:
-        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+    if not _civitai_key():
+        raise HTTPException(403, "_civitai_key() not configured")
     try:
         model_id, version_id = _parse_civitai_url(body.url)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"}
+    headers = {"Authorization": f"Bearer {_civitai_key()}"}
     async with httpx.AsyncClient(timeout=20, headers=headers) as client:
         try:
             r = await client.get(f"https://civitai.com/api/v1/models/{model_id}")
@@ -401,8 +405,8 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
 
     if not body.action.startswith("start"):
         raise HTTPException(400, "action must be 'start' or 'stop'")
-    if not CIVITAI_API_KEY:
-        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+    if not _civitai_key():
+        raise HTTPException(403, "_civitai_key() not configured")
 
     st = _gallery_state.get(model_id)
     if st and st.get("status") == "downloading":
@@ -642,7 +646,7 @@ def _gallery_download_batch(items: list[tuple],
 def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
     """Download model card images + community images for a CivitAI model."""
     state = _gallery_state[model_id]
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
+    headers = {"Authorization": f"Bearer {_civitai_key()}"} if _civitai_key() else {}
     max_community = state.get("max_images", 200)
     num_workers = api_params.get("workers", 6)
     mode = api_params.get("mode", "fixed")
@@ -674,7 +678,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                     "width": img.get("width"), "height": img.get("height"),
                     "_source": "original"}
             if img.get("id"):
-                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}"
+                meta["civitai_page"] = f"https://civitai.com/images/{img['id']}?token={_civitai_key()}"
             card_imgs.append((str(iid), url, meta))
 
     state["total"] = len(card_imgs) + max_community
@@ -801,7 +805,7 @@ def _gallery_thread(model_id: int, stop: threading.Event, api_params: dict):
                 continue
             meta = {
                 "civitai_id": img.get("id"),
-                "civitai_page": f"https://civitai.com/images/{img['id']}?token={CIVITAI_API_KEY}" if img.get("id") else None,
+                "civitai_page": f"https://civitai.com/images/{img['id']}?token={_civitai_key()}" if img.get("id") else None,
                 "url": full_url,
                 "type": img.get("type", "image"),
                 "width": img.get("width"), "height": img.get("height"),
@@ -881,7 +885,7 @@ async def gallery_status(model_id: int, version_id: int | None = None,
             "createdAt": row.get("created_at", ""),
             "meta": {
                 "civitai_id": row.get("civitai_id"),
-                "civitai_page": f"https://civitai.com/images/{row['civitai_id']}?token={CIVITAI_API_KEY}" if row.get("civitai_id", "").isdigit() else None,
+                "civitai_page": f"https://civitai.com/images/{row['civitai_id']}?token={_civitai_key()}" if row.get("civitai_id", "").isdigit() else None,
                 "url": None,  # not needed for listing — loaded on detail view
                 "type": row.get("type", "image"),
                 "width": row.get("width"),
@@ -1003,7 +1007,7 @@ def _sync_civitai_tags_bg() -> int:
     Collects tagIds from gallery metadata, resolves unknown ones via
     CivitAI tRPC batch, stores in DB. Returns count of newly resolved tags.
     """
-    if not CIVITAI_API_KEY:
+    if not _civitai_key():
         return 0
 
     # Collect all unique tagIds from gallery images' raw metadata
@@ -1027,7 +1031,7 @@ def _sync_civitai_tags_bg() -> int:
         return 0
 
     # Resolve via tRPC batch (sync httpx, not async)
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+    headers = {"Authorization": f"Bearer {_civitai_key()}",
                "Content-Type": "application/json"}
     resolved = []
     chunk_size = 50
@@ -1062,8 +1066,8 @@ async def sync_civitai_tags():
     Each call is incremental — only resolves tags not already cached.
     Safe to call repeatedly.
     """
-    if not CIVITAI_API_KEY:
-        raise HTTPException(403, "CIVITAI_API_KEY not configured")
+    if not _civitai_key():
+        raise HTTPException(403, "_civitai_key() not configured")
 
     # Collect all unique tagIds from gallery images' raw metadata
     all_tag_ids = set()
@@ -1092,7 +1096,7 @@ async def sync_civitai_tags():
     # Resolve via tRPC batch API.
     # tRPC batch: repeat procedure name N times, input keyed by index.
     # Process in chunks of 50 to avoid URL length limits.
-    headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}",
+    headers = {"Authorization": f"Bearer {_civitai_key()}",
                "Content-Type": "application/json"}
     resolved = []
     chunk_size = 50

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from config import MODELS_BASE, CIVITAI_API_KEY, HF_TOKEN, DEV_MODE
+from config import MODELS_BASE, DEV_MODE
 import config as _cfg
 
 # ── Download state & parallel pool ──────────────────────────────────────────
@@ -48,12 +48,15 @@ def _inject_auth(url: str) -> tuple[str, dict]:
     """
     headers: dict = {}
 
-    if "civitai.com/api/download" in url and CIVITAI_API_KEY:
-        separator = "&" if "?" in url else "?"
-        url = f"{url}{separator}token={CIVITAI_API_KEY}"
+    civitai_key = os.environ.get("CIVITAI_API_KEY", "")
+    hf_token = os.environ.get("HF_TOKEN", "")
 
-    if "huggingface.co" in url and HF_TOKEN:
-        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+    if "civitai.com/api/download" in url and civitai_key:
+        separator = "&" if "?" in url else "?"
+        url = f"{url}{separator}token={civitai_key}"
+
+    if "huggingface.co" in url and hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
 
     return url, headers
 

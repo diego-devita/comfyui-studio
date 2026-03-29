@@ -8,7 +8,11 @@ from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from config import app, API_KEY, SESSION_SECRET_PATH
+import os
+from config import app, SESSION_SECRET_PATH
+
+def _api_key():
+    return os.environ.get("API_KEY", "changeme")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -89,7 +93,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # X-API-Key header (for curl/scripts)
         api_key_header = request.headers.get("X-API-Key", "")
-        if api_key_header and secrets.compare_digest(api_key_header, API_KEY):
+        if api_key_header and secrets.compare_digest(api_key_header, _api_key()):
             return await call_next(request)
 
         # Session cookie (with sliding expiration)
@@ -130,7 +134,7 @@ async def login_page(request: Request):
 async def auth_login(request: Request):
     body = await request.json()
     key = body.get("api_key", "")
-    if not secrets.compare_digest(key.encode(), API_KEY.encode()):
+    if not secrets.compare_digest(key.encode(), _api_key().encode()):
         raise HTTPException(401, "Invalid API key")
     next_url = body.get("next", "/home")
     response = JSONResponse({"status": "ok", "redirect": next_url})

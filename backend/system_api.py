@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import (
-    app, API_KEY, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
+    app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
     VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR, DEV_MODE, HOSTING,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
@@ -873,10 +873,13 @@ def _mask(val):
 # Maps env var name → (module_attr_path, cast_fn).
 # module_attr_path is "module.attr" for cross-module or just "attr" for config.
 _EDITABLE_VARS = {
-    "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
-    "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
+    "API_KEY": ("_env", str),
+    "CIVITAI_API_KEY": ("_env", str),
+    "HF_TOKEN": ("_env", str),
     "TELEGRAM_BOT_TOKEN": ("_env", str),
     "TELEGRAM_BOT_NAME": ("_env", str),
+    "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
+    "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
 }
 
 
@@ -961,7 +964,7 @@ class RevealRequest(BaseModel):
 @router.post("/api/admin/settings/reveal")
 async def reveal_secrets(body: RevealRequest):
     """Reveal sensitive env var values. Requires API key as second factor."""
-    if not secrets.compare_digest(body.api_key, API_KEY):
+    if not secrets.compare_digest(body.api_key, os.environ.get("API_KEY", "changeme")):
         raise HTTPException(403, "Invalid API key")
     result = {}
     for _gid, _label, var_defs in _ENV_GROUPS:
