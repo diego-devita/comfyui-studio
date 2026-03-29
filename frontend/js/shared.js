@@ -362,4 +362,19 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   initActivityPanel();
+
+  // ── Docs link ──
+  (function() {
+    var link = document.getElementById('docsLink');
+    if (!link) return;
+    apiFetch('/api/admin/system/status').then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      var url = data.docs_url;
+      if (url) {
+        link.href = url;
+        link.style.display = '';
+      }
+    }).catch(function() {});
+  })();
 });

@@ -309,6 +309,7 @@
   <a href="/admin/llm" class="nav-link active">LLM</a>
   <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
+  <a id="docsLink" href="#" target="_blank" class="nav-link" title="Documentation" style="display:none"><span class="icon icon-circle-question icon-lg"></span></a>
   <a href="#" class="nav-link nav-logout" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location='/login')"><span class="icon icon-logout icon-lg"></span></a>
 </nav>
 

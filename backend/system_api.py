@@ -350,6 +350,7 @@ async def system_status():
             "running": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
             "name": os.environ.get("TELEGRAM_BOT_NAME", ""),
         },
+        "docs_url": getattr(__import__('config'), 'DOCS_URL', ''),
     }
 
 
@@ -850,6 +851,7 @@ _ENV_GROUPS = [
         ("HOSTING",         False, "",      "Hosting provider (runpod, etc.) — empty = generic/local"),
         ("REPO_URL",        False, "https://github.com/diego-devita/comfyui-studio.git", "Git repository URL for OTA updates"),
         ("REPO_BRANCH",     False, "main", "Git branch to track (main = production, dev = testing)"),
+        ("DOCS_URL",        False, "",     "Documentation site URL — shown as help link in navigation bar"),
         ("DEV_MODE",        False, "false", "Development mode — stubs downloads, LLM, GPU stats"),
     ]),
     ("dev", "Development (editable at runtime)", [
@@ -886,6 +888,7 @@ _EDITABLE_VARS = {
     "TELEGRAM_BOT_TOKEN": ("_env", str),
     "TELEGRAM_BOT_NAME": ("_env", str),
     "HOSTING": ("config.HOSTING", str),
+    "DOCS_URL": ("config.DOCS_URL", str),
     "DEV_DOWNLOAD_DELAY": ("config.DEV_DOWNLOAD_DELAY", int),
     "MAX_CONCURRENT_DOWNLOADS": ("download._max_concurrent", int),
 }
