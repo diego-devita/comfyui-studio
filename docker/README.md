@@ -1,23 +1,59 @@
 # ComfyUI Studio -- Docker & Deployment
 
-This directory contains all Docker infrastructure: the Dockerfile, boot script, bootstrap installer, custom node configuration, and an interactive build configurator.
+ComfyUI Studio ships two Docker images:
+
+- **Production** -- Full GPU image with CUDA, PyTorch, ComfyUI, custom nodes, and llama-server. Built for RunPod GPU pods. See below.
+- **Development** -- Lightweight ~200MB image for local development. No GPU required. See [`development/README.md`](development/README.md) for full details.
 
 ---
 
-## Files
+## Production Image
+
+### Files
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | Image definition: CUDA base, Python, PyTorch, ComfyUI, custom nodes, performance optimizations, llama-server, FastAPI dependencies |
-| `configure.sh` | Interactive build configurator — guides you through GPU selection, optimizations, and outputs the right `docker build` command |
-| `start.sh` | Container entry point. Runs bootstrap on first boot, copies ComfyUI to volume, starts ComfyUI + Studio backend |
-| `bootstrap.py` | First-boot installer. Clones the repo, checks runtime compatibility, copies components to working directories |
-| `nodes.txt` | Custom node list with repo URLs, organized by category |
-| `install_nodes.sh` | Build-time helper. Reads `nodes.txt` between section markers, clones repos, installs requirements |
+| `production/Dockerfile` | Image definition: CUDA base, Python, PyTorch, ComfyUI, custom nodes, performance optimizations, llama-server, FastAPI dependencies |
+| `production/start.sh` | Container entry point. Runs bootstrap on first boot, copies ComfyUI to volume, starts ComfyUI + Studio backend |
+| `production/bootstrap.py` | First-boot installer. Clones the repo, checks runtime compatibility, copies components to working directories |
+| `production/nodes.txt` | Custom node list with repo URLs, organized by category |
+| `production/install_nodes.sh` | Build-time helper. Reads `nodes.txt` between section markers, clones repos, installs requirements |
+| `configure.sh` | Interactive build configurator -- guides you through GPU selection, optimizations, and outputs the right `docker build` command |
+| `RUNPOD_TEMPLATE.md` | RunPod template description -- copy-paste for the RunPod dashboard template field |
+| `dev.sh` | Development container manager -- start/stop/logs/bash/build/reset shortcuts |
+| `prod.sh` | Production container manager -- start/stop/logs/bash/pull/build shortcuts for local GPU testing |
+
+### Container Manager Scripts
+
+Both scripts run from the repository root.
+
+**`dev.sh`** — manage the development container:
+
+| Command | What it does |
+|---------|-------------|
+| `./docker/dev.sh` | Start (or restart) the dev container |
+| `./docker/dev.sh stop` | Stop and remove |
+| `./docker/dev.sh logs` | Tail logs |
+| `./docker/dev.sh bash` | Open a shell inside |
+| `./docker/dev.sh build` | Rebuild the image |
+| `./docker/dev.sh reset` | Wipe all data and restart fresh |
+
+**`prod.sh`** — manage a local production container (requires GPU):
+
+| Command | What it does |
+|---------|-------------|
+| `./docker/prod.sh` | Start with defaults |
+| `./docker/prod.sh stop` | Stop and remove |
+| `./docker/prod.sh logs` | Tail logs |
+| `./docker/prod.sh bash` | Open a shell inside |
+| `./docker/prod.sh pull` | Pull latest image from registry |
+| `./docker/prod.sh build` | Build locally (interactive or default) |
+
+`prod.sh` accepts env var overrides: `API_KEY=secret VOLUME=/data/studio ./docker/prod.sh`
 
 ---
 
-## Quick Start: Build Configurator
+### Quick Start: Build Configurator
 
 The easiest way to build the Docker image is to use the interactive configurator:
 
@@ -28,21 +64,21 @@ docker/configure.sh
 
 The configurator walks you through:
 
-1. **GPU selection** — pick your GPU from a list, the script auto-resolves CUDA version, PyTorch index, and attention optimizations
-2. **Parameter confirmation** — review and optionally override the auto-detected settings
-3. **LLM support** — include llama-server for local LLM inference (Qwen, Llama, etc.)
-4. **Build environment** — if LLM is enabled, whether you're building with or without a GPU (affects compilation time and strategy)
-5. **Custom node categories** — toggle which node groups to include
-6. **Output** — copy-paste `docker build` command, or generate a customized Dockerfile
+1. **GPU selection** -- pick your GPU from a list, the script auto-resolves CUDA version, PyTorch index, and attention optimizations
+2. **Parameter confirmation** -- review and optionally override the auto-detected settings
+3. **LLM support** -- include llama-server for local LLM inference (Qwen, Llama, etc.)
+4. **Build environment** -- if LLM is enabled, whether you're building with or without a GPU (affects compilation time and strategy)
+5. **Custom node categories** -- toggle which node groups to include
+6. **Output** -- copy-paste `docker build` command, or generate a customized Dockerfile
 
 At the end you get the exact command to run, with build time estimates.
 
-### Why the build environment matters
+#### Why the build environment matters
 
 If you enable LLM support (llama-server), the script asks where you're building the image:
 
 - **With the target GPU**: the compiler auto-detects the architecture and builds optimized kernels for that specific GPU only (~10 min)
-- **Without a GPU** (GitHub Actions, CI runners): the compiler builds kernels for ALL supported architectures (Turing through Blackwell) — produces a universal binary but takes ~60 min
+- **Without a GPU** (GitHub Actions, CI runners): the compiler builds kernels for ALL supported architectures (Turing through Blackwell) -- produces a universal binary but takes ~60 min
 
 ---
 
@@ -63,13 +99,13 @@ The `.repo/` directory is a shallow git clone used exclusively for fetching upda
    - If compatible: proceed.
 
 3. **Copy ALL components** from `.repo/` to working directories:
-   - `backend/` → `STUDIO_DIR/backend/` (always overwritten)
-   - `frontend/` → `STUDIO_DIR/frontend/` (always overwritten)
-   - `catalogs/*.json` → `STUDIO_DIR/catalogs/` (only if file doesn't exist — preserves user edits)
-   - `workflows/` → `STUDIO_DIR/workflows/` (only if index.json doesn't exist)
-   - `version.json` → `STUDIO_DIR/version.json` (always overwritten)
+   - `backend/` -> `STUDIO_DIR/backend/` (always overwritten)
+   - `frontend/` -> `STUDIO_DIR/frontend/` (always overwritten)
+   - `catalogs/*.json` -> `STUDIO_DIR/catalogs/` (only if file doesn't exist -- preserves user edits)
+   - `workflows/` -> `STUDIO_DIR/workflows/` (only if dir doesn't exist or is empty)
+   - `version.json` -> `STUDIO_DIR/version.json` (always overwritten)
 
-4. **Create runtime directories**: `assets/input`, `assets/output`, `db`, `jobs`, `llm/models`.
+4. **Create runtime directories**: `assets/input`, `assets/output`, `assets/images/{lookup,media,models}`, `database`, `llm/models`, `llm/logs`, `presets`.
 
 All steps are logged with `[bootstrap]` prefix to stdout (visible in RunPod container logs).
 
@@ -80,12 +116,49 @@ All steps are logged with `[bootstrap]` prefix to stdout (visible in RunPod cont
 | `STUDIO_DIR` | `/workspace/studio` | Where to install the application |
 | `REPO_URL` | `https://github.com/diego-devita/comfyui-studio.git` | Git repository URL |
 | `REPO_BRANCH` | `main` | Git branch to track (`main` for production, `dev` for testing) |
-| `RUNTIME_VERSION` | `0` (image sets `3`) | Docker image runtime version (set at build time) |
+| `RUNTIME_VERSION` | `0` (image sets `4`) | Docker image runtime version (set at build time) |
 
 ### Error handling
 
 - If git clone fails, bootstrap exits with code 1 (network error).
 - If runtime is incompatible, bootstrap exits with code 2.
+
+---
+
+## start.sh Boot Sequence
+
+```
+STEP 0: Bootstrap (first boot only)
+  |-- Check if STUDIO_DIR/backend/main.py exists
+  |-- If not: run bootstrap.py
+  |   |-- Clones repo to .repo/
+  |   |-- Checks runtime compatibility
+  |   `-- Copies all components to working dirs
+  `-- If bootstrap fails: exit
+
+STEP 1: Copy ComfyUI (first boot only)
+  |-- Check if /workspace/ComfyUI exists
+  `-- If not: cp -r /comfyui /workspace/ComfyUI
+
+STEP 2: Start ComfyUI
+  |-- Create STUDIO_DIR/assets/input and STUDIO_DIR/assets/output
+  |-- cd /workspace/ComfyUI
+  |-- python main.py --listen 0.0.0.0 --port 8188 ...
+  |   --input-directory STUDIO_DIR/assets/input
+  |   --output-directory STUDIO_DIR/assets/output
+  |   $COMFYUI_FLAGS (default: --highvram)
+  |   $COMFYUI_EXTRA_ARGS
+  |   Output: stdout + /var/log/comfyui.log (via tee)
+  `-- Wait for ComfyUI ready (poll /system_stats every 2s, max 120s)
+
+STEP 3: Start Studio backend
+  |-- cd STUDIO_DIR/backend
+  `-- uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+      Output: stdout + /var/log/admin.log (via tee)
+
+Container stays alive by waiting on all background processes.
+All service output visible in RunPod container logs.
+```
 
 ---
 
@@ -99,14 +172,14 @@ The Docker image version is tracked in **two places that must stay in sync**:
 
 | Location | What | Example |
 |----------|------|---------|
-| `docker/Dockerfile` → `ENV RUNTIME_VERSION=N` | Baked into the image at build time. The running container reads this. | `ENV RUNTIME_VERSION=3` |
-| `version.json` → `components.runtime.version` | In the Git repo. The update mechanism reads this to compare. | `"version": 3` |
+| `docker/production/Dockerfile` -> `ENV RUNTIME_VERSION=N` | Baked into the image at build time. The running container reads this. | `ENV RUNTIME_VERSION=4` |
+| `version.json` -> `components.runtime.version` | In the Git repo. The update mechanism reads this to compare. | `"version": 4` |
 
-The Docker image is also tagged by CI with `:latest` and `:sha-<commit>`, but these are not used by the application — only `RUNTIME_VERSION` matters for compatibility checks.
+The Docker image is also tagged by CI with `:latest` and `:sha-<commit>`, but these are not used by the application -- only `RUNTIME_VERSION` matters for compatibility checks.
 
 ### How it works
 
-1. The **Docker image** has `ENV RUNTIME_VERSION=3` set at build time.
+1. The **Docker image** has `ENV RUNTIME_VERSION=4` set at build time.
 
 2. The **repository's `version.json`** has a `min_runtime` field (e.g., `"min_runtime": 0`).
 
@@ -125,43 +198,6 @@ Bump `min_runtime` in `version.json` when the application requires something tha
 ### When to bump `RUNTIME_VERSION`
 
 Increment `ENV RUNTIME_VERSION=N` in the Dockerfile **and** `components.runtime.version` in `version.json` whenever you make infrastructure changes that the application might depend on. Both must match.
-
----
-
-## start.sh Boot Sequence
-
-```
-STEP 0: Bootstrap (first boot only)
-  ├── Check if STUDIO_DIR/backend/main.py exists
-  ├── If not: run bootstrap.py
-  │   ├── Clones repo to .repo/
-  │   ├── Checks runtime compatibility
-  │   └── Copies all components to working dirs
-  └── If bootstrap fails: exit
-
-STEP 1: Copy ComfyUI (first boot only)
-  ├── Check if /workspace/ComfyUI exists
-  └── If not: cp -r /comfyui /workspace/ComfyUI
-
-STEP 2: Start ComfyUI
-  ├── Create STUDIO_DIR/assets/input and STUDIO_DIR/assets/output
-  ├── cd /workspace/ComfyUI
-  ├── python main.py --listen 0.0.0.0 --port 8188 ...
-  │   --input-directory STUDIO_DIR/assets/input
-  │   --output-directory STUDIO_DIR/assets/output
-  │   $COMFYUI_FLAGS (default: --highvram)
-  │   $COMFYUI_EXTRA_ARGS
-  │   Output: stdout + /var/log/comfyui.log (via tee)
-  └── Wait for ComfyUI ready (poll /system_stats every 2s, max 120s)
-
-STEP 3: Start Studio backend
-  ├── cd STUDIO_DIR/backend
-  └── uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
-      Output: stdout + /var/log/admin.log (via tee)
-
-Container stays alive by waiting on all background processes.
-All service output visible in RunPod container logs.
-```
 
 ---
 
@@ -239,7 +275,7 @@ The default `b8505` was the latest stable release on 2026-03-24 when llama-serve
 
 To update to a newer version, check [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases) and pass the tag:
 ```bash
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg LLAMA_CPP_VERSION=b8600 .
 ```
 
@@ -291,15 +327,15 @@ The quickest way is to use `docker/configure.sh`. But if you prefer manual comma
 
 ```bash
 # B200 (default -- no args needed)
-docker build -f docker/Dockerfile -t comfyui-studio .
+docker build -f docker/production/Dockerfile -t comfyui-studio .
 
 # A100 / RTX 4090 / RTX 3090
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg PYTORCH_INDEX=cu124 .
 
 # T4 / V100 (no attention optimizations, no LLM)
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg CUDA_VERSION=12.1.1 \
   --build-arg PYTORCH_INDEX=cu121 \
   --build-arg ENABLE_SAGE_ATTENTION=false \
@@ -307,7 +343,7 @@ docker build -f docker/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_LLM=false .
 
 # Fast build for CI (skip LLM and FlashAttention)
-docker build -f docker/Dockerfile -t comfyui-studio \
+docker build -f docker/production/Dockerfile -t comfyui-studio \
   --build-arg ENABLE_FLASH_ATTENTION=false \
   --build-arg ENABLE_LLM=false .
 ```
@@ -316,7 +352,7 @@ docker build -f docker/Dockerfile -t comfyui-studio \
 
 ## Custom Nodes
 
-Custom nodes are pre-installed in the Docker image, organized in 6 categories. The full list with descriptions is in [`nodes.txt`](nodes.txt).
+Custom nodes are pre-installed in the Docker image, organized in 6 categories. The full list with descriptions is in [`production/nodes.txt`](production/nodes.txt).
 
 **Fundamentals / QoL (9)** -- ComfyUI-Manager, ComfyUI_essentials, rgthree-comfy, cg-use-everywhere, ComfyLiterals, ComfyUI-Custom-Scripts, ComfyUI-KJNodes, was-node-suite-comfyui, ComfyUI-Easy-Use.
 
@@ -351,7 +387,11 @@ Users can also install nodes at runtime through the Node Manager page (`/admin/n
 The Docker image can optionally include llama-server, a compiled binary from the llama.cpp project that provides GPU-accelerated LLM inference.
 
 - **Binary location**: `/opt/llama-server`
+- **Shared libraries**: `/opt/llama-lib/`
+- **Library path**: `LD_LIBRARY_PATH=/opt/llama-lib` (set in image)
 - **Models directory**: `STUDIO_DIR/llm/models/` (on the persistent volume)
+- **Logs directory**: `STUDIO_DIR/llm/logs/`
+- **Multi-model support**: multiple instances can run on different ports
 - **Compiled with CUDA** for architectures SM 75 through SM 100 (Turing to Blackwell)
 
 ### Build time impact
@@ -373,6 +413,62 @@ If llama-server is not in the image, it can be compiled manually on the pod (whi
 
 ---
 
+## CI/CD
+
+**File:** `.github/workflows/build.yml`
+
+GitHub Actions builds and pushes the Docker image to `ghcr.io` on every push to `main` that changes files under `docker/production/**`. Can also be triggered manually via `workflow_dispatch`.
+
+The Docker image is **not** rebuilt when these paths change (they are updated live via the in-app update mechanism):
+- `workflows/**`, `backend/**`, `frontend/**`, `catalogs/**`, `version.json`, `*.md`
+
+### Build configuration via GitHub Actions variables
+
+| Variable | CI Default |
+|----------|-----------|
+| `CUDA_VERSION` | `12.8.1` |
+| `PYTORCH_INDEX` | `cu128` |
+| `PYTHON_VERSION` | `3.12` |
+| `ENABLE_SAGE_ATTENTION` | `true` |
+| `ENABLE_FLASH_ATTENTION` | `false` (no GPU on CI runner) |
+| `ENABLE_LLM` | `true` |
+| `LLAMA_CPP_VERSION` | `b8505` |
+
+Note: `ENABLE_FLASH_ATTENTION` defaults to `false` in CI because FlashAttention requires a GPU to compile. `ENABLE_LLM` is `true` by default -- the build compiles for all GPU architectures on CI (~60 min).
+
+### Image tags
+
+- `latest` -- always points to the most recent build from `main`
+- `sha-<commit>` -- pinned to a specific commit
+
+---
+
+## Development Image
+
+Lightweight (~200MB) image for local development without a GPU. Includes a ComfyUI stub server, hot reload, and sqlite-web for database inspection.
+
+See [`development/README.md`](development/README.md) for full documentation.
+
+Quick start:
+
+```bash
+# Build
+docker build -f docker/development/Dockerfile -t comfyui-studio-dev .
+
+# Run
+docker run -d --name studio-dev \
+  -p 8000:8000 -p 8188:8188 -p 8002:8002 \
+  -v $(pwd)/backend:/workspace/studio/backend \
+  -v $(pwd)/frontend:/workspace/studio/frontend \
+  -v $(pwd)/workflows:/workspace/studio/workflows \
+  -v $(pwd)/version.json:/workspace/studio/version.json \
+  -v ~/.studio-dev:/workspace/studio/data \
+  -e API_KEY=test \
+  comfyui-studio-dev
+```
+
+---
+
 ## How to Add a Python Dependency
 
 Adding a pip package requires a Docker image rebuild.
@@ -390,12 +486,12 @@ Adding a pip package requires a Docker image rebuild.
 
 2. Bump `RUNTIME_VERSION` in the Dockerfile:
    ```dockerfile
-   ENV RUNTIME_VERSION=3
+   ENV RUNTIME_VERSION=5
    ```
 
 3. Bump `min_runtime` in `version.json` to match:
    ```json
-   "min_runtime": 3
+   "min_runtime": 5
    ```
 
 4. Commit and push. This will trigger a CI build since the Dockerfile changed.
@@ -406,9 +502,9 @@ Adding a pip package requires a Docker image rebuild.
 
 ## How to Add a Custom Node
 
-Custom nodes are installed at Docker build time from `nodes.txt`.
+Custom nodes are installed at Docker build time from `production/nodes.txt`.
 
-1. Add the node's GitHub URL to the appropriate section in `nodes.txt`:
+1. Add the node's GitHub URL to the appropriate section in `production/nodes.txt`:
    ```
    # Description of the node
    https://github.com/author/ComfyUI-NodeName.git
@@ -419,7 +515,7 @@ Custom nodes are installed at Docker build time from `nodes.txt`.
    https://github.com/author/ComfyUI-NodeName.git requirements-special.txt python install.py
    ```
 
-2. Commit and push. The Dockerfile change will trigger a CI build.
+2. Commit and push. The change under `docker/production/` will trigger a CI build.
 
 3. The node will be available in `/comfyui/custom_nodes/` in the image, and copied to `/workspace/ComfyUI/custom_nodes/` on first boot.
 
@@ -427,7 +523,7 @@ Custom nodes are installed at Docker build time from `nodes.txt`.
 
 ```
 # Lines starting with # are comments
-# Section markers: # ── Section Name ──
+# Section markers: # -- Section Name --
 # Format: repo_url [requirements_file] [post_install_command]
 
 https://github.com/author/NodeName.git
@@ -436,44 +532,6 @@ https://github.com/author/NodeName.git requirements.txt python install.py
 ```
 
 The `install_nodes.sh` script reads between section markers, so nodes are installed in groups (each group is a separate Docker layer for better caching).
-
----
-
-## CI/CD
-
-**File:** `.github/workflows/build.yml`
-
-GitHub Actions builds and pushes the Docker image to `ghcr.io` on every push to `main`, **except** when only these paths change:
-
-- `workflows/**` -- workflow library (updated live)
-- `backend/**` -- backend code (updated live)
-- `frontend/**` -- frontend code (updated live)
-- `catalogs/**` -- model catalogs (updated live)
-- `version.json` -- version manifest (updated live)
-- `*.md` -- documentation
-
-The Docker image is rebuilt when these files change:
-- `docker/Dockerfile`, `docker/start.sh`, `docker/bootstrap.py`, `docker/install_nodes.sh`, `docker/nodes.txt`
-- `.github/workflows/build.yml`
-
-### Build configuration via GitHub Actions variables
-
-| Variable | CI Default |
-|----------|-----------|
-| `CUDA_VERSION` | `12.8.1` |
-| `PYTORCH_INDEX` | `cu128` |
-| `PYTHON_VERSION` | `3.12` |
-| `ENABLE_SAGE_ATTENTION` | `true` |
-| `ENABLE_FLASH_ATTENTION` | `false` (no GPU on CI runner) |
-| `ENABLE_LLM` | `true` |
-| `LLAMA_CPP_VERSION` | `b8505` |
-
-Note: `ENABLE_FLASH_ATTENTION` defaults to `false` in CI because FlashAttention requires a GPU to compile. `ENABLE_LLM` is `true` by default — the build compiles for all GPU architectures on CI (~60 min).
-
-### Image tags
-
-- `latest` -- always points to the most recent build from `main`
-- `sha-<commit>` -- pinned to a specific commit
 
 ---
 

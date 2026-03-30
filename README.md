@@ -188,15 +188,9 @@ docker run -p 8000:8000 -v $(pwd):/workspace/studio -e API_KEY=test comfyui-stud
 
 ### RunPod Template
 
-Container image: `ghcr.io/diego-devita/comfyui-studio:latest`
+See [`docker/RUNPOD_TEMPLATE.md`](docker/RUNPOD_TEMPLATE.md) for the full template description (copy-paste for the RunPod dashboard).
 
-| Variable | Value |
-|----------|-------|
-| `API_KEY` | A strong password for the web application |
-| `CIVITAI_API_KEY` | Your CivitAI API token |
-| `HF_TOKEN` | Your HuggingFace access token |
-
-Exposed ports: **8188** (ComfyUI), **8000** (Studio)
+Container image: `ghcr.io/diego-devita/comfyui-studio:latest` — Exposed ports: **8188** (ComfyUI), **8000** (Studio)
 
 ---
 
