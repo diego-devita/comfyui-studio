@@ -18,7 +18,8 @@ mkdir -p "${DATA_DIR}/catalogs" \
          "${DATA_DIR}/assets/input" \
          "${DATA_DIR}/assets/output" \
          "${DATA_DIR}/llm/models" \
-         "${STUDIO_DIR}/presets"
+         "${DATA_DIR}/llm/logs" \
+         "${DATA_DIR}/presets"
 
 # ── Fake ComfyUI tree ──
 # Mirrors real ComfyUI directory structure so model downloads land correctly.
@@ -55,7 +56,7 @@ fi
 # ── Symlink persistent dirs into STUDIO_DIR ──
 # The backend expects catalogs/, database/, assets/, llm/ under STUDIO_DIR.
 # We symlink them from the persistent data volume.
-for name in catalogs database assets llm; do
+for name in catalogs database assets llm presets; do
     target="${STUDIO_DIR}/${name}"
     source="${DATA_DIR}/${name}"
     if [ -e "${target}" ] || [ -L "${target}" ]; then

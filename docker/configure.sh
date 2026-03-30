@@ -544,6 +544,11 @@ ask_image_type() {
 
 emit_dev_command() {
   echo ""
+  read -rp "  Persistent data directory [~/.studio-dev]: " dev_data_dir
+  dev_data_dir="${dev_data_dir:-$HOME/.studio-dev}"
+  read -rp "  API key [test]: " dev_api_key
+  dev_api_key="${dev_api_key:-test}"
+  echo ""
   bold "  ──────────────────────────────────────────────"; echo ""
   bold "  Build:"; echo ""
   echo ""
@@ -551,15 +556,21 @@ emit_dev_command() {
   echo ""
   bold "  Run:"; echo ""
   echo ""
-  echo "  docker run -p 8000:8000 \\"
-  echo "    -v \$(pwd):/workspace/studio \\"
-  echo "    -e API_KEY=test \\"
+  echo "  docker run -d --name studio-dev \\"
+  echo "    -p 8000:8000 -p 8188:8188 -p 8002:8002 \\"
+  echo "    -v \$(pwd)/backend:/workspace/studio/backend \\"
+  echo "    -v \$(pwd)/frontend:/workspace/studio/frontend \\"
+  echo "    -v \$(pwd)/workflows:/workspace/studio/workflows \\"
+  echo "    -v \$(pwd)/version.json:/workspace/studio/version.json \\"
+  echo "    -v ${dev_data_dir}:/workspace/studio/data \\"
+  echo "    -e API_KEY=${dev_api_key} \\"
   echo "    comfyui-studio-dev"
   echo ""
   bold "  ──────────────────────────────────────────────"; echo ""
   dim "  Run both commands from the repository root."; echo ""
   dim "  Edit files in your editor — changes appear instantly (hot reload)."; echo ""
-  dim "  ComfyUI stub server runs on port 8188 with fake responses."; echo ""
+  dim "  Persistent data (catalogs, database, assets) in ${dev_data_dir}"; echo ""
+  dim "  ComfyUI stub server on port 8188 | sqlite-web DB browser on port 8002"; echo ""
   echo ""
 }
 

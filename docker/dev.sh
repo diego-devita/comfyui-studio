@@ -19,15 +19,13 @@ start() {
     docker stop "$NAME" 2>/dev/null && docker rm "$NAME" 2>/dev/null || true
 
     docker run -d --name "$NAME" \
-        -p 8000:8000 -p 8188:8188 \
+        -p 8000:8000 -p 8188:8188 -p 8002:8002 \
         -v "$(pwd)/backend:/workspace/studio/backend" \
         -v "$(pwd)/frontend:/workspace/studio/frontend" \
         -v "$(pwd)/workflows:/workspace/studio/workflows" \
         -v "$(pwd)/version.json:/workspace/studio/version.json" \
-        -v "$(pwd)/catalogs:/repo-catalogs:ro" \
         -v "$HOME/.studio-dev:/workspace/studio/data" \
         -e API_KEY=test \
-        -e CIVITAI_API_KEY=d920d34df8f1b433e5d31065d501ba19 \
         "$IMAGE"
 
     echo "Started. http://localhost:8000 (key: test)"
