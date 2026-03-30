@@ -4,7 +4,7 @@ import json
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from config import LLM_MODELS_DIR, LLAMA_SERVER_PATH, DEV_MODE
 import catalogs as _catalogs
@@ -370,11 +370,11 @@ async def llm_proxy(instance_id: str, path: str, request: Request):
             else:
                 raise HTTPException(405, "Method not allowed")
 
-            # Forward response
+            # Forward response directly (not as stream — preserves content-length)
             response_headers = {k: v for k, v in r.headers.items()
                                if k.lower() not in ("transfer-encoding", "content-encoding", "connection")}
-            return StreamingResponse(
-                iter([r.content]),
+            return Response(
+                content=r.content,
                 status_code=r.status_code,
                 headers=response_headers,
                 media_type=r.headers.get("content-type"),
