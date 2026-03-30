@@ -284,6 +284,7 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
             "--n-gpu-layers", str(config.get("n_gpu_layers", 99)),
             "--ctx-size", str(config.get("ctx_size", 8192)),
             "--threads", str(config.get("threads", 4)),
+            "--parallel", "1",
         ]
 
         log_file = open(log_path, "w")

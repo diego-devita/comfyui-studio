@@ -78,6 +78,7 @@ LLAMA_SERVER_PORT = int(os.environ.get("LLAMA_SERVER_PORT", "8080"))
 
 # DB
 DB_DIR = STUDIO_DIR / "database"
+LLM_DB_PATH = DB_DIR / "llm.db"
 
 # Auth
 SESSION_SECRET_PATH = STUDIO_DIR / ".session_secret"

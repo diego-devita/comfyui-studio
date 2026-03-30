@@ -361,30 +361,18 @@
   .chat-fullscreen-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ── Fullscreen overlay ── */
-  .chat-section.fullscreen {
+  #tabChat.fullscreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     z-index: 9999;
     background: var(--bg);
     margin: 0;
     padding: 16px;
-    display: flex;
-    flex-direction: column;
+    display: block;
     overflow: hidden;
   }
-  .chat-section.fullscreen .section-title { display: none; }
-  .chat-section.fullscreen .chat-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    border: none;
-    border-radius: 0;
-    padding: 0;
-  }
-  .chat-section.fullscreen .chat-messages {
-    flex: 1;
-    max-height: none;
-  }
+  #tabChat.fullscreen .chat-layout { height: 100%; }
+  #tabChat.fullscreen .chat-messages { flex: 1; max-height: none; }
 
   .chat-messages {
     min-height: 120px;
@@ -453,7 +441,91 @@
     align-self: flex-end;
   }
 
+  /* ── Page Tabs ── */
+  .page-tabs {
+    display: flex; gap: 0; margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-tab {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--muted);
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 20px; cursor: pointer; transition: all 0.15s;
+  }
+  .page-tab:hover { color: var(--text); }
+  .page-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Chat Tab Layout ── */
+  .chat-layout {
+    display: flex; gap: 16px; min-height: 500px;
+  }
+  .chat-sidebar {
+    width: 240px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .chat-sidebar-header {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .chat-sidebar-header select {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--mono); font-size: 11px; padding: 6px 8px; outline: none;
+  }
+  .conv-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .conv-item {
+    padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s;
+  }
+  .conv-item:hover { border-color: var(--border); }
+  .conv-item.active { border-color: var(--accent); background: rgba(232,255,71,0.05); }
+  .conv-item-title {
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .conv-item-meta {
+    font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px;
+  }
+  .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .chat-topbar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .chat-topbar-title {
+    font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text);
+    flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .token-bar {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+  }
+  .token-bar-fill {
+    width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .token-bar-fill-inner {
+    height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s;
+  }
+  .token-bar-fill-inner.warn { background: var(--queued); }
+  .token-bar-fill-inner.crit { background: var(--error); }
+  .chat-system-msg {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 8px;
+    white-space: pre-wrap; max-height: 60px; overflow: hidden; cursor: pointer;
+  }
+  .chat-system-msg:hover { max-height: none; }
+  .chat-no-conv {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-align: center; padding: 60px 0; flex: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+
   @media (max-width: 768px) {
+    .chat-layout { flex-direction: column; }
+    .chat-sidebar { width: 100%; max-height: 200px; }
     .config-panel { padding: 16px; }
     .config-row { flex-direction: column; gap: 12px; }
     .config-field { flex: none; width: 100%; }
@@ -489,6 +561,12 @@
 </header>
 
 <main>
+  <div class="page-tabs">
+    <button class="page-tab active" data-tab="server">Server</button>
+    <button class="page-tab" data-tab="chat">Chat</button>
+  </div>
+
+  <div id="tabServer" class="tab-content active">
   <!-- Telemetry -->
   <div class="telemetry-panel" id="telemetryPanel"></div>
 
@@ -548,31 +626,85 @@
     </div>
   </div>
 
-  <!-- Section 4: Chat -->
-  <div class="chat-section" id="chatSection" style="display:none;">
-    <div class="section-title">Chat</div>
-    <div class="chat-area">
-      <div class="chat-header">
-        <select class="chat-model-select" id="chatInstanceSelect">
-          <option value="">-- select a running instance --</option>
-        </select>
-        <button class="chat-clear-btn" id="chatClearBtn">Clear</button>
-        <button class="chat-fullscreen-btn" id="chatFullscreenBtn" title="Toggle fullscreen">&#x26F6;</button>
+  </div><!-- /tabServer -->
+
+  <div id="tabChat" class="tab-content">
+    <div class="chat-layout">
+      <!-- Sidebar -->
+      <div class="chat-sidebar">
+        <div class="chat-sidebar-header">
+          <select id="convModelFilter">
+            <option value="">All models</option>
+          </select>
+          <button class="btn btn--sm" id="newChatBtn">+ New</button>
+        </div>
+        <div class="conv-list" id="convList"></div>
+        <button class="chat-clear-btn" id="managePresetsBtn" style="width:100%;">System Prompts</button>
       </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-empty">Select a running instance and send a message to start chatting.</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <label style="font-size:10px;color:var(--muted);white-space:nowrap;">Temperature <span class="help-tip" title="Override temperature for this message. Lower = more focused, higher = more creative.">?</span></label>
-        <input type="range" id="chatTemp" min="0" max="2" step="0.1" value="0.7" style="flex:1;max-width:150px;">
-        <span id="chatTempVal" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:24px;">0.7</span>
-      </div>
-      <div class="chat-input-row">
-        <textarea id="chatInput" placeholder="Type a message..." rows="2"></textarea>
-        <button class="btn" id="chatSendBtn">Send</button>
+
+      <!-- Main chat area -->
+      <div class="chat-main" id="chatMain">
+        <div class="chat-no-conv" id="chatNoConv">Select or create a conversation to start chatting.</div>
+        <div id="chatConvArea" style="display:none;flex:1;display:none;flex-direction:column;">
+          <div class="chat-topbar">
+            <span class="chat-topbar-title" id="convTitle">--</span>
+            <div class="token-bar" id="tokenBar">
+              <div class="token-bar-fill"><div class="token-bar-fill-inner" id="tokenFill" style="width:0%"></div></div>
+              <span id="tokenLabel">0 / 0</span>
+            </div>
+            <button class="chat-clear-btn" id="convResetBtn">Reset</button>
+            <button class="chat-fullscreen-btn" id="chatFullscreenBtn" title="Toggle fullscreen">&#x26F6;</button>
+          </div>
+          <div id="convSystemMsg" class="chat-system-msg" style="display:none;"></div>
+          <div class="chat-messages" id="chatMessages" style="flex:1;"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <label style="font-size:10px;color:var(--muted);white-space:nowrap;">Temperature</label>
+            <input type="range" id="chatTemp" min="0" max="2" step="0.1" value="0.7" style="flex:1;max-width:150px;">
+            <span id="chatTempVal" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:24px;">0.7</span>
+          </div>
+          <div class="chat-input-row">
+            <textarea id="chatInput" placeholder="Type a message..." rows="2"></textarea>
+            <button class="btn" id="chatSendBtn">Send</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </div><!-- /tabChat -->
+
+  <!-- System Prompts Dialog -->
+  <dialog id="presetsDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:24px;max-width:600px;width:90%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <span style="font-family:var(--mono);font-size:14px;font-weight:700;">System Prompts</span>
+      <button class="chat-clear-btn" onclick="document.getElementById('presetsDialog').close()">Close</button>
+    </div>
+    <div id="presetsList" style="margin-bottom:16px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;">
+      <input id="presetName" placeholder="Name" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;">
+      <textarea id="presetPrompt" placeholder="System prompt..." rows="4" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;"></textarea>
+      <button class="btn btn--sm" id="presetSaveBtn">Save Preset</button>
+    </div>
+  </dialog>
+
+  <!-- New Chat Dialog -->
+  <dialog id="newChatDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:24px;max-width:400px;width:90%;">
+    <div style="font-family:var(--mono);font-size:14px;font-weight:700;margin-bottom:16px;">New Chat</div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="config-field">
+        <label>Model</label>
+        <select id="newChatModel"></select>
+      </div>
+      <div class="config-field">
+        <label>System Prompt</label>
+        <select id="newChatPreset">
+          <option value="">None</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="chat-clear-btn" onclick="document.getElementById('newChatDialog').close()">Cancel</button>
+        <button class="btn btn--sm" id="newChatCreateBtn">Create</button>
+      </div>
+    </div>
+  </dialog>
 </main>
 
 <script src="/static/js/shared.js"></script>
@@ -667,30 +799,17 @@
   var $threads = document.getElementById('threads');
   var $launchBtn = document.getElementById('launchBtn');
   var $instancesList = document.getElementById('instancesList');
-  var $chatSection = document.getElementById('chatSection');
-  var $chatInstanceSelect = document.getElementById('chatInstanceSelect');
-  var $chatClearBtn = document.getElementById('chatClearBtn');
-  var $chatMessages = document.getElementById('chatMessages');
-  var $chatInput = document.getElementById('chatInput');
-  var $chatSendBtn = document.getElementById('chatSendBtn');
 
   var _models = [];
   var _runningInstances = {};  // instance_id -> {model, port, started_at, health, config, proxy_base_path}
-  var _chatHistories = {};     // instance_id -> [{role, content}]
   var _expandedLogs = {};      // instance_id -> true/false
   var _logTimers = {};         // instance_id -> intervalId
   var _statusTimer = null;
   var _downloadPollTimer = null;
-  var _streaming = false;      // true while a streaming response is in progress
 
-  // ── Temperature sliders ──
+  // ── Temperature slider (launch config) ──
   $temperature.addEventListener('input', function() {
     $tempVal.textContent = this.value;
-  });
-  var $chatTemp = document.getElementById('chatTemp');
-  var $chatTempVal = document.getElementById('chatTempVal');
-  $chatTemp.addEventListener('input', function() {
-    $chatTempVal.textContent = this.value;
   });
 
   // ── Load Models ──
@@ -936,11 +1055,6 @@
       });
 
       renderInstances(data.instances || []);
-      updateChatInstanceSelect();
-
-      // Show/hide chat section
-      var hasRunning = Object.keys(_runningInstances).length > 0;
-      $chatSection.style.display = hasRunning ? '' : 'none';
     } catch (e) {
       // silent
     }
@@ -1063,159 +1177,337 @@
     }
   }
 
-  // ── Chat ──
+  // ── Chat (redirect from instance card) ──
   window._llmChatWith = function(instanceId) {
-    $chatSection.style.display = '';
-    $chatInstanceSelect.value = instanceId;
-    switchChatInstance(instanceId);
-    $chatSection.scrollIntoView({behavior: 'smooth'});
+    // Switch to chat tab
+    document.querySelectorAll('.page-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === 'chat'); });
+    document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.toggle('active', c.id === 'tabChat'); });
+    _chatBoot();
   };
 
-  function updateChatInstanceSelect() {
-    var current = $chatInstanceSelect.value;
-    $chatInstanceSelect.innerHTML = '<option value="">-- select a running instance --</option>';
-    Object.keys(_runningInstances).forEach(function(iid) {
-      var inst = _runningInstances[iid];
-      var opt = document.createElement('option');
-      opt.value = iid;
-      opt.textContent = inst.model + ' (:' + inst.port + ')';
-      $chatInstanceSelect.appendChild(opt);
-    });
-    // Restore selection if still running
-    if (current && _runningInstances[current]) {
-      $chatInstanceSelect.value = current;
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── CHAT TAB (conversations + presets) ──
+  // ══════════════════════════════════════════════════════════════════════════
 
-  $chatInstanceSelect.addEventListener('change', function() {
-    switchChatInstance(this.value);
+  // ── Tab switching ──
+  document.querySelectorAll('.page-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.page-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById('tab' + this.dataset.tab.charAt(0).toUpperCase() + this.dataset.tab.slice(1)).classList.add('active');
+      if (this.dataset.tab === 'chat') _chatBoot();
+    });
   });
 
-  function switchChatInstance(instanceId) {
-    renderChatMessages(instanceId);
+  var _chatBooted = false;
+  var _conversations = [];
+  var _presets = [];
+  var _currentConvId = null;
+  var _chatStreaming = false;
+
+  var $convList = document.getElementById('convList');
+  var $convModelFilter = document.getElementById('convModelFilter');
+  var $chatNoConv = document.getElementById('chatNoConv');
+  var $chatConvArea = document.getElementById('chatConvArea');
+  var $convTitle = document.getElementById('convTitle');
+  var $tokenFill = document.getElementById('tokenFill');
+  var $tokenLabel = document.getElementById('tokenLabel');
+  var $convSystemMsg = document.getElementById('convSystemMsg');
+  var $chatMessages = document.getElementById('chatMessages');
+  var $chatInput = document.getElementById('chatInput');
+  var $chatSendBtn = document.getElementById('chatSendBtn');
+  var $chatTemp = document.getElementById('chatTemp');
+  var $chatTempVal = document.getElementById('chatTempVal');
+
+  $chatTemp.addEventListener('input', function() { $chatTempVal.textContent = this.value; });
+
+  function _chatBoot() {
+    if (_chatBooted) return;
+    _chatBooted = true;
+    _loadPresets();
+    _loadConversations();
   }
 
-  function renderChatMessages(instanceId) {
-    var history = instanceId ? (_chatHistories[instanceId] || []) : [];
-    if (!history.length) {
-      $chatMessages.innerHTML = '<div class="chat-empty">Send a message to start chatting.</div>';
+  // ── Presets ──
+  async function _loadPresets() {
+    try {
+      var resp = await apiFetch('/api/admin/llm/chat-presets');
+      if (resp.ok) _presets = await resp.json();
+    } catch (_) {}
+    _populatePresetSelects();
+  }
+
+  function _populatePresetSelects() {
+    var sel = document.getElementById('newChatPreset');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">None</option>';
+    _presets.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  document.getElementById('managePresetsBtn').addEventListener('click', function() {
+    _renderPresetsDialog();
+    document.getElementById('presetsDialog').showModal();
+  });
+
+  function _renderPresetsDialog() {
+    var html = '';
+    _presets.forEach(function(p) {
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);">' + escHtml(p.name) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(p.system_prompt).substring(0, 100) + '</div>' +
+        '</div>' +
+        '<button class="btn btn--sm btn--danger" onclick="window._deletePreset(\'' + escHtml(p.id) + '\')">Delete</button>' +
+      '</div>';
+    });
+    document.getElementById('presetsList').innerHTML = html || '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:12px 0;">No presets yet.</div>';
+  }
+
+  document.getElementById('presetSaveBtn').addEventListener('click', async function() {
+    var name = document.getElementById('presetName').value.trim();
+    var prompt = document.getElementById('presetPrompt').value.trim();
+    if (!name) { showToast('Name is required', 3000, 'error'); return; }
+    try {
+      await apiFetch('/api/admin/llm/chat-presets', { method: 'POST', body: { name: name, system_prompt: prompt } });
+      document.getElementById('presetName').value = '';
+      document.getElementById('presetPrompt').value = '';
+      await _loadPresets();
+      _renderPresetsDialog();
+      showToast('Preset saved', 2000);
+    } catch (_) {}
+  });
+
+  window._deletePreset = async function(id) {
+    var ok = await studioConfirm('Delete this preset?', {yes: 'Delete', danger: true});
+    if (!ok) return;
+    await apiFetch('/api/admin/llm/chat-presets/' + id, { method: 'DELETE' });
+    await _loadPresets();
+    _renderPresetsDialog();
+  };
+
+  // ── Conversations ──
+  async function _loadConversations() {
+    try {
+      var filter = $convModelFilter.value;
+      var url = '/api/admin/llm/conversations' + (filter ? '?model=' + encodeURIComponent(filter) : '');
+      var resp = await apiFetch(url);
+      if (resp.ok) _conversations = await resp.json();
+    } catch (_) {}
+    _renderConvList();
+    _populateModelFilter();
+  }
+
+  function _populateModelFilter() {
+    var models = {};
+    _conversations.forEach(function(c) { models[c.model] = true; });
+    // Also add from running instances
+    Object.values(_runningInstances).forEach(function(i) { models[i.model] = true; });
+    var current = $convModelFilter.value;
+    $convModelFilter.innerHTML = '<option value="">All models</option>';
+    Object.keys(models).sort().forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m.replace(/\.gguf$/i, '');
+      $convModelFilter.appendChild(opt);
+    });
+    $convModelFilter.value = current;
+  }
+
+  $convModelFilter.addEventListener('change', function() { _loadConversations(); });
+
+  function _renderConvList() {
+    if (!_conversations.length) {
+      $convList.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:20px 0;">No conversations yet.</div>';
       return;
     }
-    $chatMessages.innerHTML = '';
-    history.forEach(function(msg) {
-      var div = document.createElement('div');
-      div.className = 'chat-msg ' + msg.role;
-      div.textContent = msg.content;
-      $chatMessages.appendChild(div);
+    var html = '';
+    _conversations.forEach(function(c) {
+      var active = c.id === _currentConvId;
+      var modelShort = (c.model || '').replace(/\.gguf$/i, '').substring(0, 25);
+      html += '<div class="conv-item' + (active ? ' active' : '') + '" onclick="window._selectConv(\'' + escHtml(c.id) + '\')">' +
+        '<div class="conv-item-title">' + escHtml(c.title || 'New Chat') + '</div>' +
+        '<div class="conv-item-meta">' + escHtml(modelShort) + ' · ' + (c.message_count || 0) + ' msgs</div>' +
+      '</div>';
     });
-    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+    $convList.innerHTML = html;
   }
 
-  function appendChatMsg(instanceId, role, text) {
-    if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
-    _chatHistories[instanceId].push({role: role, content: text});
+  window._selectConv = async function(convId) {
+    _currentConvId = convId;
+    _renderConvList();
+    try {
+      var resp = await apiFetch('/api/admin/llm/conversations/' + convId);
+      if (!resp.ok) return;
+      var conv = await resp.json();
+      _showConversation(conv);
+    } catch (_) {}
+  };
 
-    // Only render if this instance is selected
-    if ($chatInstanceSelect.value !== instanceId) return null;
+  function _showConversation(conv) {
+    $chatNoConv.style.display = 'none';
+    $chatConvArea.style.display = 'flex';
+    $convTitle.textContent = conv.title || 'New Chat';
 
-    var empty = $chatMessages.querySelector('.chat-empty');
-    if (empty) empty.remove();
-    var div = document.createElement('div');
-    div.className = 'chat-msg ' + role;
-    div.textContent = text;
-    $chatMessages.appendChild(div);
-    $chatMessages.scrollTop = $chatMessages.scrollHeight;
-    return div;
-  }
-
-  $chatClearBtn.addEventListener('click', function() {
-    var instanceId = $chatInstanceSelect.value;
-    if (instanceId) {
-      _chatHistories[instanceId] = [];
+    // System prompt
+    if (conv.preset_id) {
+      var preset = _presets.find(function(p) { return p.id === conv.preset_id; });
+      if (preset && preset.system_prompt) {
+        $convSystemMsg.textContent = 'System: ' + preset.system_prompt;
+        $convSystemMsg.style.display = '';
+      } else {
+        $convSystemMsg.style.display = 'none';
+      }
+    } else {
+      $convSystemMsg.style.display = 'none';
     }
-    renderChatMessages(instanceId);
+
+    // Token usage
+    var tu = conv.token_usage || {};
+    var total = tu.total_tokens || 0;
+    var ctx = tu.ctx_size || 4096;
+    var pct = ctx > 0 ? Math.min(100, total / ctx * 100) : 0;
+    $tokenFill.style.width = pct + '%';
+    $tokenFill.className = 'token-bar-fill-inner' + (pct > 85 ? ' crit' : pct > 65 ? ' warn' : '');
+    $tokenLabel.textContent = total + ' / ' + ctx;
+
+    // Messages
+    $chatMessages.innerHTML = '';
+    (conv.messages || []).forEach(function(msg) {
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        var div = document.createElement('div');
+        div.className = 'chat-msg ' + msg.role;
+        div.textContent = msg.content;
+        $chatMessages.appendChild(div);
+      }
+    });
+    if (!conv.messages || !conv.messages.length) {
+      $chatMessages.innerHTML = '<div class="chat-empty">Send a message to start chatting.</div>';
+    }
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+  }
+
+  // ── New Chat ──
+  document.getElementById('newChatBtn').addEventListener('click', function() {
+    var dlg = document.getElementById('newChatDialog');
+    // Populate model select from running instances
+    var sel = document.getElementById('newChatModel');
+    sel.innerHTML = '';
+    var models = {};
+    Object.values(_runningInstances).forEach(function(i) {
+      if (i.alive && !models[i.model]) {
+        models[i.model] = true;
+        var opt = document.createElement('option');
+        opt.value = i.model;
+        opt.textContent = i.model.replace(/\.gguf$/i, '');
+        sel.appendChild(opt);
+      }
+    });
+    if (!sel.options.length) {
+      showToast('No running instances. Start a model first.', 3000, 'error');
+      return;
+    }
+    _populatePresetSelects();
+    dlg.showModal();
   });
 
-  // ── Fullscreen toggle ──
+  document.getElementById('newChatCreateBtn').addEventListener('click', async function() {
+    var model = document.getElementById('newChatModel').value;
+    var presetId = document.getElementById('newChatPreset').value || undefined;
+    if (!model) return;
+    document.getElementById('newChatDialog').close();
+    try {
+      var resp = await apiFetch('/api/admin/llm/conversations', {
+        method: 'POST',
+        body: { model: model, preset_id: presetId }
+      });
+      if (!resp.ok) { showToast('Failed to create conversation', 3000, 'error'); return; }
+      var conv = await resp.json();
+      await _loadConversations();
+      window._selectConv(conv.id);
+    } catch (_) {}
+  });
+
+  // ── Reset ──
+  document.getElementById('convResetBtn').addEventListener('click', async function() {
+    if (!_currentConvId) return;
+    var ok = await studioConfirm('Reset conversation? All messages will be cleared.', {yes: 'Reset', danger: true});
+    if (!ok) return;
+    await apiFetch('/api/admin/llm/conversations/' + _currentConvId + '/reset', { method: 'POST' });
+    window._selectConv(_currentConvId);
+  });
+
+  // ── Fullscreen ──
   var $chatFullscreenBtn = document.getElementById('chatFullscreenBtn');
+  var $tabChat = document.getElementById('tabChat');
   $chatFullscreenBtn.addEventListener('click', function() {
-    $chatSection.classList.toggle('fullscreen');
-    var isFull = $chatSection.classList.contains('fullscreen');
+    $tabChat.classList.toggle('fullscreen');
+    var isFull = $tabChat.classList.contains('fullscreen');
     this.innerHTML = isFull ? '&#x2716;' : '&#x26F6;';
-    this.title = isFull ? 'Exit fullscreen' : 'Toggle fullscreen';
-    $chatMessages.scrollTop = $chatMessages.scrollHeight;
   });
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && $chatSection.classList.contains('fullscreen')) {
-      $chatSection.classList.remove('fullscreen');
+    if (e.key === 'Escape' && $tabChat.classList.contains('fullscreen')) {
+      $tabChat.classList.remove('fullscreen');
       $chatFullscreenBtn.innerHTML = '&#x26F6;';
-      $chatFullscreenBtn.title = 'Toggle fullscreen';
     }
   });
 
-  $chatSendBtn.addEventListener('click', sendChat);
+  // ── Send Message ──
+  $chatSendBtn.addEventListener('click', _sendMessage);
   $chatInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _sendMessage(); }
   });
 
-  async function sendChat() {
+  async function _sendMessage() {
     var text = $chatInput.value.trim();
-    var instanceId = $chatInstanceSelect.value;
-    if (!text || !instanceId || _streaming) return;
-
-    if (!_runningInstances[instanceId]) {
-      showToast('Instance is not running', 3000, 'error');
-      return;
-    }
+    if (!text || !_currentConvId || _chatStreaming) return;
 
     $chatInput.value = '';
-    appendChatMsg(instanceId, 'user', text);
-
-    if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
-    var messages = _chatHistories[instanceId]
-      .filter(function(m) { return m.role === 'user' || m.role === 'assistant'; })
-      .map(function(m) { return {role: m.role, content: m.content}; });
-
+    _chatStreaming = true;
     $chatSendBtn.disabled = true;
+
+    // Show user message immediately
+    var empty = $chatMessages.querySelector('.chat-empty');
+    if (empty) empty.remove();
+    var userDiv = document.createElement('div');
+    userDiv.className = 'chat-msg user';
+    userDiv.textContent = text;
+    $chatMessages.appendChild(userDiv);
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+
+    // Timer
     var _sendStart = performance.now();
     var _timerInterval = setInterval(function() {
-      var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
-      $chatSendBtn.textContent = elapsed + 's';
+      $chatSendBtn.textContent = ((performance.now() - _sendStart) / 1000).toFixed(1) + 's';
     }, 100);
-    _streaming = true;
 
     try {
-      var resp = await apiFetch('/api/admin/llm/chat', {
+      var resp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId + '/message', {
         method: 'POST',
-        body: {
-          instance_id: instanceId,
-          messages: messages,
-          temperature: parseFloat($chatTemp.value) || 0.7,
-          stream: true,
-        },
+        body: { content: text, temperature: parseFloat($chatTemp.value) || 0.7, stream: true },
         raw: true,
       });
 
       if (!resp.ok) {
         clearInterval(_timerInterval);
         var err = await resp.json().catch(function() { return {}; });
-        appendChatMsg(instanceId, 'error', 'Error: ' + (err.detail || err.error || resp.status));
-        if (_chatHistories[instanceId]) _chatHistories[instanceId].pop();
-        _streaming = false;
+        showToast('Error: ' + (err.detail || resp.status), 5000, 'error');
+        userDiv.remove();  // remove optimistic user msg
+        _chatStreaming = false;
         $chatSendBtn.disabled = false;
         $chatSendBtn.textContent = 'Send';
         return;
       }
 
-      // Create assistant message element for streaming
-      var empty = $chatMessages.querySelector('.chat-empty');
-      if (empty) empty.remove();
+      // Stream assistant response
       var assistantDiv = document.createElement('div');
       assistantDiv.className = 'chat-msg assistant';
-      assistantDiv.textContent = '';
-      if ($chatInstanceSelect.value === instanceId) {
-        $chatMessages.appendChild(assistantDiv);
-      }
+      $chatMessages.appendChild(assistantDiv);
 
       var fullContent = '';
       var reader = resp.body.getReader();
@@ -1225,17 +1517,14 @@
       while (true) {
         var result = await reader.read();
         if (result.done) break;
-
         buffer += decoder.decode(result.value, {stream: true});
         var lines = buffer.split('\n');
-        buffer = lines.pop();  // keep incomplete line in buffer
-
+        buffer = lines.pop();
         for (var i = 0; i < lines.length; i++) {
           var line = lines[i].trim();
           if (!line || !line.startsWith('data:')) continue;
           var payload = line.substring(5).trim();
           if (payload === '[DONE]') continue;
-
           try {
             var chunk = JSON.parse(payload);
             var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
@@ -1244,20 +1533,13 @@
               assistantDiv.textContent = fullContent;
               $chatMessages.scrollTop = $chatMessages.scrollHeight;
             }
-          } catch (parseErr) {
-            // skip unparseable lines
-          }
+          } catch (_) {}
         }
       }
 
-      // Store completed message in history
-      if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
-      _chatHistories[instanceId].push({role: 'assistant', content: fullContent || '(empty response)'});
-      if (!fullContent) {
-        assistantDiv.textContent = '(empty response)';
-      }
+      if (!fullContent) assistantDiv.textContent = '(empty response)';
 
-      // Show elapsed time
+      // Timer tag
       clearInterval(_timerInterval);
       var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
       var timeTag = document.createElement('div');
@@ -1265,17 +1547,26 @@
       timeTag.textContent = elapsed + 's';
       assistantDiv.appendChild(timeTag);
 
+      // Refresh conversation to update token count
+      _loadConversations();
+      var convResp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId);
+      if (convResp.ok) {
+        var conv = await convResp.json();
+        var tu = conv.token_usage || {};
+        var total = tu.total_tokens || 0;
+        var ctx = tu.ctx_size || 4096;
+        var pct = ctx > 0 ? Math.min(100, total / ctx * 100) : 0;
+        $tokenFill.style.width = pct + '%';
+        $tokenFill.className = 'token-bar-fill-inner' + (pct > 85 ? ' crit' : pct > 65 ? ' warn' : '');
+        $tokenLabel.textContent = total + ' / ' + ctx;
+      }
+
     } catch (e) {
       clearInterval(_timerInterval);
-      if (e.message !== 'auth') {
-        appendChatMsg(instanceId, 'error', 'Error: ' + e.message);
-      }
-      if (_chatHistories[instanceId] && _chatHistories[instanceId].length && _chatHistories[instanceId][_chatHistories[instanceId].length - 1].role === 'user') {
-        _chatHistories[instanceId].pop();
-      }
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
     }
 
-    _streaming = false;
+    _chatStreaming = false;
     $chatSendBtn.disabled = false;
     $chatSendBtn.textContent = 'Send';
   }

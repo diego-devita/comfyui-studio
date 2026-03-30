@@ -17,6 +17,7 @@ import pages
 # Register API routers
 from models_api import router as models_router
 from llm_api import router as llm_router
+from llm_chat_api import router as llm_chat_router
 from workflows_api import router as workflows_router
 from runner_api import router as runner_router
 from system_api import router as system_router
@@ -27,6 +28,7 @@ from civitai_api import router as civitai_router
 
 app.include_router(models_router)
 app.include_router(llm_router)
+app.include_router(llm_chat_router)
 app.include_router(workflows_router)
 app.include_router(runner_router)
 app.include_router(system_router)

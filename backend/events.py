@@ -187,6 +187,10 @@ async def _start_event_consumer():
     import gallery_db as _gdb
     _gdb.init_gallery_db()
 
+    # Initialize LLM chat database (SQLite)
+    import llm_db as _llmdb
+    _llmdb.init_llm_db()
+
     # Background sync CivitAI tags — non-blocking, runs after startup completes.
     # Resolves tag IDs from downloaded gallery metadata into human-readable names.
     import threading as _threading
