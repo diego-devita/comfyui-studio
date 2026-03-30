@@ -9,6 +9,16 @@
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
   main { max-width: 1060px; margin: 0 auto; }
+  .telemetry-bar {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 24px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .telemetry-bar .telem-item {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 6px 12px;
+  }
+  .telemetry-bar .telem-val { color: var(--text); font-weight: 600; }
   .help-tip {
     display: inline-flex; align-items: center; justify-content: center;
     width: 14px; height: 14px; border-radius: 50%;
@@ -48,7 +58,6 @@
     transition: border-color 0.15s;
   }
   .llm-model-card:hover { border-color: #3a3a4a; }
-  .llm-model-card.is-running { border-color: var(--success); }
   .model-info {
     display: flex;
     flex-direction: column;
@@ -98,11 +107,6 @@
     color: var(--success);
     border: 1px solid var(--success);
   }
-  .model-badge.running {
-    color: #0a0a0f;
-    background: var(--success);
-    border: 1px solid var(--success);
-  }
   .model-badge.missing {
     color: var(--muted);
     border: 1px solid var(--border);
@@ -116,13 +120,69 @@
     gap: 8px;
     align-items: center;
   }
-  .port-label {
+
+  /* ── Launch Config ── */
+  .config-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px;
+    margin-bottom: 32px;
+  }
+  .config-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 140px;
+  }
+  .config-field label {
     font-family: var(--mono);
     font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
     color: var(--muted);
-    padding: 2px 6px;
+  }
+  .config-field select,
+  .config-field input {
+    background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .config-field select:focus,
+  .config-field input:focus {
+    border-color: var(--accent);
+  }
+  .config-field .range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px; /* match input field height */
+  }
+  .config-field input[type="range"] {
+    flex: 1;
+    padding: 0;
+    background: transparent;
+    border: none;
+    accent-color: var(--accent);
+  }
+  .config-field .range-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    min-width: 28px;
+    text-align: right;
   }
 
   /* ── Running Instances ── */
@@ -167,6 +227,14 @@
     font-weight: 700;
     color: var(--text);
   }
+  .instance-id-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
   .health-dot {
     display: inline-block;
     width: 8px;
@@ -189,6 +257,22 @@
     gap: 8px;
     align-items: center;
   }
+  .port-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+  .proxy-link {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: #666;
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .proxy-link:hover { color: var(--accent); }
   .log-toggle {
     font-family: var(--mono);
     font-size: 10px;
@@ -224,69 +308,6 @@
     scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
   .log-console.visible { display: block; }
-
-  /* ── Config Row ── */
-  .config-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: 20px;
-    margin-bottom: 32px;
-  }
-  .config-row {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-  }
-  .config-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1 1 140px;
-  }
-  .config-field label {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .config-field select,
-  .config-field input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    padding: 8px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .config-field select:focus,
-  .config-field input:focus {
-    border-color: var(--accent);
-  }
-  .config-field .range-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .config-field input[type="range"] {
-    flex: 1;
-    padding: 0;
-    background: transparent;
-    border: none;
-    accent-color: var(--accent);
-  }
-  .config-field .range-val {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
-    min-width: 28px;
-    text-align: right;
-  }
 
   /* ── Chat Panel ── */
   .chat-section {
@@ -433,16 +454,29 @@
 </header>
 
 <main>
-  <!-- Section 1: Model Catalog -->
-  <div class="section-title">Model Catalog</div>
-  <div class="model-list" id="modelList">
-    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
+  <!-- Telemetry -->
+  <div class="telemetry-bar" id="telemetryBar"></div>
+
+  <!-- Section 1: Model Catalog (collapsible) -->
+  <div class="section-title" style="cursor:pointer;user-select:none;" id="catalogToggle">
+    <span id="catalogArrow">▾</span> Model Catalog
+  </div>
+  <div id="catalogBody">
+    <div class="model-list" id="modelList">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
+    </div>
   </div>
 
-  <!-- Section 2: Start Config -->
+  <!-- Section 2: Launch Configuration -->
   <div class="section-title">Launch Configuration</div>
   <div class="config-panel">
     <div class="config-row">
+      <div class="config-field">
+        <label>Model</label>
+        <select id="launchModel">
+          <option value="">-- select a downloaded model --</option>
+        </select>
+      </div>
       <div class="config-field">
         <label>Context Size <span class="help-tip" title="How many tokens the model can 'see' in a conversation. 1 token ≈ 0.75 words. Larger = more conversation memory but more VRAM. 4096 ≈ 3000 words, 8192 ≈ 6000 words, 32768 ≈ 24000 words. Maximum depends on the model (e.g. Qwen 2.5 supports up to 128k). Set at launch — requires restart to change.">?</span></label>
         <input type="number" id="ctxSize" value="8192" min="512" max="131072" step="512">
@@ -451,6 +485,8 @@
         <label>GPU Layers <span class="help-tip" title="How many transformer layers to load into GPU VRAM. -1 or 99 = all layers in GPU (fastest). Lower values offload layers to CPU RAM (slower). With 192GB VRAM you should always use -1. Set at launch — requires restart to change.">?</span></label>
         <input type="number" id="gpuLayers" value="99" min="-1" max="200" step="1">
       </div>
+    </div>
+    <div class="config-row" style="margin-top:12px;">
       <div class="config-field">
         <label>Temperature <span class="help-tip" title="Controls response randomness/creativity. 0.0 = deterministic (always same answer). 0.3-0.5 = focused, good for code/facts. 0.7 = balanced (default). 1.0+ = creative but may hallucinate. This is the default for this instance — can be overridden per-message in the chat panel.">?</span></label>
         <div class="range-wrap">
@@ -461,6 +497,9 @@
       <div class="config-field">
         <label>Threads <span class="help-tip" title="CPU threads for non-GPU operations (tokenization, sampling). Default 4 is fine for most cases. More threads help slightly with concurrent requests but the GPU does most of the work. Set at launch — requires restart to change.">?</span></label>
         <input type="number" id="threads" value="4" min="1" max="32" step="1">
+      </div>
+      <div class="config-field" style="justify-content:flex-end;">
+        <button class="btn" id="launchBtn">Launch Instance</button>
       </div>
     </div>
   </div>
@@ -478,13 +517,13 @@
     <div class="section-title">Chat</div>
     <div class="chat-area">
       <div class="chat-header">
-        <select class="chat-model-select" id="chatModelSelect">
-          <option value="">-- select a running model --</option>
+        <select class="chat-model-select" id="chatInstanceSelect">
+          <option value="">-- select a running instance --</option>
         </select>
         <button class="chat-clear-btn" id="chatClearBtn">Clear</button>
       </div>
       <div class="chat-messages" id="chatMessages">
-        <div class="chat-empty">Select a running model and send a message to start chatting.</div>
+        <div class="chat-empty">Select a running instance and send a message to start chatting.</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <label style="font-size:10px;color:var(--muted);white-space:nowrap;">Temperature <span class="help-tip" title="Override temperature for this message. Lower = more focused, higher = more creative.">?</span></label>
@@ -504,29 +543,65 @@
 (function() {
   'use strict';
 
+  // ── Catalog accordion ──
+  var $catalogToggle = document.getElementById('catalogToggle');
+  var $catalogBody = document.getElementById('catalogBody');
+  var $catalogArrow = document.getElementById('catalogArrow');
+  $catalogToggle.addEventListener('click', function() {
+    var open = $catalogBody.style.display !== 'none';
+    $catalogBody.style.display = open ? 'none' : '';
+    $catalogArrow.textContent = open ? '▸' : '▾';
+  });
+
+  // ── Telemetry ──
+  var $telemetryBar = document.getElementById('telemetryBar');
+  function updateTelemetry() {
+    apiFetch('/api/admin/system/status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var disk = data.disk || {};
+        var html = '';
+        // GPU info from ComfyUI stats if available
+        var comfy = data.comfyui || {};
+        html += '<div class="telem-item">ComfyUI <span class="telem-val">' + (comfy.status || 'unknown') + '</span></div>';
+        if (disk.total_bytes) {
+          var used = ((disk.used_bytes || 0) / 1e9).toFixed(1);
+          var total = ((disk.total_bytes || 0) / 1e9).toFixed(1);
+          html += '<div class="telem-item">Disk <span class="telem-val">' + used + ' / ' + total + ' GB</span></div>';
+        }
+        var instances = (data.remote_version && data.remote_version.components) ? Object.keys(data.remote_version.components).length : 0;
+        html += '<div class="telem-item">App <span class="telem-val">v' + (data.app_version || '?') + '</span></div>';
+        $telemetryBar.innerHTML = html;
+      })
+      .catch(function() {});
+  }
+  updateTelemetry();
+
   // ── DOM refs ──
   var $modelList = document.getElementById('modelList');
+  var $launchModel = document.getElementById('launchModel');
   var $ctxSize = document.getElementById('ctxSize');
   var $gpuLayers = document.getElementById('gpuLayers');
   var $temperature = document.getElementById('temperature');
   var $tempVal = document.getElementById('tempVal');
   var $threads = document.getElementById('threads');
+  var $launchBtn = document.getElementById('launchBtn');
   var $instancesList = document.getElementById('instancesList');
   var $chatSection = document.getElementById('chatSection');
-  var $chatModelSelect = document.getElementById('chatModelSelect');
+  var $chatInstanceSelect = document.getElementById('chatInstanceSelect');
   var $chatClearBtn = document.getElementById('chatClearBtn');
   var $chatMessages = document.getElementById('chatMessages');
   var $chatInput = document.getElementById('chatInput');
   var $chatSendBtn = document.getElementById('chatSendBtn');
 
   var _models = [];
-  var _runningModels = {};  // model -> {port, started_at, health}
-  var _chatHistories = {};  // model -> [{role, content}]
-  var _expandedLogs = {};   // model -> true/false
-  var _logTimers = {};      // model -> intervalId
+  var _runningInstances = {};  // instance_id -> {model, port, started_at, health, config, proxy_base_path}
+  var _chatHistories = {};     // instance_id -> [{role, content}]
+  var _expandedLogs = {};      // instance_id -> true/false
+  var _logTimers = {};         // instance_id -> intervalId
   var _statusTimer = null;
   var _downloadPollTimer = null;
-  var _streaming = false;   // true while a streaming response is in progress
+  var _streaming = false;      // true while a streaming response is in progress
 
   // ── Temperature sliders ──
   $temperature.addEventListener('input', function() {
@@ -549,6 +624,7 @@
         (cat.models || []).forEach(function(m) { _models.push(m); });
       });
       renderModels();
+      updateLaunchModelSelect();
     } catch (e) {
       if (e.message !== 'auth') {
         $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--error);text-align:center;padding:24px 0;">Failed to load models</div>';
@@ -569,13 +645,11 @@
       var status = m.status || 'missing';
       var tags = m.tags || [];
       var progress = m.download_progress || null;
-      var isRunning = !!m.running || !!_runningModels[m.file];
+      var hasRunning = !!m.running;
+      var runCount = m.running_instance_count || 0;
 
       var badgeClass, badgeText;
-      if (isRunning) {
-        badgeClass = 'running';
-        badgeText = 'Running';
-      } else if (status === 'downloading') {
+      if (status === 'downloading') {
         badgeClass = 'downloading';
         badgeText = progress != null ? 'Downloading ' + progress + '%' : 'Downloading';
       } else if (status === 'present') {
@@ -597,13 +671,11 @@
       var fileEsc = escHtml(m.file).replace(/'/g, '&#39;');
       var actionHtml = '';
 
-      if (isRunning) {
-        var port = m.running_port || (_runningModels[m.file] && _runningModels[m.file].port) || '';
-        actionHtml = '<span class="port-label">:' + port + '</span>';
-        actionHtml += '<button class="btn btn--sm btn--danger" onclick="window._llmStopModel(\'' + fileEsc + '\')">Stop</button>';
-      } else if (status === 'present') {
-        actionHtml = '<button class="btn btn--sm" onclick="window._llmStartModel(\'' + fileEsc + '\')">Start</button>';
-        actionHtml += '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
+      if (status === 'present') {
+        actionHtml = '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')"' + (hasRunning ? ' disabled title="Stop running instances first"' : '') + '>Delete</button>';
+        if (hasRunning) {
+          actionHtml = '<span class="port-label" style="color:var(--success);">' + runCount + ' running</span>' + actionHtml;
+        }
       } else if (status === 'downloading') {
         actionHtml = '<span class="spinner sm"></span>';
       } else {
@@ -611,7 +683,7 @@
       }
 
       html +=
-        '<div class="llm-model-card' + (isRunning ? ' is-running' : '') + '">' +
+        '<div class="llm-model-card">' +
           '<div class="model-info">' +
             '<div class="model-name">' + escHtml(name) +
               (m.hf_repo ? ' <a href="https://huggingface.co/' + m.hf_repo + '" target="_blank" style="text-decoration:none;color:#666;" title="View on HuggingFace"><span class="icon icon-external-link icon-sm"></span></a>' : '') +
@@ -636,8 +708,30 @@
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   }
 
-  // ── Start / Stop / Download / Delete ──
-  window._llmStartModel = async function(modelFile) {
+  // ── Launch Model Select ──
+  function updateLaunchModelSelect() {
+    var current = $launchModel.value;
+    $launchModel.innerHTML = '<option value="">-- select a downloaded model --</option>';
+    _models.forEach(function(m) {
+      if (m.status === 'present') {
+        var opt = document.createElement('option');
+        opt.value = m.file;
+        opt.textContent = m.name || m.file;
+        $launchModel.appendChild(opt);
+      }
+    });
+    if (current) $launchModel.value = current;
+  }
+
+  // ── Launch Instance ──
+  $launchBtn.addEventListener('click', async function() {
+    var modelFile = $launchModel.value;
+    if (!modelFile) {
+      showToast('Select a model to launch', 3000, 'error');
+      return;
+    }
+    $launchBtn.disabled = true;
+    $launchBtn.innerHTML = '<span class="spinner sm"></span> Launching...';
     try {
       var resp = await apiFetch('/api/admin/llm/start', {
         method: 'POST',
@@ -650,43 +744,21 @@
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        showToast('Start failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        showToast('Launch failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
         return;
       }
       var data = await resp.json();
-      showToast('Starting ' + modelFile + ' on port ' + data.port, 3000);
+      showToast('Launched ' + modelFile + ' on port ' + data.port + ' (id: ' + data.instance_id + ')', 3000);
       setTimeout(function() { loadStatus(); loadModels(); }, 1500);
     } catch (e) {
-      if (e.message !== 'auth') showToast('Start error: ' + e.message, 5000, 'error');
+      if (e.message !== 'auth') showToast('Launch error: ' + e.message, 5000, 'error');
+    } finally {
+      $launchBtn.disabled = false;
+      $launchBtn.textContent = 'Launch Instance';
     }
-  };
+  });
 
-  window._llmStopModel = async function(modelFile) {
-    var ok = await studioConfirm('Stop instance "' + modelFile + '"?');
-    if (!ok) return;
-    try {
-      var resp = await apiFetch('/api/admin/llm/stop', {
-        method: 'POST',
-        body: { model: modelFile }
-      });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        showToast('Stop failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
-        return;
-      }
-      showToast('Stopped: ' + modelFile, 3000);
-      // Clean up log polling for this instance
-      if (_logTimers[modelFile]) {
-        clearInterval(_logTimers[modelFile]);
-        delete _logTimers[modelFile];
-      }
-      delete _expandedLogs[modelFile];
-      setTimeout(function() { loadStatus(); loadModels(); }, 500);
-    } catch (e) {
-      if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
-    }
-  };
-
+  // ── Download / Delete ──
   window._llmDownloadModel = async function(name) {
     try {
       var resp = await apiFetch('/api/admin/llm/models/download/' + encodeURIComponent(name), {method: 'POST'});
@@ -719,6 +791,33 @@
     }
   };
 
+  // ── Stop Instance ──
+  window._llmStopInstance = async function(instanceId) {
+    var ok = await studioConfirm('Stop instance "' + instanceId + '"?');
+    if (!ok) return;
+    try {
+      var resp = await apiFetch('/api/admin/llm/stop', {
+        method: 'POST',
+        body: { instance_id: instanceId }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Stop failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        return;
+      }
+      showToast('Stopped: ' + instanceId, 3000);
+      // Clean up log polling for this instance
+      if (_logTimers[instanceId]) {
+        clearInterval(_logTimers[instanceId]);
+        delete _logTimers[instanceId];
+      }
+      delete _expandedLogs[instanceId];
+      setTimeout(function() { loadStatus(); loadModels(); }, 500);
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
+    }
+  };
+
   function startDownloadPoll() {
     if (_downloadPollTimer) return;
     _downloadPollTimer = setInterval(function() {
@@ -739,18 +838,18 @@
       if (!resp.ok) return;
       var data = await resp.json();
 
-      // Build running map
-      _runningModels = {};
+      // Build running map keyed by instance_id
+      _runningInstances = {};
       (data.instances || []).forEach(function(inst) {
-        _runningModels[inst.model] = inst;
+        _runningInstances[inst.instance_id] = inst;
       });
 
       renderInstances(data.instances || []);
-      updateChatModelSelect();
+      updateChatInstanceSelect();
       renderModels();  // re-render to update running badges
 
       // Show/hide chat section
-      var hasRunning = Object.keys(_runningModels).length > 0;
+      var hasRunning = Object.keys(_runningInstances).length > 0;
       $chatSection.style.display = hasRunning ? '' : 'none';
     } catch (e) {
       // silent
@@ -766,26 +865,40 @@
     var html = '<div class="instances-list">';
     instances.forEach(function(inst) {
       var healthClass = inst.health || 'unreachable';
-      var logExpanded = !!_expandedLogs[inst.model];
+      var logExpanded = !!_expandedLogs[inst.instance_id];
+      var iidEsc = escHtml(inst.instance_id).replace(/'/g, '&#39;');
+      var proxyUrl = window.location.origin + (inst.proxy_base_path || '/api/admin/llm/' + encodeURIComponent(inst.instance_id) + '/api/');
+
+      // Config summary
+      var configParts = [];
+      if (inst.config) {
+        if (inst.config.ctx_size) configParts.push('ctx=' + inst.config.ctx_size);
+        if (inst.config.n_gpu_layers !== undefined) configParts.push('gpu=' + inst.config.n_gpu_layers);
+        if (inst.config.temp !== undefined) configParts.push('temp=' + inst.config.temp);
+        if (inst.config.threads) configParts.push('threads=' + inst.config.threads);
+      }
 
       html +=
-        '<div class="instance-card" data-model="' + escHtml(inst.model) + '">' +
+        '<div class="instance-card" data-instance="' + escHtml(inst.instance_id) + '">' +
           '<div class="instance-header">' +
             '<div class="instance-info">' +
               '<span class="health-dot ' + healthClass + '" title="' + healthClass + '"></span>' +
               '<span class="instance-model-name">' + escHtml(inst.model) + '</span>' +
               '<span class="port-label">:' + inst.port + '</span>' +
-            '</div>' +
-            '<div class="instance-meta">' +
-              '<span>Started: ' + escHtml(inst.started_at || '--') + '</span>' +
+              '<span class="instance-id-label">' + escHtml(inst.instance_id) + '</span>' +
             '</div>' +
             '<div class="instance-actions">' +
-              '<button class="log-toggle' + (logExpanded ? ' active' : '') + '" onclick="window._llmToggleLog(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Log</button>' +
-              '<button class="btn btn--sm" onclick="window._llmChatWith(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Chat</button>' +
-              '<button class="btn btn--sm btn--danger" onclick="window._llmStopModel(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Stop</button>' +
+              '<button class="log-toggle' + (logExpanded ? ' active' : '') + '" onclick="window._llmToggleLog(\'' + iidEsc + '\')">Log</button>' +
+              '<button class="btn btn--sm" onclick="window._llmChatWith(\'' + iidEsc + '\')">Chat</button>' +
+              '<button class="btn btn--sm btn--danger" onclick="window._llmStopInstance(\'' + iidEsc + '\')">Stop</button>' +
             '</div>' +
           '</div>' +
-          '<div class="log-console' + (logExpanded ? ' visible' : '') + '" id="log-' + escHtml(inst.model) + '"></div>' +
+          '<div class="instance-meta">' +
+            '<span>Started: ' + escHtml(inst.started_at || '--') + '</span>' +
+            (configParts.length ? '<span>' + escHtml(configParts.join(', ')) + '</span>' : '') +
+          '</div>' +
+          '<div style="margin-top:4px;"><a class="proxy-link" href="' + escHtml(proxyUrl) + '" target="_blank" title="OpenAI-compatible API">' + escHtml(proxyUrl) + '</a></div>' +
+          '<div class="log-console' + (logExpanded ? ' visible' : '') + '" id="log-' + escHtml(inst.instance_id).replace(/:/g, '_') + '"></div>' +
         '</div>';
     });
     html += '</div>';
@@ -793,55 +906,55 @@
 
     // Restore log content for expanded logs
     instances.forEach(function(inst) {
-      if (_expandedLogs[inst.model]) {
-        fetchLog(inst.model);
+      if (_expandedLogs[inst.instance_id]) {
+        fetchLog(inst.instance_id);
       }
     });
   }
 
   // ── Log Toggle & Fetch ──
-  window._llmToggleLog = function(modelFile) {
-    if (_expandedLogs[modelFile]) {
-      _expandedLogs[modelFile] = false;
-      if (_logTimers[modelFile]) {
-        clearInterval(_logTimers[modelFile]);
-        delete _logTimers[modelFile];
+  window._llmToggleLog = function(instanceId) {
+    var elId = 'log-' + instanceId.replace(/:/g, '_');
+    if (_expandedLogs[instanceId]) {
+      _expandedLogs[instanceId] = false;
+      if (_logTimers[instanceId]) {
+        clearInterval(_logTimers[instanceId]);
+        delete _logTimers[instanceId];
       }
-      var el = document.getElementById('log-' + modelFile);
+      var el = document.getElementById(elId);
       if (el) el.classList.remove('visible');
-      // Update toggle button
-      var card = document.querySelector('.instance-card[data-model="' + modelFile + '"]');
+      var card = document.querySelector('.instance-card[data-instance="' + instanceId + '"]');
       if (card) {
         var btn = card.querySelector('.log-toggle');
         if (btn) btn.classList.remove('active');
       }
     } else {
-      _expandedLogs[modelFile] = true;
-      var el = document.getElementById('log-' + modelFile);
+      _expandedLogs[instanceId] = true;
+      var el = document.getElementById(elId);
       if (el) el.classList.add('visible');
-      var card = document.querySelector('.instance-card[data-model="' + modelFile + '"]');
+      var card = document.querySelector('.instance-card[data-instance="' + instanceId + '"]');
       if (card) {
         var btn = card.querySelector('.log-toggle');
         if (btn) btn.classList.add('active');
       }
-      fetchLog(modelFile);
-      // Start polling log
-      if (!_logTimers[modelFile]) {
-        _logTimers[modelFile] = setInterval(function() {
-          if (_expandedLogs[modelFile]) {
-            fetchLog(modelFile);
+      fetchLog(instanceId);
+      if (!_logTimers[instanceId]) {
+        _logTimers[instanceId] = setInterval(function() {
+          if (_expandedLogs[instanceId]) {
+            fetchLog(instanceId);
           }
         }, 3000);
       }
     }
   };
 
-  async function fetchLog(modelFile) {
+  async function fetchLog(instanceId) {
     try {
-      var resp = await apiFetch('/api/admin/llm/log/' + encodeURIComponent(modelFile));
+      var resp = await apiFetch('/api/admin/llm/log/' + encodeURIComponent(instanceId));
       if (!resp.ok) return;
       var data = await resp.json();
-      var el = document.getElementById('log-' + modelFile);
+      var elId = 'log-' + instanceId.replace(/:/g, '_');
+      var el = document.getElementById(elId);
       if (el) {
         var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
         el.textContent = data.log || '(no log output)';
@@ -855,38 +968,39 @@
   }
 
   // ── Chat ──
-  window._llmChatWith = function(modelFile) {
+  window._llmChatWith = function(instanceId) {
     $chatSection.style.display = '';
-    $chatModelSelect.value = modelFile;
-    switchChatModel(modelFile);
+    $chatInstanceSelect.value = instanceId;
+    switchChatInstance(instanceId);
     $chatSection.scrollIntoView({behavior: 'smooth'});
   };
 
-  function updateChatModelSelect() {
-    var current = $chatModelSelect.value;
-    $chatModelSelect.innerHTML = '<option value="">-- select a running model --</option>';
-    Object.keys(_runningModels).forEach(function(model) {
+  function updateChatInstanceSelect() {
+    var current = $chatInstanceSelect.value;
+    $chatInstanceSelect.innerHTML = '<option value="">-- select a running instance --</option>';
+    Object.keys(_runningInstances).forEach(function(iid) {
+      var inst = _runningInstances[iid];
       var opt = document.createElement('option');
-      opt.value = model;
-      opt.textContent = model + ' (:' + _runningModels[model].port + ')';
-      $chatModelSelect.appendChild(opt);
+      opt.value = iid;
+      opt.textContent = inst.model + ' (:' + inst.port + ')';
+      $chatInstanceSelect.appendChild(opt);
     });
     // Restore selection if still running
-    if (current && _runningModels[current]) {
-      $chatModelSelect.value = current;
+    if (current && _runningInstances[current]) {
+      $chatInstanceSelect.value = current;
     }
   }
 
-  $chatModelSelect.addEventListener('change', function() {
-    switchChatModel(this.value);
+  $chatInstanceSelect.addEventListener('change', function() {
+    switchChatInstance(this.value);
   });
 
-  function switchChatModel(model) {
-    renderChatMessages(model);
+  function switchChatInstance(instanceId) {
+    renderChatMessages(instanceId);
   }
 
-  function renderChatMessages(model) {
-    var history = model ? (_chatHistories[model] || []) : [];
+  function renderChatMessages(instanceId) {
+    var history = instanceId ? (_chatHistories[instanceId] || []) : [];
     if (!history.length) {
       $chatMessages.innerHTML = '<div class="chat-empty">Send a message to start chatting.</div>';
       return;
@@ -901,12 +1015,12 @@
     $chatMessages.scrollTop = $chatMessages.scrollHeight;
   }
 
-  function appendChatMsg(model, role, text) {
-    if (!_chatHistories[model]) _chatHistories[model] = [];
-    _chatHistories[model].push({role: role, content: text});
+  function appendChatMsg(instanceId, role, text) {
+    if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
+    _chatHistories[instanceId].push({role: role, content: text});
 
-    // Only render if this model is selected
-    if ($chatModelSelect.value !== model) return null;
+    // Only render if this instance is selected
+    if ($chatInstanceSelect.value !== instanceId) return null;
 
     var empty = $chatMessages.querySelector('.chat-empty');
     if (empty) empty.remove();
@@ -919,11 +1033,11 @@
   }
 
   $chatClearBtn.addEventListener('click', function() {
-    var model = $chatModelSelect.value;
-    if (model) {
-      _chatHistories[model] = [];
+    var instanceId = $chatInstanceSelect.value;
+    if (instanceId) {
+      _chatHistories[instanceId] = [];
     }
-    renderChatMessages(model);
+    renderChatMessages(instanceId);
   });
 
   $chatSendBtn.addEventListener('click', sendChat);
@@ -933,19 +1047,19 @@
 
   async function sendChat() {
     var text = $chatInput.value.trim();
-    var model = $chatModelSelect.value;
-    if (!text || !model || _streaming) return;
+    var instanceId = $chatInstanceSelect.value;
+    if (!text || !instanceId || _streaming) return;
 
-    if (!_runningModels[model]) {
-      showToast('Model is not running', 3000, 'error');
+    if (!_runningInstances[instanceId]) {
+      showToast('Instance is not running', 3000, 'error');
       return;
     }
 
     $chatInput.value = '';
-    appendChatMsg(model, 'user', text);
+    appendChatMsg(instanceId, 'user', text);
 
-    if (!_chatHistories[model]) _chatHistories[model] = [];
-    var messages = _chatHistories[model]
+    if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
+    var messages = _chatHistories[instanceId]
       .filter(function(m) { return m.role === 'user' || m.role === 'assistant'; })
       .map(function(m) { return {role: m.role, content: m.content}; });
 
@@ -957,7 +1071,7 @@
       var resp = await apiFetch('/api/admin/llm/chat', {
         method: 'POST',
         body: {
-          model: model,
+          instance_id: instanceId,
           messages: messages,
           temperature: parseFloat($chatTemp.value) || 0.7,
           stream: true,
@@ -967,9 +1081,9 @@
 
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        appendChatMsg(model, 'error', 'Error: ' + (err.detail || err.error || resp.status));
+        appendChatMsg(instanceId, 'error', 'Error: ' + (err.detail || err.error || resp.status));
         // Remove last user message from history since it failed
-        if (_chatHistories[model]) _chatHistories[model].pop();
+        if (_chatHistories[instanceId]) _chatHistories[instanceId].pop();
         _streaming = false;
         $chatSendBtn.disabled = false;
         $chatSendBtn.textContent = 'Send';
@@ -982,7 +1096,7 @@
       var assistantDiv = document.createElement('div');
       assistantDiv.className = 'chat-msg assistant';
       assistantDiv.textContent = '';
-      if ($chatModelSelect.value === model) {
+      if ($chatInstanceSelect.value === instanceId) {
         $chatMessages.appendChild(assistantDiv);
       }
 
@@ -1020,19 +1134,19 @@
       }
 
       // Store completed message in history
-      if (!_chatHistories[model]) _chatHistories[model] = [];
-      _chatHistories[model].push({role: 'assistant', content: fullContent || '(empty response)'});
+      if (!_chatHistories[instanceId]) _chatHistories[instanceId] = [];
+      _chatHistories[instanceId].push({role: 'assistant', content: fullContent || '(empty response)'});
       if (!fullContent) {
         assistantDiv.textContent = '(empty response)';
       }
 
     } catch (e) {
       if (e.message !== 'auth') {
-        appendChatMsg(model, 'error', 'Error: ' + e.message);
+        appendChatMsg(instanceId, 'error', 'Error: ' + e.message);
       }
       // Remove last user message from history since it failed
-      if (_chatHistories[model] && _chatHistories[model].length && _chatHistories[model][_chatHistories[model].length - 1].role === 'user') {
-        _chatHistories[model].pop();
+      if (_chatHistories[instanceId] && _chatHistories[instanceId].length && _chatHistories[instanceId][_chatHistories[instanceId].length - 1].role === 'user') {
+        _chatHistories[instanceId].pop();
       }
     }
 

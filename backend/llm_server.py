@@ -8,8 +8,8 @@ from pathlib import Path
 from config import LLM_MODELS_DIR, LLM_CONFIG_PATH, LLAMA_SERVER_PATH, LLAMA_SERVER_PORT, DEV_MODE, _now_rome
 
 # ── LLM Multi-Instance Registry ─────────────────────────────────────────────
-# key = model filename
-# value = {"process": Popen|None, "port": int, "config": dict,
+# key = instance_id  (format: "{model_file}:{port}")
+# value = {"process": Popen|None, "port": int, "model": str, "config": dict,
 #          "log_path": Path, "started_at": str}
 
 _instances: dict[str, dict] = {}
@@ -53,9 +53,9 @@ def _next_port() -> int:
     return port
 
 
-def _is_running(model_file: str) -> bool:
-    """Check if a specific model instance is alive."""
-    inst = _instances.get(model_file)
+def _is_running(instance_id: str) -> bool:
+    """Check if a specific instance is alive."""
+    inst = _instances.get(instance_id)
     if inst is None:
         return False
     if DEV_MODE:
@@ -66,53 +66,62 @@ def _is_running(model_file: str) -> bool:
     return proc.poll() is None
 
 
+def _has_running_instances(model_file: str) -> bool:
+    """Return True if ANY instance of the given model file is running."""
+    with _instances_lock:
+        for inst_id, inst in _instances.items():
+            if inst.get("model") != model_file:
+                continue
+            if DEV_MODE:
+                return True
+            proc = inst.get("process")
+            if proc and proc.poll() is None:
+                return True
+    return False
+
+
 def _get_running_instances() -> list[dict]:
-    """Return list of running instances with port, model, started_at."""
+    """Return list of running instances with instance_id, port, model, started_at."""
     result = []
     with _instances_lock:
         dead = []
-        for model_file, inst in _instances.items():
+        for instance_id, inst in _instances.items():
             if DEV_MODE or (inst.get("process") and inst["process"].poll() is None):
                 result.append({
-                    "model": model_file,
+                    "instance_id": instance_id,
+                    "model": inst["model"],
                     "port": inst["port"],
                     "started_at": inst.get("started_at", ""),
                     "config": {k: v for k, v in inst.get("config", {}).items() if not k.startswith("_")},
                 })
             else:
-                dead.append(model_file)
+                dead.append(instance_id)
         # Clean up dead instances
-        for m in dead:
-            del _instances[m]
+        for iid in dead:
+            del _instances[iid]
     return result
 
 
-def _start_llama_server(model_file: str, config: dict) -> int:
-    """Start a NEW llama-server instance. Returns the assigned port."""
+def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
+    """Start a NEW llama-server instance. Returns (instance_id, port)."""
     from events import _events
 
     with _instances_lock:
-        # If already running, raise
-        if model_file in _instances:
-            if DEV_MODE or (_instances[model_file].get("process") and _instances[model_file]["process"].poll() is None):
-                raise RuntimeError(f"Model '{model_file}' is already running on port {_instances[model_file]['port']}")
-            else:
-                # Dead process, clean up
-                del _instances[model_file]
-
         model_path = LLM_MODELS_DIR / model_file
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
         port = _next_port()
+        instance_id = f"{model_file}:{port}"
         started_at = _now_rome()
 
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = _LOG_DIR / f"{model_file}.log"
+        log_path = _LOG_DIR / f"{instance_id.replace(':', '_')}.log"
 
         if DEV_MODE:
-            _instances[model_file] = {
+            _instances[instance_id] = {
                 "process": None,
+                "model": model_file,
                 "port": port,
                 "config": config,
                 "log_path": log_path,
@@ -120,9 +129,9 @@ def _start_llama_server(model_file: str, config: dict) -> int:
             }
             # Write a fake log line
             log_path.write_text(f"[DEV MODE] llama-server stub started for {model_file} on port {port}\n")
-            _events.emit("llm.server.started", f"LLM instance started (dev stub): {model_file} on port {port}",
-                         data={"model": model_file, "port": port})
-            return port
+            _events.emit("llm.server.started", f"LLM instance started (dev stub): {instance_id}",
+                         data={"instance_id": instance_id, "model": model_file, "port": port})
+            return instance_id, port
 
         if not LLAMA_SERVER_PATH.exists():
             raise FileNotFoundError(f"llama-server binary not found: {LLAMA_SERVER_PATH}")
@@ -140,8 +149,9 @@ def _start_llama_server(model_file: str, config: dict) -> int:
         log_file = open(log_path, "w")
         process = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
 
-        _instances[model_file] = {
+        _instances[instance_id] = {
             "process": process,
+            "model": model_file,
             "port": port,
             "config": config,
             "log_path": log_path,
@@ -149,17 +159,17 @@ def _start_llama_server(model_file: str, config: dict) -> int:
             "_log_file": log_file,
         }
 
-        _events.emit("llm.server.started", f"LLM instance started: {model_file} on port {port}",
-                     data={"model": model_file, "port": port})
-        return port
+        _events.emit("llm.server.started", f"LLM instance started: {instance_id}",
+                     data={"instance_id": instance_id, "model": model_file, "port": port})
+        return instance_id, port
 
 
-def _stop_llama_server(model_file: str) -> None:
-    """Stop a specific model instance."""
+def _stop_llama_server(instance_id: str) -> None:
+    """Stop a specific instance by instance_id."""
     from events import _events
 
     with _instances_lock:
-        inst = _instances.pop(model_file, None)
+        inst = _instances.pop(instance_id, None)
         if inst is None:
             return
 
@@ -180,21 +190,26 @@ def _stop_llama_server(model_file: str) -> None:
                 except Exception:
                     pass
 
-        _events.emit("llm.server.stopped", f"LLM instance stopped: {model_file}",
-                     data={"model": model_file})
+        _events.emit("llm.server.stopped", f"LLM instance stopped: {instance_id}",
+                     data={"instance_id": instance_id, "model": inst.get("model", "")})
 
 
 def _stop_all() -> None:
     """Stop all running instances."""
     with _instances_lock:
-        models = list(_instances.keys())
-    for m in models:
-        _stop_llama_server(m)
+        instance_ids = list(_instances.keys())
+    for iid in instance_ids:
+        _stop_llama_server(iid)
 
 
-def _get_instance_log(model_file: str, tail: int = 50) -> str:
+def _get_instance_log(instance_id: str, tail: int = 50) -> str:
     """Read last N lines of a specific instance's log."""
-    log_path = _LOG_DIR / f"{model_file}.log"
+    inst = _instances.get(instance_id)
+    if inst and inst.get("log_path"):
+        log_path = inst["log_path"]
+    else:
+        # Fallback: try to find by constructed name
+        log_path = _LOG_DIR / f"{instance_id.replace(':', '_')}.log"
     if not log_path.exists():
         return ""
     try:
@@ -204,9 +219,9 @@ def _get_instance_log(model_file: str, tail: int = 50) -> str:
         return ""
 
 
-def _get_instance_port(model_file: str) -> int | None:
-    """Get the port for a running model instance."""
-    inst = _instances.get(model_file)
+def _get_instance_port(instance_id: str) -> int | None:
+    """Get the port for a running instance."""
+    inst = _instances.get(instance_id)
     if inst is None:
         return None
     return inst["port"]
