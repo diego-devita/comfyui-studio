@@ -97,7 +97,7 @@ async def llm_status():
 
     # Check health for each instance
     for inst in instances:
-        inst["proxy_base_path"] = f"/api/admin/llm/{inst['instance_id']}/api/"
+        inst["proxy_base_path"] = f"/api/admin/llm/proxy/{inst['instance_id']}/api/"
         if not inst.get("alive"):
             inst["health"] = "exited"
         elif DEV_MODE:
@@ -188,7 +188,7 @@ async def llm_stop_all():
     return JSONResponse({"status": "stopped_all"})
 
 
-@router.get("/api/admin/llm/log/{instance_id:path}")
+@router.get("/api/admin/llm/log/{instance_id}")
 async def llm_instance_log(instance_id: str, tail: int = 100):
     """Get the last N lines of an instance's log."""
     log = _get_instance_log(instance_id, tail=tail)
@@ -299,12 +299,12 @@ async def llm_chat(request: Request):
         raise HTTPException(500, f"LLM chat error: {str(e)}")
 
 
-@router.api_route("/api/admin/llm/{instance_id:path}/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@router.api_route("/api/admin/llm/proxy/{instance_id}/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def llm_proxy(instance_id: str, path: str, request: Request):
     """Generic proxy to a running llama-server instance.
 
-    Routes /api/admin/llm/{instance_id}/api/{anything} to localhost:{port}/{anything}.
-    Only works for instances registered in the instance registry.
+    Routes /api/admin/llm/proxy/{instance_id}/api/{anything} to localhost:{port}/{anything}.
+    Instance IDs are URL-safe slugs (e.g. qwen2_5_7b_instruct_q4_k_m_gguf_8080).
     """
     if not _is_running(instance_id):
         raise HTTPException(503, f"Instance '{instance_id}' is not running")

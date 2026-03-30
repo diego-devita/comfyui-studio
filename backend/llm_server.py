@@ -6,6 +6,7 @@ probe each port to determine if the orphaned process is still alive.
 """
 
 import json
+import re
 import socket
 import subprocess
 import threading
@@ -113,6 +114,13 @@ def _save_llm_config(config: dict) -> None:
 
 # ── Instance helpers ─────────────────────────────────────────────────────────
 
+def _normalize_model_name(model_file: str) -> str:
+    """Normalize model filename to URL-safe slug: [a-zA-Z0-9] → keep, rest → _."""
+    slug = re.sub(r'[^a-zA-Z0-9]', '_', model_file)
+    slug = re.sub(r'_+', '_', slug).strip('_').lower()
+    return slug
+
+
 def _next_port() -> int:
     """Find next available port starting from LLAMA_SERVER_PORT."""
     used = {inst["port"] for inst in _instances.values()}
@@ -189,11 +197,12 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
                 raise FileNotFoundError(f"Model file not found: {model_path}")
 
         port = _next_port()
-        instance_id = f"{model_file}:{port}"
+        slug = _normalize_model_name(model_file)
+        instance_id = f"{slug}_{port}"
         started_at = _now_rome().strftime("%Y-%m-%d %H:%M")
 
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = _LOG_DIR / f"{instance_id.replace(':', '_')}.log"
+        log_path = _LOG_DIR / f"{instance_id}.log"
 
         if DEV_MODE:
             _instances[instance_id] = {
