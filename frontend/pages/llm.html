@@ -847,7 +847,8 @@
     var html = '';
     _models.forEach(function(m) {
       var name = m.name || m.filename || '--';
-      var size = m.size ? formatSize(m.size) : '';
+      var sizeBytes = m.on_disk_bytes || m.expected_bytes || 0;
+      var size = sizeBytes ? formatSize(sizeBytes) : (m.size_gb ? m.size_gb + ' GB' : '');
       var quant = m.quant || '';
       var status = m.status || 'missing';
       var tags = m.tags || [];
