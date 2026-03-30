@@ -1874,6 +1874,7 @@
   var _pipelineData = null;  // current pipeline descriptor
   var _pipelineRunId = null;
   var _pipelinePollTimer = null;
+  var _pipelineStartTime = 0;
 
   function _pipelinesBoot() {
     if (_pipelinesLoaded) return;
@@ -2061,9 +2062,17 @@
       }
       var data = await resp.json();
       _pipelineRunId = data.run_id;
+      _pipelineStartTime = performance.now();
       document.getElementById('pipelineLog').style.display = '';
       document.getElementById('pipelineLog').textContent = 'Pipeline started...\n';
       btn.textContent = 'Running...';
+
+      // Live timer on Run button
+      var _pipelineTimerInterval = setInterval(function() {
+        if (!_pipelineRunId) { clearInterval(_pipelineTimerInterval); return; }
+        var elapsed = ((performance.now() - _pipelineStartTime) / 1000).toFixed(0);
+        btn.textContent = 'Running... ' + elapsed + 's';
+      }, 500);
 
       // Poll for status
       _pipelinePollTimer = setInterval(async function() {
@@ -2075,6 +2084,7 @@
           if (status.status !== 'running') {
             clearInterval(_pipelinePollTimer);
             _pipelinePollTimer = null;
+            _pipelineRunId = null;
             btn.disabled = false;
             btn.textContent = 'Run Pipeline';
             if (status.status === 'completed') {
@@ -2094,10 +2104,16 @@
   function _renderPipelineLog(status) {
     var el = document.getElementById('pipelineLog');
     var html = '';
+    var lastStepTime = 0;
     (status.log || []).forEach(function(entry) {
       var time = entry.t.toFixed(1) + 's';
       html += '<span style="color:var(--accent);">[' + time + ']</span> ' + escHtml(entry.msg) + '\n';
+      if (entry.msg.startsWith('▶')) lastStepTime = entry.t;
     });
+    if (status.status === 'running' && lastStepTime > 0) {
+      var stepElapsed = (status.elapsed - lastStepTime).toFixed(0);
+      html += '<span style="color:var(--queued);">  ⏱ ' + stepElapsed + 's waiting...</span>\n';
+    }
     if (status.status === 'completed') {
       html += '\n<span style="color:var(--success);">✓ Completed in ' + status.elapsed.toFixed(1) + 's</span>\n';
       if (status.result && status.result.job_id) {

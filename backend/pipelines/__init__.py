@@ -167,11 +167,13 @@ class PipelineContext:
         if input_image_name:
             params["_existing_input_image"] = input_image_name
 
+        # Use API key from env (set by events.py at boot from DB settings)
+        api_key = os.environ.get("API_KEY", "")
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
                 f"http://127.0.0.1:8000/api/run/{workflow_id}/execute",
                 data={"params": json.dumps(params)},
-                headers={"Cookie": "session=internal"},  # internal call
+                headers={"X-API-Key": api_key},
             )
             if r.status_code != 200:
                 raise RuntimeError(f"Job submission failed: {r.status_code} {r.text[:200]}")

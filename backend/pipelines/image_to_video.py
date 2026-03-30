@@ -73,7 +73,7 @@ async def run(inputs: dict, ctx):
     ctx.set_step(f"Analyzing image with vision model")
     image_description = await ctx.llm_chat(
         preset_id="image-analyzer",
-        message="Describe this image.",
+        message="Describe this image. Pay special attention to the subject's real age — examine neck skin, crow's feet, nasolabial folds, hand veins, jawline before estimating. Do not underestimate age. Include an AGE ASSESSMENT section with specific aging indicators found.",
         requirement_id="vision_model",
         image_id=image_id,
     )
