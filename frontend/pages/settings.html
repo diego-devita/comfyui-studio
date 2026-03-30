@@ -749,8 +749,10 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         $tgNotifToggle.checked = !!data.notifications_enabled;
+        _tgHasToken = !!data.has_token;
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:6px;background:';
         if (data.running) {
-          var info = 'Running since ' + (data.started_at || '?');
+          var info = dot + 'var(--success);"></span>Running since ' + (data.started_at || '?');
           if (data.name) info += ' — <a href="https://t.me/' + data.name + '" target="_blank" style="color:var(--accent);">@' + data.name + '</a>';
           $tgStatus.innerHTML = info;
           $tgStartBtn.style.display = 'none';
@@ -758,24 +760,25 @@
           $tgStopBtn.disabled = false;
           $tgStopBtn.textContent = 'Stop';
         } else {
-          $tgStatus.textContent = 'Not running';
+          $tgStatus.innerHTML = dot + 'var(--error);"></span>Not running';
           $tgStartBtn.style.display = '';
           $tgStopBtn.style.display = 'none';
           checkTelegramStartEnabled();
         }
       })
       .catch(function() {
-        $tgStatus.textContent = 'Not configured';
+        $tgStatus.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:6px;background:var(--muted);"></span>Not configured';
         $tgStartBtn.style.display = '';
         $tgStopBtn.style.display = 'none';
         $tgStartBtn.disabled = true;
       });
   }
 
+  var _tgHasToken = false;
   function checkTelegramStartEnabled() {
-    // Check if token input has a value in the env vars section
+    // Check DOM first, fallback to cached flag from status
     var tokenInput = document.querySelector('.env-edit-input[data-key="TELEGRAM_BOT_TOKEN"]');
-    var hasToken = tokenInput && tokenInput.value.trim().length > 0;
+    var hasToken = (tokenInput && tokenInput.value.trim().length > 0) || _tgHasToken;
     $tgStartBtn.disabled = !hasToken;
     $tgStartBtn.title = hasToken ? '' : 'Set TELEGRAM_BOT_TOKEN in Environment Variables first';
   }

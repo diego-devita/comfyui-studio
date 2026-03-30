@@ -692,6 +692,7 @@ async def telegram_bot_status():
     except ImportError:
         status = {"running": False, "name": "", "started_at": None, "error": "python-telegram-bot not installed"}
     status["notifications_enabled"] = _db.get_setting("TELEGRAM_NOTIFICATIONS", "0") == "1"
+    status["has_token"] = bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
     return status
 
 
