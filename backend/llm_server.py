@@ -160,20 +160,73 @@ def _has_running_instances(model_file: str) -> bool:
     return False
 
 
+def _get_gpu_mem_by_pid() -> dict[int, int]:
+    """Query nvidia-smi for per-process GPU memory (MiB). Returns {pid: mib}."""
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        result = {}
+        for line in r.stdout.strip().splitlines():
+            parts = line.split(",")
+            if len(parts) >= 2:
+                pid = int(parts[0].strip())
+                mem = int(parts[1].strip())
+                result[pid] = mem
+        return result
+    except Exception:
+        return {}
+
+
 def _get_running_instances() -> list[dict]:
-    """Return ALL registered instances (alive or exited) with status flag."""
+    """Return ALL registered instances (alive or exited) with status flag + VRAM."""
+    gpu_mem = _get_gpu_mem_by_pid() if not DEV_MODE else {}
+    port_pids = _get_llama_pids_by_port() if (not DEV_MODE and gpu_mem) else {}
     result = []
     with _instances_lock:
         for instance_id, inst in _instances.items():
             alive = _instance_alive(inst)
-            result.append({
+            entry = {
                 "instance_id": instance_id,
                 "model": inst["model"],
                 "port": inst["port"],
                 "started_at": inst.get("started_at", ""),
                 "config": {k: v for k, v in inst.get("config", {}).items() if not k.startswith("_")},
                 "alive": alive,
-            })
+            }
+            # Attach VRAM from nvidia-smi
+            proc = inst.get("process")
+            pid = proc.pid if proc else port_pids.get(inst["port"])
+            if pid and pid in gpu_mem:
+                entry["vram_mb"] = gpu_mem[pid]
+            if DEV_MODE and alive:
+                entry["vram_mb"] = 5326  # fake for dev
+            result.append(entry)
+    return result
+
+
+def _get_llama_pids_by_port() -> dict[int, int]:
+    """Scan /proc for llama-server processes, return {port: pid}."""
+    import os
+    result = {}
+    try:
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                cmdline = Path(f"/proc/{entry}/cmdline").read_bytes().decode("utf-8", errors="replace")
+                args = cmdline.split("\0")
+                if not any("llama-server" in a or "llama_server" in a for a in args):
+                    continue
+                for i, a in enumerate(args):
+                    if a == "--port" and i + 1 < len(args) and args[i + 1].isdigit():
+                        result[int(args[i + 1])] = int(entry)
+                        break
+            except (OSError, PermissionError, ValueError):
+                continue
+    except OSError:
+        pass
     return result
 
 
@@ -295,14 +348,10 @@ def _kill_by_port(port: int) -> None:
     import os
     import signal
     try:
-        # Use /proc/net/tcp to find PID without external tools
-        import subprocess as sp
-        result = sp.run(["fuser", f"{port}/tcp"], capture_output=True, text=True, timeout=5)
-        if result.stdout.strip():
-            for pid_str in result.stdout.strip().split():
-                pid_str = pid_str.strip()
-                if pid_str.isdigit():
-                    os.kill(int(pid_str), signal.SIGTERM)
+        port_pids = _get_llama_pids_by_port()
+        pid = port_pids.get(port)
+        if pid:
+            os.kill(pid, signal.SIGTERM)
     except Exception:
         pass
 

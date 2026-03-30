@@ -991,6 +991,7 @@
           '<div class="instance-meta">' +
             '<span>Started: ' + escHtml(inst.started_at || '--') + '</span>' +
             (configParts.length ? '<span>' + escHtml(configParts.join(', ')) + '</span>' : '') +
+            (inst.vram_mb ? '<span style="color:var(--accent);">VRAM: ' + (inst.vram_mb >= 1024 ? (inst.vram_mb / 1024).toFixed(1) + ' GB' : inst.vram_mb + ' MB') + '</span>' : '') +
           '</div>' +
           '<div style="margin-top:4px;"><a class="proxy-link" href="' + escHtml(proxyUrl) + '" target="_blank" title="OpenAI-compatible API">' + escHtml(proxyUrl) + '</a></div>' +
           '<div class="log-console' + (logExpanded ? ' visible' : '') + '" id="log-' + escHtml(inst.instance_id).replace(/:/g, '_') + '"></div>' +
@@ -1176,7 +1177,11 @@
       .map(function(m) { return {role: m.role, content: m.content}; });
 
     $chatSendBtn.disabled = true;
-    $chatSendBtn.innerHTML = '<span class="spinner sm"></span>';
+    var _sendStart = performance.now();
+    var _timerInterval = setInterval(function() {
+      var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
+      $chatSendBtn.textContent = elapsed + 's';
+    }, 100);
     _streaming = true;
 
     try {
@@ -1192,9 +1197,9 @@
       });
 
       if (!resp.ok) {
+        clearInterval(_timerInterval);
         var err = await resp.json().catch(function() { return {}; });
         appendChatMsg(instanceId, 'error', 'Error: ' + (err.detail || err.error || resp.status));
-        // Remove last user message from history since it failed
         if (_chatHistories[instanceId]) _chatHistories[instanceId].pop();
         _streaming = false;
         $chatSendBtn.disabled = false;
@@ -1252,11 +1257,19 @@
         assistantDiv.textContent = '(empty response)';
       }
 
+      // Show elapsed time
+      clearInterval(_timerInterval);
+      var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
+      var timeTag = document.createElement('div');
+      timeTag.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:2px;';
+      timeTag.textContent = elapsed + 's';
+      assistantDiv.appendChild(timeTag);
+
     } catch (e) {
+      clearInterval(_timerInterval);
       if (e.message !== 'auth') {
         appendChatMsg(instanceId, 'error', 'Error: ' + e.message);
       }
-      // Remove last user message from history since it failed
       if (_chatHistories[instanceId] && _chatHistories[instanceId].length && _chatHistories[instanceId][_chatHistories[instanceId].length - 1].role === 'user') {
         _chatHistories[instanceId].pop();
       }
