@@ -284,7 +284,7 @@
 <header>
   <div class="logo">ComfyUI <span class="studio-word">Studio<span class="beta-badge">BETA</span></span> <span class="version-tag" id="versionTag"></span></div>
   <div class="header-update">
-    <button class="btn" id="updateBtn"><span id="updateBtnText" style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div></button>
+    <button class="btn" id="updateBtn" disabled><span id="updateBtnText" style="position:relative;z-index:1;">Check for Updates</span><div class="update-bar" id="updateBar"></div></button>
     <div class="header-meta">Last updated: <span id="lastUpdated">--</span></div>
   </div>
 </header>
@@ -601,6 +601,7 @@
       renderStatus(data);
       $loading.style.display = 'none';
       $dash.style.display = '';
+      $updateBtn.disabled = false;
     } catch (e) {
       if (e.message !== 'auth') {
         $loading.innerHTML = '<span style="color:var(--error)">Failed to load system status: ' + escHtml(e.message) + '</span>';
