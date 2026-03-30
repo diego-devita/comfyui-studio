@@ -23,6 +23,7 @@ import logging
 import os
 import time
 from config import _now_rome
+import telegram_db as _tdb
 
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -66,10 +67,50 @@ async def studio_get_bytes(path: str) -> bytes:
         return r.content
 
 
+# ── Contact tracking ──
+
+def _track_contact(update: Update):
+    """Save/update contact info from any incoming update."""
+    user = update.effective_user
+    chat = update.effective_chat
+    if user and chat:
+        _tdb.upsert_contact(
+            chat_id=chat.id,
+            user_id=user.id,
+            username=user.username or "",
+            first_name=user.first_name or "",
+            last_name=user.last_name or "",
+            language_code=user.language_code or "",
+        )
+
+
 # ── Handlers ──
 
+async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Unsubscribe from bot notifications."""
+    _track_contact(update)
+    _tdb.set_unsubscribed(update.effective_chat.id)
+    await update.message.reply_text("You've been unsubscribed from notifications. Send any message to re-subscribe.")
+
+
+COMMANDS = [
+    ("presets", "Browse and run available presets"),
+    ("stop", "Unsubscribe from notifications"),
+]
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show available commands."""
+    _track_contact(update)
+    lines = ["🤖 *ComfyUI Studio Bot*\n\nAvailable commands:"]
+    for cmd, desc in COMMANDS:
+        lines.append(f"/{cmd} — {desc}")
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_presets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List available presets."""
+    _track_contact(update)
     presets = await studio_get("/api/admin/presets")
     if not presets:
         await update.message.reply_text("No presets available. Create one from the Studio web UI.")
@@ -89,6 +130,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cb_preset_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle preset selection."""
+    _track_contact(update)
     query = update.callback_query
     await query.answer()
 
@@ -175,6 +217,7 @@ async def _ask_next_placeholder(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text — either placeholder answer or show presets."""
+    _track_contact(update)
     state = context.user_data.get("state")
 
     if state == "answering_text":
@@ -191,6 +234,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive photo for the preset."""
+    _track_contact(update)
     state = context.user_data.get("state")
     if state != "waiting_image":
         await cmd_start(update, context)
@@ -399,7 +443,8 @@ def start_bot() -> str:
 
             _bot_app = Application.builder().token(BOT_TOKEN).build()
             _bot_app.add_handler(CommandHandler("start", cmd_start))
-            _bot_app.add_handler(CommandHandler("presets", cmd_start))
+            _bot_app.add_handler(CommandHandler("presets", cmd_presets))
+            _bot_app.add_handler(CommandHandler("stop", cmd_stop))
             _bot_app.add_handler(CallbackQueryHandler(cb_preset_selected))
             _bot_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
             _bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
@@ -410,6 +455,26 @@ def start_bot() -> str:
                 await _bot_app.initialize()
                 await _bot_app.start()
                 await _bot_app.updater.start_polling()
+
+                # Register commands in Telegram menu
+                from telegram import BotCommand
+                await _bot_app.bot.set_my_commands([
+                    BotCommand(cmd, desc) for cmd, desc in COMMANDS
+                ])
+
+                # Notify active contacts that bot is online
+                now_str = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
+                bot_name = os.environ.get("TELEGRAM_BOT_NAME", "ComfyUI Studio")
+                online_msg = f"🟢 {bot_name} is online — {now_str}"
+                for contact in _tdb.get_active_contacts():
+                    try:
+                        await _bot_app.bot.send_message(chat_id=contact["chat_id"], text=online_msg)
+                    except Exception as e:
+                        err_str = str(e).lower()
+                        if "forbidden" in err_str or "blocked" in err_str:
+                            _tdb.set_blocked(contact["chat_id"])
+                        logger.warning(f"Failed to notify {contact['chat_id']}: {e}")
+
                 # Keep running until stopped
                 while _bot_app and _bot_started_at:
                     await asyncio.sleep(1)
