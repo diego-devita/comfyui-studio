@@ -44,6 +44,7 @@ def init_llm_db():
         CREATE TABLE IF NOT EXISTS chat_presets (
             id            TEXT PRIMARY KEY,
             name          TEXT NOT NULL,
+            description   TEXT NOT NULL DEFAULT '',
             system_prompt TEXT NOT NULL DEFAULT '',
             temperature   REAL DEFAULT 0.7,
             created_at    TEXT NOT NULL
@@ -75,6 +76,12 @@ def init_llm_db():
         CREATE INDEX IF NOT EXISTS idx_conv_model ON conversations(model);
         CREATE INDEX IF NOT EXISTS idx_conv_updated ON conversations(updated_at);
     """)
+    # Migration: add description column if missing
+    try:
+        conn.execute("SELECT description FROM chat_presets LIMIT 1")
+    except Exception:
+        conn.execute("ALTER TABLE chat_presets ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        conn.commit()
 
 
 # ── Presets CRUD ─────────────────────────────────────────────────────────────
@@ -109,13 +116,14 @@ def upsert_preset(data: dict) -> dict:
     pid = data.get("id") or _gen_id()
     now = _now()
     conn.execute("""
-        INSERT INTO chat_presets (id, name, system_prompt, temperature, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO chat_presets (id, name, description, system_prompt, temperature, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
+            description = excluded.description,
             system_prompt = excluded.system_prompt,
             temperature = excluded.temperature
-    """, (pid, data["name"], data.get("system_prompt", ""), data.get("temperature", 0.7), now))
+    """, (pid, data["name"], data.get("description", ""), data.get("system_prompt", ""), data.get("temperature", 0.7), now))
     conn.commit()
     return get_preset(pid)
 

@@ -1454,7 +1454,8 @@
     _presets.forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.name;
+      opt.textContent = p.name + (p.description ? ' — ' + p.description.substring(0, 40) : '');
+      opt.title = p.description || '';
       sel.appendChild(opt);
     });
   }
@@ -1473,7 +1474,7 @@
       var active = p.id === _selectedPresetId;
       html += '<div class="conv-item' + (active ? ' active' : '') + '" onclick="window._selectPreset(\'' + escHtml(p.id) + '\')" style="padding:6px 8px;">' +
         '<div class="conv-item-title" style="font-size:12px;">' + escHtml(p.name) + '</div>' +
-        '<div class="conv-item-meta">' + (p.examples ? p.examples.length : 0) + ' examples</div>' +
+        '<div class="conv-item-meta">' + escHtml(p.description || '').substring(0, 50) + '</div>' +
       '</div>';
     });
     if (!_presets.length) {
@@ -1509,6 +1510,8 @@
           '<button class="btn btn--sm btn--danger" onclick="window._deletePreset(\'' + pid + '\')">Delete</button>' +
         '</div>' +
       '</div>' +
+      '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Description</div>' +
+      '<input value="' + escHtml(p.description || '') + '" data-pdesc="' + pid + '" placeholder="Short description of this preset..." style="width:100%;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 10px;box-sizing:border-box;">' +
       '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">System Prompt</div>' +
       '<textarea data-pprompt="' + pid + '" rows="8" style="width:100%;margin-bottom:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px 12px;resize:vertical;box-sizing:border-box;line-height:1.5;">' + escHtml(p.system_prompt) + '</textarea>' +
       '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Example Prompts</div>' +
@@ -1544,6 +1547,7 @@
 
   window._savePresetInline = async function(pid) {
     var nameEl = document.querySelector('[data-pname="' + pid + '"]');
+    var descEl = document.querySelector('[data-pdesc="' + pid + '"]');
     var promptEl = document.querySelector('[data-pprompt="' + pid + '"]');
     if (!nameEl || !promptEl) return;
     // Save edited examples
@@ -1555,7 +1559,7 @@
     }
     await apiFetch('/api/admin/llm/chat-presets', {
       method: 'POST',
-      body: { id: pid, name: nameEl.value.trim(), system_prompt: promptEl.value.trim() }
+      body: { id: pid, name: nameEl.value.trim(), description: descEl ? descEl.value.trim() : '', system_prompt: promptEl.value.trim() }
     });
     await _loadPresets();
     _renderPresetList();
