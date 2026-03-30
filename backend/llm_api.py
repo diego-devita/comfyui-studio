@@ -62,7 +62,26 @@ async def llm_model_download(filename: str):
     item = dict(model)
     item["_base_dir"] = str(LLM_MODELS_DIR)
     _enqueue_download(item, source="manual")
-    return JSONResponse({"status": "queued", "file": filename})
+
+    # Also enqueue companion files (e.g. mmproj for VL models)
+    queued = [filename]
+    for comp in model.get("companions", []):
+        comp_file = comp.get("file", "")
+        if not comp_file:
+            continue
+        comp_state = _download_state.get(comp_file, {})
+        if comp_state.get("status") in ("downloading", "queued"):
+            continue
+        if (LLM_MODELS_DIR / comp_file).exists():
+            continue
+        comp_item = dict(comp)
+        comp_item["_base_dir"] = str(LLM_MODELS_DIR)
+        if not comp_item.get("dest"):
+            comp_item["dest"] = ""
+        _enqueue_download(comp_item, source="manual")
+        queued.append(comp_file)
+
+    return JSONResponse({"status": "queued", "files": queued})
 
 
 @router.delete("/api/admin/llm/models/{filename}")
@@ -79,6 +98,15 @@ async def llm_model_delete(filename: str):
     dest_path = LLM_MODELS_DIR / filename
     if dest_path.exists():
         dest_path.unlink()
+
+    # Delete companion files too
+    for comp in model.get("companions", []):
+        comp_path = LLM_MODELS_DIR / comp.get("file", "")
+        if comp_path.exists():
+            comp_path.unlink()
+        comp_file = comp.get("file", "")
+        if comp_file in _download_state:
+            del _download_state[comp_file]
 
     if filename in _download_state:
         state = _download_state[filename]

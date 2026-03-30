@@ -139,7 +139,17 @@
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q4_K_M",
-          "params": "8B"
+          "params": "8B",
+          "companions": [
+            {
+              "role": "mmproj",
+              "file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.mmproj-f16.gguf",
+              "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
+              "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.mmproj-f16.gguf",
+              "size_gb": 1.3,
+              "source": "huggingface"
+            }
+          ]
         },
         {
           "name": "Qwen3-VL 8B Thinking Abliterated (Q8_0)",
@@ -153,7 +163,17 @@
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q8_0",
-          "params": "8B"
+          "params": "8B",
+          "companions": [
+            {
+              "role": "mmproj",
+              "file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.mmproj-f16.gguf",
+              "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
+              "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.mmproj-f16.gguf",
+              "size_gb": 1.3,
+              "source": "huggingface"
+            }
+          ]
         }
       ]
     },

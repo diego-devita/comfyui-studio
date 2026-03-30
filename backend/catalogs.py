@@ -207,6 +207,9 @@ def _build_catalog_response(catalog_data: dict, base_dir: str | Path, download_s
                 "quant": m.get("quant", ""),
                 "params": m.get("params", ""),
                 "context_length": m.get("context_length", 0),
+                "context_default": m.get("context_default", 0),
+                "context_max": m.get("context_max", 0),
+                "companions": m.get("companions", []),
                 "status": "missing",
                 "progress": 0.0,
                 "on_disk_bytes": 0,
@@ -238,6 +241,29 @@ def _build_catalog_response(catalog_data: dict, base_dir: str | Path, download_s
                 entry["progress"] = 100.0
                 entry["on_disk_bytes"] = on_disk
                 entry["expected_bytes"] = on_disk
+
+            # Check companion files status
+            companions = m.get("companions", [])
+            if companions and entry["status"] == "present":
+                companions_out = []
+                all_present = True
+                for comp in companions:
+                    comp_file = comp.get("file", "")
+                    comp_key = f"{dest}/{comp_file}" if dest else comp_file
+                    comp_state = download_state.get(comp_file)
+                    comp_entry = {"role": comp.get("role", ""), "file": comp_file, "size_gb": comp.get("size_gb", 0)}
+                    if comp_state and comp_state.get("status") == "downloading":
+                        comp_entry["status"] = "downloading"
+                        all_present = False
+                    elif comp_key in _disk_cache:
+                        comp_entry["status"] = "present"
+                    else:
+                        comp_entry["status"] = "missing"
+                        all_present = False
+                    companions_out.append(comp_entry)
+                entry["companions_status"] = companions_out
+                if not all_present:
+                    entry["status"] = "partial"
 
             models_out.append(entry)
 

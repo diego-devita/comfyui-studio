@@ -239,6 +239,19 @@ def _dismiss_instance(instance_id: str) -> None:
 
 # ── Start / Stop ─────────────────────────────────────────────────────────────
 
+def _find_catalog_entry(model_file: str) -> dict | None:
+    """Look up a model in the LLM catalog by filename."""
+    try:
+        import catalogs as _cat
+        for cat in _cat._llm_models_data.get("categories", []):
+            for m in cat.get("models", []):
+                if m.get("file") == model_file:
+                    return m
+    except Exception:
+        pass
+    return None
+
+
 def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
     """Start a NEW llama-server instance. Returns (instance_id, port)."""
     from events import _events
@@ -286,6 +299,15 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
             "--threads", str(config.get("threads", 4)),
             "--parallel", "1",
         ]
+
+        # Add --mmproj for vision-language models
+        catalog_entry = _find_catalog_entry(model_file)
+        if catalog_entry:
+            for comp in catalog_entry.get("companions", []):
+                if comp.get("role") == "mmproj":
+                    mmproj_path = LLM_MODELS_DIR / comp["file"]
+                    if mmproj_path.exists():
+                        cmd.extend(["--mmproj", str(mmproj_path)])
 
         log_file = open(log_path, "w")
         process = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)

@@ -517,6 +517,11 @@
     white-space: pre-wrap; max-height: 60px; overflow: hidden; cursor: pointer;
   }
   .chat-system-msg:hover { max-height: none; }
+  .chat-msg-image {
+    max-width: 200px; max-height: 200px;
+    border-radius: var(--radius-sm); cursor: pointer;
+    display: block; margin: 4px 0;
+  }
   .chat-no-conv {
     font-family: var(--mono); font-size: 12px; color: var(--muted);
     text-align: center; padding: 60px 0; flex: 1;
@@ -662,7 +667,14 @@
             <input type="range" id="chatTemp" min="0" max="2" step="0.1" value="0.7" style="flex:1;max-width:150px;">
             <span id="chatTempVal" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:24px;">0.7</span>
           </div>
+          <div id="chatImagePreview" style="display:none;margin-bottom:6px;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);display:none;align-items:center;gap:8px;">
+            <img id="chatImageThumb" style="max-width:60px;max-height:60px;border-radius:4px;">
+            <span id="chatImageName" style="font-family:var(--mono);font-size:10px;color:var(--muted);flex:1;"></span>
+            <button class="btn btn--sm btn--danger" id="chatImageRemove" style="flex-shrink:0;">x</button>
+          </div>
           <div class="chat-input-row">
+            <button class="btn btn--sm" id="chatImageBtn" title="Attach image" style="align-self:flex-end;padding:8px;"><span class="icon icon-image icon-md"></span></button>
+            <input type="file" id="chatImageInput" accept="image/*" style="display:none;">
             <textarea id="chatInput" placeholder="Type a message..." rows="2"></textarea>
             <button class="btn" id="chatSendBtn">Send</button>
           </div>
@@ -861,6 +873,9 @@
       } else if (status === 'present') {
         badgeClass = 'present';
         badgeText = 'Downloaded';
+      } else if (status === 'partial') {
+        badgeClass = 'downloading';
+        badgeText = 'Incomplete';
       } else {
         badgeClass = 'missing';
         badgeText = 'Missing';
@@ -881,6 +896,8 @@
         actionHtml = '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
       } else if (status === 'downloading') {
         actionHtml = '<span class="spinner sm"></span>';
+      } else if (status === 'partial') {
+        actionHtml = '<button class="btn btn--sm" onclick="window._llmDownloadModel(\'' + fileEsc + '\')">Download Missing</button>';
       } else {
         actionHtml = '<button class="btn btn--sm" onclick="window._llmDownloadModel(\'' + fileEsc + '\')">Download</button>';
       }
@@ -1228,8 +1245,62 @@
   var $chatSendBtn = document.getElementById('chatSendBtn');
   var $chatTemp = document.getElementById('chatTemp');
   var $chatTempVal = document.getElementById('chatTempVal');
+  var $chatImageBtn = document.getElementById('chatImageBtn');
+  var $chatImageInput = document.getElementById('chatImageInput');
+  var $chatImagePreview = document.getElementById('chatImagePreview');
+  var $chatImageThumb = document.getElementById('chatImageThumb');
+  var $chatImageName = document.getElementById('chatImageName');
+  var $chatImageRemove = document.getElementById('chatImageRemove');
+  var _pendingImageId = null;
 
   $chatTemp.addEventListener('input', function() { $chatTempVal.textContent = this.value; });
+
+  // ── Render message content (text or multimodal) ──
+  function _renderMsgContent(div, content) {
+    if (typeof content === 'string') {
+      div.textContent = content;
+      return;
+    }
+    if (!Array.isArray(content)) { div.textContent = String(content); return; }
+    content.forEach(function(part) {
+      if (part.type === 'text' && part.text) {
+        var span = document.createElement('span');
+        span.textContent = part.text;
+        div.appendChild(span);
+      } else if (part.type === 'image_url') {
+        var url = (part.image_url || {}).url || '';
+        if (url.startsWith('llm://')) url = '/api/admin/llm/chat-images/' + url.replace('llm://', '');
+        var img = document.createElement('img');
+        img.src = url;
+        img.className = 'chat-msg-image';
+        img.onclick = function() { window.open(img.src, '_blank'); };
+        div.appendChild(img);
+      }
+    });
+  }
+
+  // ── Image upload ──
+  $chatImageBtn.addEventListener('click', function() { $chatImageInput.click(); });
+  $chatImageInput.addEventListener('change', async function() {
+    var file = this.files[0];
+    if (!file) return;
+    this.value = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    try {
+      var resp = await fetch('/api/admin/llm/chat-images', { method: 'POST', body: formData, credentials: 'include' });
+      if (!resp.ok) { showToast('Image upload failed', 3000, 'error'); return; }
+      var data = await resp.json();
+      _pendingImageId = data.image_id;
+      $chatImageThumb.src = '/api/admin/llm/chat-images/' + data.image_id;
+      $chatImageName.textContent = file.name;
+      $chatImagePreview.style.display = 'flex';
+    } catch (e) { showToast('Upload error: ' + e.message, 3000, 'error'); }
+  });
+  $chatImageRemove.addEventListener('click', function() {
+    _pendingImageId = null;
+    $chatImagePreview.style.display = 'none';
+  });
 
   function _chatBoot() {
     if (_chatBooted) return;
@@ -1484,7 +1555,7 @@
       if (msg.role === 'user' || msg.role === 'assistant') {
         var div = document.createElement('div');
         div.className = 'chat-msg ' + msg.role;
-        div.textContent = msg.content;
+        _renderMsgContent(div, msg.content);
         $chatMessages.appendChild(div);
       }
     });
@@ -1567,9 +1638,12 @@
 
   async function _sendMessage() {
     var text = $chatInput.value.trim();
-    if (!text || !_currentConvId || _chatStreaming) return;
+    var imageId = _pendingImageId;
+    if ((!text && !imageId) || !_currentConvId || _chatStreaming) return;
 
     $chatInput.value = '';
+    _pendingImageId = null;
+    $chatImagePreview.style.display = 'none';
     _chatStreaming = true;
     $chatSendBtn.disabled = true;
 
@@ -1578,7 +1652,17 @@
     if (empty) empty.remove();
     var userDiv = document.createElement('div');
     userDiv.className = 'chat-msg user';
-    userDiv.textContent = text;
+    if (imageId) {
+      var img = document.createElement('img');
+      img.src = '/api/admin/llm/chat-images/' + imageId;
+      img.className = 'chat-msg-image';
+      userDiv.appendChild(img);
+    }
+    if (text) {
+      var span = document.createElement('span');
+      span.textContent = text;
+      userDiv.appendChild(span);
+    }
     $chatMessages.appendChild(userDiv);
     $chatMessages.scrollTop = $chatMessages.scrollHeight;
 
@@ -1589,9 +1673,11 @@
     }, 100);
 
     try {
+      var msgBody = { content: text || '', temperature: parseFloat($chatTemp.value) || 0.7, stream: false };
+      if (imageId) msgBody.image_id = imageId;
       var resp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId + '/message', {
         method: 'POST',
-        body: { content: text, temperature: parseFloat($chatTemp.value) || 0.7, stream: false },
+        body: msgBody,
       });
 
       clearInterval(_timerInterval);

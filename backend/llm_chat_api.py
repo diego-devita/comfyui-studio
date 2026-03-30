@@ -1,18 +1,61 @@
 """ComfyUI Studio — LLM chat API (presets + conversations)."""
 
+import base64
 import json
+import uuid
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
-from config import DEV_MODE
+from config import DEV_MODE, LLM_IMAGES_DIR
 from llm_server import (
     _get_running_instances, _get_instance_port, _is_running, _load_llm_config,
 )
 import llm_db as db
 
 router = APIRouter()
+
+# ── Image helpers ────────────────────────────────────────────────────────────
+
+_b64_cache: dict[str, str] = {}  # image_id -> base64 string (LRU-ish, max 20)
+
+
+def _resolve_content_for_llm(content):
+    """Resolve llm:// image references to base64 data URIs for llama-server."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return content
+    resolved = []
+    for part in content:
+        if part.get("type") == "image_url":
+            url = part.get("image_url", {}).get("url", "")
+            if url.startswith("llm://"):
+                image_id = url.replace("llm://", "")
+                b64 = _get_image_b64(image_id)
+                if b64:
+                    resolved.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+                    continue
+        resolved.append(part)
+    return resolved
+
+
+def _get_image_b64(image_id: str) -> str | None:
+    """Get base64 of an image, with in-memory cache."""
+    if image_id in _b64_cache:
+        return _b64_cache[image_id]
+    path = LLM_IMAGES_DIR / image_id
+    if not path.exists():
+        return None
+    data = path.read_bytes()
+    b64 = base64.b64encode(data).decode("ascii")
+    # Keep cache small
+    if len(_b64_cache) >= 20:
+        _b64_cache.pop(next(iter(_b64_cache)))
+    _b64_cache[image_id] = b64
+    return b64
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,6 +137,46 @@ async def preset_example_delete(example_id: str):
     return JSONResponse({"status": "deleted", "id": example_id})
 
 
+# ── Chat image endpoints ──────────────────────────────────────────────────────
+
+@router.post("/api/admin/llm/chat-images")
+async def chat_image_upload(file: UploadFile = File(...)):
+    """Upload an image for use in chat. Resizes to max 1024px, saves as JPEG."""
+    LLM_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    ext = "jpg"
+    image_id = uuid.uuid4().hex[:12] + "." + ext
+    dest = LLM_IMAGES_DIR / image_id
+
+    data = await file.read()
+    # Resize with Pillow if available
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(data))
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        max_dim = 1024
+        if max(img.size) > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        data = buf.getvalue()
+    except ImportError:
+        pass  # No Pillow — save raw
+
+    dest.write_bytes(data)
+    return JSONResponse({"image_id": image_id})
+
+
+@router.get("/api/admin/llm/chat-images/{image_id}")
+async def chat_image_serve(image_id: str):
+    """Serve a chat image."""
+    path = LLM_IMAGES_DIR / image_id
+    if not path.exists():
+        raise HTTPException(404, "Image not found")
+    return FileResponse(path, media_type="image/jpeg")
+
+
 # ── Conversation endpoints ───────────────────────────────────────────────────
 
 @router.get("/api/admin/llm/conversations")
@@ -163,9 +246,21 @@ async def conversation_message(conv_id: str, request: Request):
     except Exception:
         raise HTTPException(400, "Invalid JSON body")
 
-    content = body.get("content", "").strip()
-    if not content:
-        raise HTTPException(400, "Missing 'content' field")
+    text_content = body.get("content", "").strip()
+    image_id = body.get("image_id")
+    if not text_content and not image_id:
+        raise HTTPException(400, "Missing 'content' or 'image_id' field")
+
+    # Build the user message content (string or multimodal array)
+    if image_id:
+        user_content = []
+        user_content.append({"type": "image_url", "image_url": {"url": f"llm://{image_id}"}})
+        if text_content:
+            user_content.append({"type": "text", "text": text_content})
+        else:
+            user_content.append({"type": "text", "text": "Describe this image."})
+    else:
+        user_content = text_content
 
     # Load conversation
     conv = db.get_conversation(conv_id)
@@ -180,8 +275,8 @@ async def conversation_message(conv_id: str, request: Request):
     instance_id = inst["instance_id"]
     port = inst["port"]
 
-    # Save user message
-    db.add_message(conv_id, "user", content)
+    # Save user message (stores llm:// references, not base64)
+    db.add_message(conv_id, "user", user_content)
 
     # Build messages array for llama-server
     llm_messages = []
@@ -192,9 +287,9 @@ async def conversation_message(conv_id: str, request: Request):
 
     for msg in conv["messages"]:
         if msg["role"] in ("user", "assistant"):
-            llm_messages.append({"role": msg["role"], "content": msg["content"]})
+            llm_messages.append({"role": msg["role"], "content": _resolve_content_for_llm(msg["content"])})
     # Add the new user message (already saved but not in conv["messages"] snapshot)
-    llm_messages.append({"role": "user", "content": content})
+    llm_messages.append({"role": "user", "content": _resolve_content_for_llm(user_content)})
 
     # Determine temperature
     config = _load_llm_config()
