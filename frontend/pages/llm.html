@@ -235,6 +235,8 @@
   .health-dot.ok { background: var(--success); }
   .health-dot.loading { background: var(--queued); animation: livePulse 2s ease-in-out infinite; }
   .health-dot.unreachable { background: var(--error); }
+  .health-dot.exited { background: var(--muted); }
+  .instance-card.exited { opacity: 0.6; }
   .instance-meta {
     font-family: var(--mono);
     font-size: 11px;
@@ -450,9 +452,9 @@
 
   <!-- Section 1: Model Catalog (collapsible) -->
   <div class="section-title" style="cursor:pointer;user-select:none;" id="catalogToggle">
-    <span id="catalogArrow">▾</span> Model Catalog
+    <span id="catalogArrow">▸</span> Model Catalog
   </div>
-  <div id="catalogBody">
+  <div id="catalogBody" style="display:none;">
     <div class="model-list" id="modelList">
       <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
     </div>
@@ -847,6 +849,22 @@
     }
   };
 
+  // ── Dismiss exited Instance ──
+  window._llmDismissInstance = async function(instanceId) {
+    try {
+      await apiFetch('/api/admin/llm/dismiss', {
+        method: 'POST',
+        body: { instance_id: instanceId }
+      });
+    } catch (_) {}
+    if (_logTimers[instanceId]) {
+      clearInterval(_logTimers[instanceId]);
+      delete _logTimers[instanceId];
+    }
+    delete _expandedLogs[instanceId];
+    loadStatus();
+  };
+
   function startDownloadPoll() {
     if (_downloadPollTimer) return;
     _downloadPollTimer = setInterval(function() {
@@ -906,19 +924,24 @@
         if (inst.config.threads) configParts.push('threads=' + inst.config.threads);
       }
 
+      var isExited = healthClass === 'exited';
+
       html +=
-        '<div class="instance-card" data-instance="' + escHtml(inst.instance_id) + '">' +
+        '<div class="instance-card' + (isExited ? ' exited' : '') + '" data-instance="' + escHtml(inst.instance_id) + '">' +
           '<div class="instance-header">' +
             '<div class="instance-info">' +
               '<span class="health-dot ' + healthClass + '" title="' + healthClass + '"></span>' +
-              '<span class="instance-model-name">' + escHtml(inst.model) + '</span>' +
+              '<span class="instance-model-name">' + escHtml(inst.model) + (isExited ? ' <span style="color:var(--error);font-size:10px;font-weight:400;">(exited)</span>' : '') + '</span>' +
               '<span class="port-label">:' + inst.port + '</span>' +
               '<span class="instance-id-label">' + escHtml(inst.instance_id) + '</span>' +
             '</div>' +
             '<div class="instance-actions">' +
               '<button class="log-toggle' + (logExpanded ? ' active' : '') + '" onclick="window._llmToggleLog(\'' + iidEsc + '\')">Log</button>' +
-              '<button class="btn btn--sm" onclick="window._llmChatWith(\'' + iidEsc + '\')">Chat</button>' +
-              '<button class="btn btn--sm btn--danger" onclick="window._llmStopInstance(\'' + iidEsc + '\')">Stop</button>' +
+              (isExited
+                ? '<button class="btn btn--sm" onclick="window._llmDismissInstance(\'' + iidEsc + '\')">Dismiss</button>'
+                : '<button class="btn btn--sm" onclick="window._llmChatWith(\'' + iidEsc + '\')">Chat</button>' +
+                  '<button class="btn btn--sm btn--danger" onclick="window._llmStopInstance(\'' + iidEsc + '\')">Stop</button>'
+              ) +
             '</div>' +
           '</div>' +
           '<div class="instance-meta">' +

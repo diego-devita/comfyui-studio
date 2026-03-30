@@ -1,6 +1,12 @@
-"""ComfyUI Studio — LLM server process manager (multi-instance llama-server)."""
+"""ComfyUI Studio — LLM server process manager (multi-instance llama-server).
+
+Persists instance registry to llm/instances.json so running llama-server
+processes survive backend restarts.  On boot, we reload the registry and
+probe each port to determine if the orphaned process is still alive.
+"""
 
 import json
+import socket
 import subprocess
 import threading
 from pathlib import Path
@@ -16,7 +22,68 @@ _instances: dict[str, dict] = {}
 _instances_lock = threading.Lock()
 
 _LOG_DIR = LLM_MODELS_DIR.parent / "logs"
+_INSTANCES_PATH = LLM_MODELS_DIR.parent / "instances.json"
 
+
+# ── Persistence ──────────────────────────────────────────────────────────────
+
+def _persist() -> None:
+    """Write current registry to disk. Must be called with _instances_lock held."""
+    data = {}
+    for iid, inst in _instances.items():
+        data[iid] = {
+            "model": inst["model"],
+            "port": inst["port"],
+            "started_at": inst.get("started_at", ""),
+            "config": {k: v for k, v in inst.get("config", {}).items() if not k.startswith("_")},
+            "log_path": str(inst.get("log_path", "")),
+        }
+    try:
+        _INSTANCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _INSTANCES_PATH.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def _port_alive(port: int) -> bool:
+    """Check if something is listening on localhost:port."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except (OSError, ConnectionRefusedError):
+        return False
+
+
+def _restore() -> None:
+    """Reload registry from disk on boot. Probe ports to detect alive processes."""
+    if not _INSTANCES_PATH.exists():
+        return
+    try:
+        data = json.loads(_INSTANCES_PATH.read_text())
+    except Exception:
+        return
+
+    with _instances_lock:
+        for iid, info in data.items():
+            port = info.get("port")
+            if port is None:
+                continue
+            _instances[iid] = {
+                "process": None,  # orphaned — no Popen handle
+                "model": info.get("model", ""),
+                "port": port,
+                "config": info.get("config", {}),
+                "log_path": Path(info["log_path"]) if info.get("log_path") else _LOG_DIR / f"{iid.replace(':', '_')}.log",
+                "started_at": info.get("started_at", ""),
+                "_orphan": True,  # we don't own the process
+            }
+
+
+# Run restore on import (module load = backend boot)
+_restore()
+
+
+# ── Config ───────────────────────────────────────────────────────────────────
 
 def _load_llm_config() -> dict:
     """Load LLM config from disk with defaults."""
@@ -44,6 +111,8 @@ def _save_llm_config(config: dict) -> None:
     LLM_CONFIG_PATH.write_text(json.dumps(config, indent=2))
 
 
+# ── Instance helpers ─────────────────────────────────────────────────────────
+
 def _next_port() -> int:
     """Find next available port starting from LLAMA_SERVER_PORT."""
     used = {inst["port"] for inst in _instances.values()}
@@ -53,54 +122,61 @@ def _next_port() -> int:
     return port
 
 
+def _instance_alive(inst: dict) -> bool:
+    """Check if an instance is alive (process or port probe for orphans)."""
+    if DEV_MODE:
+        return True
+    proc = inst.get("process")
+    if proc is not None:
+        return proc.poll() is None
+    # Orphan (restored from disk) — probe the port
+    return _port_alive(inst["port"])
+
+
 def _is_running(instance_id: str) -> bool:
     """Check if a specific instance is alive."""
     inst = _instances.get(instance_id)
     if inst is None:
         return False
-    if DEV_MODE:
-        return True  # dev instances are always "running" while in registry
-    proc = inst.get("process")
-    if proc is None:
-        return False
-    return proc.poll() is None
+    return _instance_alive(inst)
 
 
 def _has_running_instances(model_file: str) -> bool:
     """Return True if ANY instance of the given model file is running."""
     with _instances_lock:
-        for inst_id, inst in _instances.items():
+        for inst in _instances.values():
             if inst.get("model") != model_file:
                 continue
-            if DEV_MODE:
-                return True
-            proc = inst.get("process")
-            if proc and proc.poll() is None:
+            if _instance_alive(inst):
                 return True
     return False
 
 
 def _get_running_instances() -> list[dict]:
-    """Return list of running instances with instance_id, port, model, started_at."""
+    """Return ALL registered instances (alive or exited) with status flag."""
     result = []
     with _instances_lock:
-        dead = []
         for instance_id, inst in _instances.items():
-            if DEV_MODE or (inst.get("process") and inst["process"].poll() is None):
-                result.append({
-                    "instance_id": instance_id,
-                    "model": inst["model"],
-                    "port": inst["port"],
-                    "started_at": inst.get("started_at", ""),
-                    "config": {k: v for k, v in inst.get("config", {}).items() if not k.startswith("_")},
-                })
-            else:
-                dead.append(instance_id)
-        # Clean up dead instances
-        for iid in dead:
-            del _instances[iid]
+            alive = _instance_alive(inst)
+            result.append({
+                "instance_id": instance_id,
+                "model": inst["model"],
+                "port": inst["port"],
+                "started_at": inst.get("started_at", ""),
+                "config": {k: v for k, v in inst.get("config", {}).items() if not k.startswith("_")},
+                "alive": alive,
+            })
     return result
 
+
+def _dismiss_instance(instance_id: str) -> None:
+    """Remove an instance from the registry (e.g. after it exited)."""
+    with _instances_lock:
+        _instances.pop(instance_id, None)
+        _persist()
+
+
+# ── Start / Stop ─────────────────────────────────────────────────────────────
 
 def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
     """Start a NEW llama-server instance. Returns (instance_id, port)."""
@@ -129,6 +205,7 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
             }
             # Write a fake log line
             log_path.write_text(f"[DEV MODE] llama-server stub started for {model_file} on port {port}\n")
+            _persist()
             _events.emit("llm.server.started", f"LLM instance started (dev stub): {instance_id}",
                          data={"instance_id": instance_id, "model": model_file, "port": port})
             return instance_id, port
@@ -158,6 +235,7 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
             "started_at": started_at,
             "_log_file": log_file,
         }
+        _persist()
 
         _events.emit("llm.server.started", f"LLM instance started: {instance_id}",
                      data={"instance_id": instance_id, "model": model_file, "port": port})
@@ -173,15 +251,22 @@ def _stop_llama_server(instance_id: str) -> None:
         if inst is None:
             return
 
-        if not DEV_MODE and inst.get("process"):
-            try:
-                inst["process"].terminate()
-                inst["process"].wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                inst["process"].kill()
-                inst["process"].wait(timeout=5)
-            except Exception:
-                pass
+        if not DEV_MODE:
+            proc = inst.get("process")
+            if proc:
+                # We own the process — terminate it
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            elif inst.get("_orphan"):
+                # Orphan process — try to kill via port (find PID listening on port)
+                _kill_by_port(inst["port"])
+
             # Close log file handle if present
             lf = inst.get("_log_file")
             if lf:
@@ -190,8 +275,26 @@ def _stop_llama_server(instance_id: str) -> None:
                 except Exception:
                     pass
 
+        _persist()
         _events.emit("llm.server.stopped", f"LLM instance stopped: {instance_id}",
                      data={"instance_id": instance_id, "model": inst.get("model", "")})
+
+
+def _kill_by_port(port: int) -> None:
+    """Best-effort kill of process listening on a port (for orphaned instances)."""
+    import os
+    import signal
+    try:
+        # Use /proc/net/tcp to find PID without external tools
+        import subprocess as sp
+        result = sp.run(["fuser", f"{port}/tcp"], capture_output=True, text=True, timeout=5)
+        if result.stdout.strip():
+            for pid_str in result.stdout.strip().split():
+                pid_str = pid_str.strip()
+                if pid_str.isdigit():
+                    os.kill(int(pid_str), signal.SIGTERM)
+    except Exception:
+        pass
 
 
 def _stop_all() -> None:
@@ -202,6 +305,8 @@ def _stop_all() -> None:
         _stop_llama_server(iid)
 
 
+# ── Log / Port accessors ────────────────────────────────────────────────────
+
 def _get_instance_log(instance_id: str, tail: int = 50) -> str:
     """Read last N lines of a specific instance's log."""
     inst = _instances.get(instance_id)
@@ -210,6 +315,8 @@ def _get_instance_log(instance_id: str, tail: int = 50) -> str:
     else:
         # Fallback: try to find by constructed name
         log_path = _LOG_DIR / f"{instance_id.replace(':', '_')}.log"
+    if not isinstance(log_path, Path):
+        log_path = Path(log_path)
     if not log_path.exists():
         return ""
     try:

@@ -15,7 +15,7 @@ from llm_server import (
     _load_llm_config, _save_llm_config,
     _start_llama_server, _stop_llama_server, _stop_all,
     _get_running_instances, _get_instance_log, _get_instance_port,
-    _is_running, _has_running_instances,
+    _is_running, _has_running_instances, _dismiss_instance,
 )
 
 router = APIRouter()
@@ -90,7 +90,9 @@ async def llm_status():
     # Check health for each instance
     for inst in instances:
         inst["proxy_base_path"] = f"/api/admin/llm/{inst['instance_id']}/api/"
-        if DEV_MODE:
+        if not inst.get("alive"):
+            inst["health"] = "exited"
+        elif DEV_MODE:
             inst["health"] = "ok"
         else:
             try:
@@ -153,6 +155,22 @@ async def llm_stop(request: Request):
 
     _stop_llama_server(instance_id)
     return JSONResponse({"status": "stopped", "instance_id": instance_id})
+
+
+@router.post("/api/admin/llm/dismiss")
+async def llm_dismiss(request: Request):
+    """Remove an exited instance from the registry."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+
+    instance_id = body.get("instance_id")
+    if not instance_id:
+        raise HTTPException(400, "Missing 'instance_id' field")
+
+    _dismiss_instance(instance_id)
+    return JSONResponse({"status": "dismissed", "instance_id": instance_id})
 
 
 @router.post("/api/admin/llm/stop-all")
