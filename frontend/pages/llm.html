@@ -9,16 +9,7 @@
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
   main { max-width: 1060px; margin: 0 auto; }
-  .telemetry-bar {
-    display: flex; gap: 16px; flex-wrap: wrap;
-    margin-bottom: 24px; font-family: var(--mono); font-size: 11px; color: var(--muted);
-  }
-  .telemetry-bar .telem-item {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 6px 12px;
-  }
-  .telemetry-bar .telem-val { color: var(--text); font-weight: 600; }
+  /* telemetry uses shared .telemetry-panel / .gauge-* from styles.css */
   .help-tip {
     display: inline-flex; align-items: center; justify-content: center;
     width: 14px; height: 14px; border-radius: 50%;
@@ -455,7 +446,7 @@
 
 <main>
   <!-- Telemetry -->
-  <div class="telemetry-bar" id="telemetryBar"></div>
+  <div class="telemetry-panel" id="telemetryPanel"></div>
 
   <!-- Section 1: Model Catalog (collapsible) -->
   <div class="section-title" style="cursor:pointer;user-select:none;" id="catalogToggle">
@@ -553,29 +544,72 @@
     $catalogArrow.textContent = open ? '▸' : '▾';
   });
 
-  // ── Telemetry ──
-  var $telemetryBar = document.getElementById('telemetryBar');
-  function updateTelemetry() {
-    apiFetch('/api/admin/system/status')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var disk = data.disk || {};
-        var html = '';
-        // GPU info from ComfyUI stats if available
-        var comfy = data.comfyui || {};
-        html += '<div class="telem-item">ComfyUI <span class="telem-val">' + (comfy.status || 'unknown') + '</span></div>';
-        if (disk.total_bytes) {
-          var used = ((disk.used_bytes || 0) / 1e9).toFixed(1);
-          var total = ((disk.total_bytes || 0) / 1e9).toFixed(1);
-          html += '<div class="telem-item">Disk <span class="telem-val">' + used + ' / ' + total + ' GB</span></div>';
-        }
-        var instances = (data.remote_version && data.remote_version.components) ? Object.keys(data.remote_version.components).length : 0;
-        html += '<div class="telem-item">App <span class="telem-val">v' + (data.app_version || '?') + '</span></div>';
-        $telemetryBar.innerHTML = html;
-      })
-      .catch(function() {});
+  // ── Telemetry (gauge circles, same as home page) ──
+  var $telemetryPanel = document.getElementById('telemetryPanel');
+
+  function fmtGB(bytes) {
+    if (!bytes && bytes !== 0) return '--';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   }
-  updateTelemetry();
+
+  function makeGauge(id, label) {
+    return '<div class="gauge-card" id="' + id + '">' +
+      '<div class="gauge-ring">' +
+        '<svg viewBox="0 0 80 80"><circle class="gauge-bg" /><circle class="gauge-fill" /></svg>' +
+        '<div class="gauge-value">--</div>' +
+      '</div>' +
+      '<div class="gauge-label">' + label + '</div>' +
+      '<div class="gauge-sub">&nbsp;</div>' +
+    '</div>';
+  }
+
+  function updateGauge(id, pct, sub) {
+    var card = document.getElementById(id);
+    if (!card) return;
+    var fill = card.querySelector('.gauge-fill');
+    var val = card.querySelector('.gauge-value');
+    var subEl = card.querySelector('.gauge-sub');
+    var p = Math.max(0, Math.min(100, pct || 0));
+    var offset = 213.6 - (213.6 * p / 100);
+    fill.style.strokeDashoffset = offset;
+    fill.classList.remove('warn', 'crit');
+    if (p > 85) fill.classList.add('crit');
+    else if (p > 65) fill.classList.add('warn');
+    val.textContent = Math.round(p) + '%';
+    if (sub) subEl.textContent = sub;
+  }
+
+  async function pollTelemetry() {
+    try {
+      var resp = await apiFetch('/api/admin/telemetry');
+      if (!resp.ok) return;
+      var d = await resp.json();
+
+      $telemetryPanel.style.background = 'rgba(232, 255, 71, 0.03)';
+      setTimeout(function() { $telemetryPanel.style.background = ''; }, 300);
+
+      if (!$telemetryPanel.innerHTML) {
+        $telemetryPanel.innerHTML =
+          makeGauge('gGpu', 'GPU Load') +
+          makeGauge('gVram', 'VRAM') +
+          makeGauge('gRam', 'System RAM') +
+          makeGauge('gCpu', 'CPU') +
+          makeGauge('gDisk', 'Disk');
+      }
+
+      if (d.gpu) {
+        updateGauge('gGpu', d.gpu.util_percent, d.gpu.name + (d.gpu.temp_c ? ' \u00b7 ' + d.gpu.temp_c + '\u00b0C' : ''));
+        updateGauge('gVram', d.gpu.vram_percent, fmtGB(d.gpu.vram_used) + ' / ' + fmtGB(d.gpu.vram_total));
+      }
+      updateGauge('gRam', d.ram_percent, fmtGB(d.ram_used) + ' / ' + fmtGB(d.ram_total));
+      updateGauge('gCpu', d.cpu_percent, 'load');
+      if (d.disk_total > 0) {
+        updateGauge('gDisk', d.disk_percent, fmtGB(d.disk_used) + ' / ' + fmtGB(d.disk_total));
+      }
+    } catch (_) {}
+  }
+  pollTelemetry();
+  setInterval(pollTelemetry, 5000);
 
   // ── DOM refs ──
   var $modelList = document.getElementById('modelList');
@@ -645,8 +679,6 @@
       var status = m.status || 'missing';
       var tags = m.tags || [];
       var progress = m.download_progress || null;
-      var hasRunning = !!m.running;
-      var runCount = m.running_instance_count || 0;
 
       var badgeClass, badgeText;
       if (status === 'downloading') {
@@ -672,10 +704,7 @@
       var actionHtml = '';
 
       if (status === 'present') {
-        actionHtml = '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')"' + (hasRunning ? ' disabled title="Stop running instances first"' : '') + '>Delete</button>';
-        if (hasRunning) {
-          actionHtml = '<span class="port-label" style="color:var(--success);">' + runCount + ' running</span>' + actionHtml;
-        }
+        actionHtml = '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
       } else if (status === 'downloading') {
         actionHtml = '<span class="spinner sm"></span>';
       } else {
@@ -749,7 +778,7 @@
       }
       var data = await resp.json();
       showToast('Launched ' + modelFile + ' on port ' + data.port + ' (id: ' + data.instance_id + ')', 3000);
-      setTimeout(function() { loadStatus(); loadModels(); }, 1500);
+      setTimeout(loadStatus, 1500);
     } catch (e) {
       if (e.message !== 'auth') showToast('Launch error: ' + e.message, 5000, 'error');
     } finally {
@@ -812,7 +841,7 @@
         delete _logTimers[instanceId];
       }
       delete _expandedLogs[instanceId];
-      setTimeout(function() { loadStatus(); loadModels(); }, 500);
+      setTimeout(loadStatus, 500);
     } catch (e) {
       if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
     }
@@ -846,7 +875,6 @@
 
       renderInstances(data.instances || []);
       updateChatInstanceSelect();
-      renderModels();  // re-render to update running badges
 
       // Show/hide chat section
       var hasRunning = Object.keys(_runningInstances).length > 0;

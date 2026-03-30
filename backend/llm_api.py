@@ -29,22 +29,6 @@ async def llm_models_list():
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
-    # Mark which models have running instances
-    instances = _get_running_instances()
-    running_models = {}
-    for inst in instances:
-        model = inst["model"]
-        if model not in running_models:
-            running_models[model] = []
-        running_models[model].append(inst)
-
-    for cat in result_categories:
-        for m in cat["models"]:
-            fname = m.get("file") or m.get("filename")
-            if fname in running_models:
-                m["running"] = True
-                m["running_instance_count"] = len(running_models[fname])
-
     return JSONResponse({
         "version": _catalogs._llm_models_data.get("version", 0),
         "date": _catalogs._llm_models_data.get("date", ""),
