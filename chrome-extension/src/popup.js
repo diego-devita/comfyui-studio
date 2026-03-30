@@ -301,7 +301,7 @@ async function loadPods() {
           showStatus('Pod ' + action + ' OK', 'success');
           setTimeout(loadPods, 2000);
         } catch (e) {
-          if (action === 'resume' && e.message && e.message.includes('not enough free GPUs')) {
+          if (action === 'resume' && _isGpuUnavailable(e.message)) {
             showStatus(e.message + ' — auto-retrying', 'error');
             _startRetry(id);
           } else {
@@ -319,6 +319,14 @@ async function loadPods() {
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
+}
+
+// ── GPU unavailable check ──
+
+function _isGpuUnavailable(msg) {
+  if (!msg) return false;
+  var m = msg.toLowerCase();
+  return m.includes('not enough free gpu') || m.includes('no longer any instances available') || m.includes('no available gpu');
 }
 
 // ── Resume retry ──
@@ -382,7 +390,7 @@ async function _scheduleNextRetry(podId) {
       showStatus('Resume succeeded after ' + state.attempt + ' attempt' + (state.attempt > 1 ? 's' : ''), 'success');
       setTimeout(loadPods, 2000);
     } catch (e) {
-      if (e.message && e.message.includes('not enough free GPUs')) {
+      if (_isGpuUnavailable(e.message)) {
         showStatus('Retry #' + state.attempt + ' — no GPU available, retrying...', 'error');
         _scheduleNextRetry(podId);
         loadPods(); // re-render with updated attempt count
@@ -474,7 +482,7 @@ function _scheduleLaunchRetry() {
       showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
       setTimeout(loadPods, 3000);
     } catch (e) {
-      if (e.message && e.message.includes('not enough free GPUs')) {
+      if (_isGpuUnavailable(e.message)) {
         showStatus('Launch retry #' + _launchRetry.attempt + ' — no GPU, retrying...', 'error');
         _scheduleLaunchRetry();
       } else {
@@ -773,7 +781,7 @@ $('launchBtn').addEventListener('click', async () => {
     showStatus('Pod launched: ' + (pod.name || pod.id), 'success');
     setTimeout(loadPods, 3000);
   } catch (e) {
-    if (e.message && e.message.includes('not enough free GPUs')) {
+    if (_isGpuUnavailable(e.message)) {
       showStatus(e.message + ' — auto-retrying', 'error');
       _startLaunchRetry(launchMutation);
     } else {
