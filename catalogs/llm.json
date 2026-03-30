@@ -128,6 +128,54 @@
       "name": "Vision-Language (Image to Prompt)",
       "models": [
         {
+          "name": "Qwen3-VL 32B Thinking Abliterated (Q4_K_M)",
+          "file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q4_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 19.0,
+          "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q4_K_M.gguf",
+          "tags": ["vision", "uncensored", "abliterated", "32b", "image-to-prompt", "thinking"],
+          "context_default": 4096,
+          "context_max": 32768,
+          "quant": "Q4_K_M",
+          "params": "32B",
+          "companions": [
+            {
+              "role": "mmproj",
+              "file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.mmproj-f16.gguf",
+              "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
+              "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.mmproj-f16.gguf",
+              "size_gb": 1.5,
+              "source": "huggingface"
+            }
+          ]
+        },
+        {
+          "name": "Qwen3-VL 32B Thinking Abliterated (Q8_0)",
+          "file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 34.8,
+          "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q8_0.gguf",
+          "tags": ["vision", "uncensored", "abliterated", "32b", "image-to-prompt", "thinking", "high-quality"],
+          "context_default": 4096,
+          "context_max": 32768,
+          "quant": "Q8_0",
+          "params": "32B",
+          "companions": [
+            {
+              "role": "mmproj",
+              "file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.mmproj-f16.gguf",
+              "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
+              "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.mmproj-f16.gguf",
+              "size_gb": 1.5,
+              "source": "huggingface"
+            }
+          ]
+        },
+        {
           "name": "Qwen3-VL 8B Thinking Abliterated (Q4_K_M)",
           "file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q4_K_M.gguf",
           "dest": "",

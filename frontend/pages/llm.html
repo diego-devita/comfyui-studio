@@ -30,6 +30,19 @@
     border-bottom: 1px solid var(--border);
   }
 
+  /* ── Catalog Filters ── */
+  .catalog-filter-tag {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    padding: 3px 8px; border: 1px solid var(--border); border-radius: 3px;
+    transition: all 0.15s; user-select: none;
+  }
+  .catalog-filter-tag:hover { border-color: var(--accent); }
+  .catalog-filter-tag input { display: none; }
+  .catalog-filter-tag:has(input:checked) {
+    color: var(--accent); border-color: var(--accent); background: rgba(232,255,71,0.08);
+  }
+
   /* ── Model Catalog ── */
   .model-list {
     display: flex;
@@ -569,6 +582,7 @@
   <div class="page-tabs">
     <button class="page-tab active" data-tab="server">Server</button>
     <button class="page-tab" data-tab="chat">Chat</button>
+    <button class="page-tab" data-tab="pipelines">Pipelines</button>
   </div>
 
   <div id="tabServer" class="tab-content active">
@@ -580,6 +594,21 @@
     <span id="catalogArrow">▸</span> Model Catalog
   </div>
   <div id="catalogBody" style="display:none;">
+    <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;min-width:50px;">Status</span>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-status="present" checked><span>Downloaded</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-status="missing" checked><span>Missing</span></label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;min-width:50px;">Family</span>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="qwen2.5" checked><span>Qwen 2.5</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="qwen3.5" checked><span>Qwen 3.5</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="llama" checked><span>Llama</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="qwen3-vl" checked><span>Qwen3-VL</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="dantaggen" checked><span>DanTagGen</span></label>
+      </div>
+    </div>
     <div class="model-list" id="modelList">
       <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
     </div>
@@ -682,6 +711,24 @@
       </div>
     </div>
   </div><!-- /tabChat -->
+
+  <div id="tabPipelines" class="tab-content">
+    <div id="pipelinesList" style="margin-bottom:24px;"></div>
+    <div id="pipelineRunPanel" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <span id="pipelineRunTitle" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);"></span>
+        <button class="chat-clear-btn" id="pipelineBackBtn">Back</button>
+      </div>
+      <!-- Requirements checklist -->
+      <div id="pipelineReqs" style="margin-bottom:16px;"></div>
+      <!-- Input form -->
+      <div id="pipelineInputs" style="margin-bottom:16px;"></div>
+      <!-- Run button -->
+      <button class="btn" id="pipelineRunBtn" style="margin-bottom:16px;">Run Pipeline</button>
+      <!-- Log panel -->
+      <div id="pipelineLog" style="display:none;background:#0a0a0f;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:var(--mono);font-size:11px;color:var(--muted);max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;"></div>
+    </div>
+  </div><!-- /tabPipelines -->
 
   <!-- System Prompts Dialog -->
   <dialog id="presetsDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:0;max-width:850px;width:95%;margin:auto;max-height:90vh;">
@@ -832,6 +879,29 @@
     $tempVal.textContent = this.value;
   });
 
+  // ── Catalog filters ──
+  document.querySelectorAll('[data-filter-status],[data-filter-family]').forEach(function(cb) {
+    cb.addEventListener('change', function() { renderModels(); });
+  });
+
+  function _getModelFamily(m) {
+    var name = (m.name || m.file || '').toLowerCase();
+    if (name.includes('dantaggen')) return 'dantaggen';
+    if (name.includes('qwen3-vl') || name.includes('qwen3_vl')) return 'qwen3-vl';
+    if (name.includes('qwen3.5') || name.includes('qwen 3.5')) return 'qwen3.5';
+    if (name.includes('qwen2.5') || name.includes('qwen 2.5')) return 'qwen2.5';
+    if (name.includes('llama')) return 'llama';
+    return 'other';
+  }
+
+  function _getActiveFilters() {
+    var statuses = [];
+    document.querySelectorAll('[data-filter-status]:checked').forEach(function(cb) { statuses.push(cb.dataset.filterStatus); });
+    var families = [];
+    document.querySelectorAll('[data-filter-family]:checked').forEach(function(cb) { families.push(cb.dataset.filterFamily); });
+    return { statuses: statuses, families: families };
+  }
+
   // ── Load Models ──
   async function loadModels() {
     try {
@@ -856,8 +926,21 @@
       $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">No models configured</div>';
       return;
     }
+    var filters = _getActiveFilters();
+    var filtered = _models.filter(function(m) {
+      var status = m.status || 'missing';
+      var statusMatch = (status === 'present' && filters.statuses.indexOf('present') >= 0) ||
+                        (status !== 'present' && filters.statuses.indexOf('missing') >= 0);
+      var family = _getModelFamily(m);
+      var familyMatch = filters.families.indexOf(family) >= 0;
+      return statusMatch && familyMatch;
+    });
+    if (!filtered.length) {
+      $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">No models match filters</div>';
+      return;
+    }
     var html = '';
-    _models.forEach(function(m) {
+    filtered.forEach(function(m) {
       var name = m.name || m.filename || '--';
       var sizeBytes = m.on_disk_bytes || m.expected_bytes || 0;
       var size = sizeBytes ? formatSize(sizeBytes) : (m.size_gb ? m.size_gb + ' GB' : '');
@@ -932,13 +1015,13 @@
   function updateLaunchModelSelect() {
     var current = $launchModel.value;
     $launchModel.innerHTML = '<option value="">-- select a downloaded model --</option>';
-    _models.forEach(function(m) {
-      if (m.status === 'present') {
-        var opt = document.createElement('option');
-        opt.value = m.file;
-        opt.textContent = m.name || m.file;
-        $launchModel.appendChild(opt);
-      }
+    var present = _models.filter(function(m) { return m.status === 'present'; });
+    present.sort(function(a, b) { return (a.name || a.file).localeCompare(b.name || b.file); });
+    present.forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m.file;
+      opt.textContent = m.name || m.file;
+      $launchModel.appendChild(opt);
     });
     if (current) $launchModel.value = current;
   }
@@ -1248,6 +1331,7 @@
       this.classList.add('active');
       document.getElementById('tab' + this.dataset.tab.charAt(0).toUpperCase() + this.dataset.tab.slice(1)).classList.add('active');
       if (this.dataset.tab === 'chat') _chatBoot();
+      if (this.dataset.tab === 'pipelines') _pipelinesBoot();
     });
   });
 
@@ -1549,8 +1633,13 @@
     $chatConvArea.style.display = 'flex';
     $convTitle.textContent = conv.title || 'New Chat';
 
-    // System prompt + examples
+    // Set temperature slider from preset
     var preset = conv.preset_id ? _presets.find(function(p) { return p.id === conv.preset_id; }) : null;
+    var presetTemp = preset && preset.temperature != null ? preset.temperature : 0.7;
+    $chatTemp.value = presetTemp;
+    $chatTempVal.textContent = presetTemp;
+
+    // System prompt + examples
     if (preset && preset.system_prompt) {
       var sysHtml = '<div style="margin-bottom:4px;">System: ' + escHtml(preset.system_prompt).substring(0, 200) + (preset.system_prompt.length > 200 ? '...' : '') + '</div>';
       if (preset.examples && preset.examples.length) {
@@ -1755,6 +1844,220 @@
     _chatStreaming = false;
     $chatSendBtn.disabled = false;
     $chatSendBtn.textContent = 'Send';
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── PIPELINES TAB ──
+  // ══════════════════════════════════════════════════════════════════════════
+
+  var _pipelinesLoaded = false;
+  var _pipelineData = null;  // current pipeline descriptor
+  var _pipelineRunId = null;
+  var _pipelinePollTimer = null;
+
+  function _pipelinesBoot() {
+    if (_pipelinesLoaded) return;
+    _pipelinesLoaded = true;
+    _loadPipelines();
+  }
+
+  async function _loadPipelines() {
+    try {
+      var resp = await apiFetch('/api/admin/pipelines');
+      if (!resp.ok) return;
+      var pipelines = await resp.json();
+      var html = '';
+      if (!pipelines.length) {
+        html = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:40px 0;">No pipelines available.</div>';
+      }
+      pipelines.forEach(function(p) {
+        html += '<div class="llm-model-card" style="cursor:pointer;" onclick="window._openPipeline(\'' + escHtml(p.id) + '\')">' +
+          '<div class="model-info">' +
+            '<div class="model-name">' + escHtml(p.name) + '</div>' +
+            '<div class="model-meta"><span>' + escHtml(p.description || '') + '</span></div>' +
+          '</div>' +
+          '<span class="model-badge present">Available</span>' +
+        '</div>';
+      });
+      document.getElementById('pipelinesList').innerHTML = html;
+    } catch (_) {}
+  }
+
+  window._openPipeline = async function(id) {
+    try {
+      var resp = await apiFetch('/api/admin/pipelines/' + id);
+      if (!resp.ok) return;
+      _pipelineData = await resp.json();
+      _pipelineRunId = null;
+      document.getElementById('pipelinesList').style.display = 'none';
+      document.getElementById('pipelineRunPanel').style.display = '';
+      document.getElementById('pipelineRunTitle').textContent = _pipelineData.name;
+      document.getElementById('pipelineLog').style.display = 'none';
+      document.getElementById('pipelineLog').textContent = '';
+      _renderPipelineReqs();
+      _renderPipelineInputs();
+    } catch (_) {}
+  };
+
+  document.getElementById('pipelineBackBtn').addEventListener('click', function() {
+    document.getElementById('pipelinesList').style.display = '';
+    document.getElementById('pipelineRunPanel').style.display = 'none';
+    if (_pipelinePollTimer) { clearInterval(_pipelinePollTimer); _pipelinePollTimer = null; }
+  });
+
+  function _renderPipelineReqs() {
+    var reqs = _pipelineData.requirements_status || [];
+    var html = '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Requirements</div>';
+    var allMet = true;
+    reqs.forEach(function(r) {
+      var ok = r.satisfied;
+      if (!ok) allMet = false;
+      var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:' + (ok ? 'var(--success)' : 'var(--error)') + ';"></span>';
+      var label = r.requirement.label + ' — ' + r.requirement.model.replace(/\.gguf$/i, '');
+      if (!ok) label += ' (not running, min ctx: ' + (r.requirement.min_ctx || 0) + ')';
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:4px;">' + dot + escHtml(label) + '</div>';
+    });
+    document.getElementById('pipelineReqs').innerHTML = html;
+    document.getElementById('pipelineRunBtn').disabled = !allMet;
+  }
+
+  function _renderPipelineInputs() {
+    var inputs = _pipelineData.inputs || [];
+    var html = '';
+    inputs.forEach(function(inp) {
+      html += '<div class="config-field" style="margin-bottom:10px;">';
+      html += '<label>' + escHtml(inp.label) + '</label>';
+      if (inp.type === 'image') {
+        html += '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<input type="file" accept="image/*" data-pipeline-input="' + inp.id + '" style="font-family:var(--mono);font-size:11px;color:var(--muted);">' +
+          '<img id="pipelineImgPreview" style="max-width:60px;max-height:60px;border-radius:4px;display:none;">' +
+          '</div>';
+      } else if (inp.type === 'text') {
+        html += '<textarea data-pipeline-input="' + inp.id + '" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;box-sizing:border-box;"></textarea>';
+      } else if (inp.type === 'number') {
+        html += '<input type="number" data-pipeline-input="' + inp.id + '" value="' + (inp.default || 4) + '" min="' + (inp.min || 1) + '" max="' + (inp.max || 20) + '" style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;">';
+      }
+      html += '</div>';
+    });
+    document.getElementById('pipelineInputs').innerHTML = html;
+
+    // Image preview handler
+    var imgInput = document.querySelector('[data-pipeline-input="image"]');
+    if (imgInput) {
+      imgInput.addEventListener('change', function() {
+        var file = this.files[0];
+        var preview = document.getElementById('pipelineImgPreview');
+        if (file && preview) {
+          preview.src = URL.createObjectURL(file);
+          preview.style.display = '';
+        }
+      });
+    }
+  }
+
+  // ── Run pipeline ──
+  document.getElementById('pipelineRunBtn').addEventListener('click', async function() {
+    if (!_pipelineData) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    // Collect inputs
+    var inputs = {};
+    var inputEls = document.querySelectorAll('[data-pipeline-input]');
+
+    // First upload any images
+    for (var i = 0; i < inputEls.length; i++) {
+      var el = inputEls[i];
+      var key = el.dataset.pipelineInput;
+      if (el.type === 'file' && el.files[0]) {
+        var formData = new FormData();
+        formData.append('file', el.files[0]);
+        try {
+          var uploadResp = await fetch('/api/admin/llm/chat-images', { method: 'POST', body: formData, credentials: 'include' });
+          if (uploadResp.ok) {
+            var uploadData = await uploadResp.json();
+            inputs[key] = uploadData.image_id;
+          } else {
+            showToast('Image upload failed', 3000, 'error');
+            btn.disabled = false; btn.textContent = 'Run Pipeline';
+            return;
+          }
+        } catch (e) {
+          showToast('Upload error: ' + e.message, 3000, 'error');
+          btn.disabled = false; btn.textContent = 'Run Pipeline';
+          return;
+        }
+      } else if (el.tagName === 'TEXTAREA') {
+        inputs[key] = el.value.trim();
+      } else if (el.type === 'number') {
+        inputs[key] = parseInt(el.value) || 4;
+      } else {
+        inputs[key] = el.value;
+      }
+    }
+
+    // Start pipeline
+    try {
+      var resp = await apiFetch('/api/admin/pipelines/' + _pipelineData.id + '/run', {
+        method: 'POST',
+        body: { inputs: inputs },
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Pipeline failed: ' + (err.detail || resp.status), 5000, 'error');
+        btn.disabled = false; btn.textContent = 'Run Pipeline';
+        return;
+      }
+      var data = await resp.json();
+      _pipelineRunId = data.run_id;
+      document.getElementById('pipelineLog').style.display = '';
+      document.getElementById('pipelineLog').textContent = 'Pipeline started...\n';
+      btn.textContent = 'Running...';
+
+      // Poll for status
+      _pipelinePollTimer = setInterval(async function() {
+        try {
+          var sr = await apiFetch('/api/admin/pipelines/runs/' + _pipelineRunId);
+          if (!sr.ok) return;
+          var status = await sr.json();
+          _renderPipelineLog(status);
+          if (status.status !== 'running') {
+            clearInterval(_pipelinePollTimer);
+            _pipelinePollTimer = null;
+            btn.disabled = false;
+            btn.textContent = 'Run Pipeline';
+            if (status.status === 'completed') {
+              showToast('Pipeline completed!', 3000, 'success');
+            } else {
+              showToast('Pipeline failed: ' + (status.error || 'unknown'), 5000, 'error');
+            }
+          }
+        } catch (_) {}
+      }, 1500);
+    } catch (e) {
+      showToast('Error: ' + e.message, 5000, 'error');
+      btn.disabled = false; btn.textContent = 'Run Pipeline';
+    }
+  });
+
+  function _renderPipelineLog(status) {
+    var el = document.getElementById('pipelineLog');
+    var html = '';
+    (status.log || []).forEach(function(entry) {
+      var time = entry.t.toFixed(1) + 's';
+      html += '<span style="color:var(--accent);">[' + time + ']</span> ' + escHtml(entry.msg) + '\n';
+    });
+    if (status.status === 'completed') {
+      html += '\n<span style="color:var(--success);">✓ Completed in ' + status.elapsed.toFixed(1) + 's</span>\n';
+      if (status.result && status.result.job_id) {
+        html += '<a href="/admin/queue" style="color:var(--accent);">View in Queue →</a>\n';
+      }
+    } else if (status.status === 'failed') {
+      html += '\n<span style="color:var(--error);">✗ Failed: ' + escHtml(status.error || '') + '</span>\n';
+    }
+    el.innerHTML = html;
+    el.scrollTop = el.scrollHeight;
   }
 
   // ── Polling ──
