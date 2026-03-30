@@ -347,7 +347,7 @@ async def system_status():
             "runtime": {
                 "version": RUNTIME_VERSION,
                 "date": ver.get("components", {}).get("runtime", {}).get("date", ""),
-                "status": f"Docker image v{RUNTIME_VERSION}",
+                "status": "Development image" if DEV_MODE else f"Docker image v{RUNTIME_VERSION}",
                 "updatable": False,
             },
             "backend": {
@@ -396,6 +396,7 @@ async def system_status():
             "name": os.environ.get("TELEGRAM_BOT_NAME", ""),
         },
         "docs_url": getattr(__import__('config'), 'DOCS_URL', ''),
+        "dev_mode": DEV_MODE,
         "remote_version": _load_remote_version(),
         "update_prefs": _load_update_prefs(),
     }

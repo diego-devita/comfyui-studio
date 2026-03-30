@@ -364,21 +364,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
   initActivityPanel();
 
-  // ── Docs link ──
+  // ── Docs link + Dev ribbon ──
   var _docsLink = document.getElementById('docsLink');
-  if (_docsLink) {
-    _docsLink.style.display = 'none';
-    try {
-      apiFetch('/api/admin/system/status')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data && data.docs_url) {
-            _docsLink.href = data.docs_url;
-            _docsLink.style.display = 'flex';
-            _docsLink.style.alignItems = 'center';
-          }
-        })
-        .catch(function() {});
-    } catch(e) {}
-  }
+  if (_docsLink) _docsLink.style.display = 'none';
+  try {
+    apiFetch('/api/admin/system/status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data) return;
+        // Docs link
+        if (_docsLink && data.docs_url) {
+          _docsLink.href = data.docs_url;
+          _docsLink.style.display = 'flex';
+          _docsLink.style.alignItems = 'center';
+        }
+        // Dev mode ribbon
+        if (data.dev_mode) {
+          var ribbon = document.createElement('div');
+          ribbon.className = 'dev-ribbon';
+          ribbon.innerHTML = 'DEV';
+          document.body.appendChild(ribbon);
+          var style = document.createElement('style');
+          style.textContent =
+            '.dev-ribbon {' +
+            '  position: fixed; top: 28px; left: -40px; z-index: 9999;' +
+            '  width: 150px; text-align: center;' +
+            '  padding: 4px 0;' +
+            '  background: #e8ff47; color: #0a0a0f;' +
+            '  font-family: var(--mono); font-size: 11px; font-weight: 800;' +
+            '  letter-spacing: 2px; text-transform: uppercase;' +
+            '  transform: rotate(-45deg);' +
+            '  box-shadow: 0 2px 8px rgba(0,0,0,0.4);' +
+            '  pointer-events: none;' +
+            '}';
+          document.head.appendChild(style);
+        }
+      })
+      .catch(function() {});
+  } catch(e) {}
 });
