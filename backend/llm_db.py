@@ -75,6 +75,21 @@ def init_llm_db():
 
         CREATE INDEX IF NOT EXISTS idx_conv_model ON conversations(model);
         CREATE INDEX IF NOT EXISTS idx_conv_updated ON conversations(updated_at);
+
+        CREATE TABLE IF NOT EXISTS pipeline_runs (
+            id          TEXT PRIMARY KEY,
+            pipeline_id TEXT NOT NULL,
+            image_id    TEXT,
+            inputs      TEXT NOT NULL DEFAULT '{}',
+            log         TEXT NOT NULL DEFAULT '',
+            status      TEXT NOT NULL DEFAULT 'running',
+            error       TEXT,
+            result      TEXT,
+            created_at  TEXT NOT NULL,
+            finished_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_prun_created ON pipeline_runs(created_at);
     """)
     # Migration: add description column if missing
     try:
@@ -276,3 +291,52 @@ def update_conversation(conv_id: str, **fields) -> bool:
     cur = conn.execute(f"UPDATE conversations SET {set_clause} WHERE id = ?", values)
     conn.commit()
     return cur.rowcount > 0
+
+
+# ── Pipeline Runs ────────────────────────────────────────────────────────────
+
+def create_pipeline_run(run_id: str, pipeline_id: str, image_id: str = None, inputs: dict = None) -> dict:
+    conn = _get_conn()
+    now = _now()
+    conn.execute(
+        "INSERT INTO pipeline_runs (id, pipeline_id, image_id, inputs, log, status, created_at) VALUES (?, ?, ?, ?, '', 'running', ?)",
+        (run_id, pipeline_id, image_id, json.dumps(inputs or {}), now),
+    )
+    conn.commit()
+    return {"id": run_id, "pipeline_id": pipeline_id, "image_id": image_id, "status": "running", "created_at": now}
+
+
+def append_pipeline_log(run_id: str, text: str):
+    conn = _get_conn()
+    conn.execute("UPDATE pipeline_runs SET log = log || ? WHERE id = ?", (text + "\n", run_id))
+    conn.commit()
+
+
+def finish_pipeline_run(run_id: str, status: str, error: str = None, result: dict = None):
+    conn = _get_conn()
+    now = _now()
+    conn.execute(
+        "UPDATE pipeline_runs SET status = ?, error = ?, result = ?, finished_at = ? WHERE id = ?",
+        (status, error, json.dumps(result) if result else None, now, run_id),
+    )
+    conn.commit()
+
+
+def get_pipeline_run(run_id: str) -> dict | None:
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["inputs"] = json.loads(d.get("inputs") or "{}")
+    d["result"] = json.loads(d["result"]) if d.get("result") else None
+    return d
+
+
+def list_pipeline_runs(limit: int = 20) -> list[dict]:
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, pipeline_id, image_id, status, error, created_at, finished_at FROM pipeline_runs ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]

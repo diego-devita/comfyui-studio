@@ -79,6 +79,13 @@ class PipelineContext:
 
     def log(self, message: str):
         self.log_lines.append((time.time(), message))
+        # Persist to DB
+        try:
+            import llm_db as db
+            elapsed = time.time() - self._started_at
+            db.append_pipeline_log(self.run_id, f"[{elapsed:.1f}s] {message}")
+        except Exception:
+            pass
 
     async def llm_chat(self, preset_id: str, message: str, requirement_id: str, image_id: str = None) -> str:
         """Send a message to an LLM instance via the conversation API. Returns the response text."""
@@ -247,6 +254,10 @@ async def start_run(pipeline_id: str, inputs: dict) -> PipelineContext:
     ctx = PipelineContext(run_id, pipeline_id, inputs, resolved)
     _runs[run_id] = ctx
 
+    # Persist to DB
+    import llm_db as db
+    db.create_pipeline_run(run_id, pipeline_id, image_id=inputs.get("image"), inputs=inputs)
+
     async def _execute():
         try:
             result = await mod.run(inputs, ctx)
@@ -255,10 +266,12 @@ async def start_run(pipeline_id: str, inputs: dict) -> PipelineContext:
             ctx.status = "completed"
             ctx.result = result
             ctx.log(f"✓ Pipeline completed")
+            db.finish_pipeline_run(run_id, "completed", result=result)
         except Exception as e:
             ctx.status = "failed"
             ctx.error = str(e)
             ctx.log(f"✗ Error: {e}")
+            db.finish_pipeline_run(run_id, "failed", error=str(e))
 
     asyncio.create_task(_execute())
     return ctx

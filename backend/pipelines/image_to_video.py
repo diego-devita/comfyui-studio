@@ -69,6 +69,13 @@ async def run(inputs: dict, ctx):
     if not description:
         raise RuntimeError("No video description provided")
 
+    # ── Log inputs ──
+    ctx.log(f"Image: {image_id}")
+    ctx.log(f"Description: {description}")
+    ctx.log(f"Scenes: {num_scenes}")
+    ctx.log(f"Full prompt will be: {{image_description}}\\n\\n{num_scenes} scenes: {description}")
+    ctx.log("")
+
     # ── Step 1: Analyze image ──
     ctx.set_step(f"Analyzing image with vision model")
     image_description = await ctx.llm_chat(
@@ -84,6 +91,7 @@ async def run(inputs: dict, ctx):
     # ── Step 2: Generate scene prompts ──
     ctx.set_step(f"Generating {num_scenes} scene prompts")
     scene_request = f"{image_description}\n\n{num_scenes} scenes: {description}"
+    ctx.log(f"Constructed prompt:\n{scene_request}\n")
     scenes_text = await ctx.llm_chat(
         preset_id="3c37f623145d",  # Prompt Multiscena
         message=scene_request,

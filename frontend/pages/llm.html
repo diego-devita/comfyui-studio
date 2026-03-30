@@ -668,11 +668,6 @@
       <!-- Sidebar -->
       <div class="chat-sidebar">
         <button class="btn" id="newChatBtn" style="width:100%;">+ New Chat</button>
-        <div class="chat-sidebar-header">
-          <select id="convModelFilter">
-            <option value="">All models</option>
-          </select>
-        </div>
         <div class="conv-list" id="convList"></div>
         <button class="chat-clear-btn" id="managePresetsBtn" style="width:100%;">System Prompts</button>
       </div>
@@ -1362,7 +1357,6 @@
   var _chatStreaming = false;
 
   var $convList = document.getElementById('convList');
-  var $convModelFilter = document.getElementById('convModelFilter');
   var $chatNoConv = document.getElementById('chatNoConv');
   var $chatConvArea = document.getElementById('chatConvArea');
   var $convTitle = document.getElementById('convTitle');
@@ -1597,32 +1591,11 @@
   // ── Conversations ──
   async function _loadConversations() {
     try {
-      var filter = $convModelFilter.value;
-      var url = '/api/admin/llm/conversations' + (filter ? '?model=' + encodeURIComponent(filter) : '');
-      var resp = await apiFetch(url);
+      var resp = await apiFetch('/api/admin/llm/conversations');
       if (resp.ok) _conversations = await resp.json();
     } catch (_) {}
     _renderConvList();
-    _populateModelFilter();
   }
-
-  function _populateModelFilter() {
-    var models = {};
-    _conversations.forEach(function(c) { models[c.model] = true; });
-    // Also add from running instances
-    Object.values(_runningInstances).forEach(function(i) { models[i.model] = true; });
-    var current = $convModelFilter.value;
-    $convModelFilter.innerHTML = '<option value="">All models</option>';
-    Object.keys(models).sort().forEach(function(m) {
-      var opt = document.createElement('option');
-      opt.value = m;
-      opt.textContent = m.replace(/\.gguf$/i, '');
-      $convModelFilter.appendChild(opt);
-    });
-    $convModelFilter.value = current;
-  }
-
-  $convModelFilter.addEventListener('change', function() { _loadConversations(); });
 
   function _renderConvList() {
     if (!_conversations.length) {
@@ -1633,13 +1606,29 @@
     _conversations.forEach(function(c) {
       var active = c.id === _currentConvId;
       var modelShort = (c.model || '').replace(/\.gguf$/i, '').substring(0, 25);
-      html += '<div class="conv-item' + (active ? ' active' : '') + '" onclick="window._selectConv(\'' + escHtml(c.id) + '\')">' +
-        '<div class="conv-item-title">' + escHtml(c.title || 'New Chat') + '</div>' +
-        '<div class="conv-item-meta">' + escHtml(modelShort) + ' · ' + (c.message_count || 0) + ' msgs</div>' +
+      var cid = escHtml(c.id);
+      html += '<div class="conv-item' + (active ? ' active' : '') + '" style="display:flex;align-items:center;gap:4px;">' +
+        '<div style="flex:1;min-width:0;" onclick="window._selectConv(\'' + cid + '\')">' +
+          '<div class="conv-item-title">' + escHtml(c.title || 'New Chat') + '</div>' +
+          '<div class="conv-item-meta">' + escHtml(modelShort) + ' · ' + (c.message_count || 0) + ' msgs</div>' +
+        '</div>' +
+        '<span style="cursor:pointer;color:var(--muted);font-size:12px;flex-shrink:0;padding:4px;" onclick="event.stopPropagation();window._deleteConv(\'' + cid + '\')" title="Delete conversation">✕</span>' +
       '</div>';
     });
     $convList.innerHTML = html;
   }
+
+  window._deleteConv = async function(convId) {
+    var ok = await studioConfirm('Delete this conversation?', {yes: 'Delete', danger: true});
+    if (!ok) return;
+    await apiFetch('/api/admin/llm/conversations/' + convId, { method: 'DELETE' });
+    if (_currentConvId === convId) {
+      _currentConvId = null;
+      $chatNoConv.style.display = '';
+      $chatConvArea.style.display = 'none';
+    }
+    _loadConversations();
+  };
 
   window._selectConv = async function(convId) {
     _currentConvId = convId;
