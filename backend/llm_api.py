@@ -26,6 +26,14 @@ async def llm_models_list():
     """List LLM models catalog with download/presence status."""
     result_categories = _build_catalog_response(_catalogs._llm_models_data, LLM_MODELS_DIR, _download_state)
 
+    # DEV_MODE: treat all models as present so the full UI is testable
+    if DEV_MODE:
+        for cat in result_categories:
+            for m in cat["models"]:
+                if m["status"] == "missing":
+                    m["status"] = "present"
+                    m["progress"] = 100.0
+
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
@@ -225,9 +233,19 @@ async def llm_chat(request: Request):
 
     # DEV_MODE: return a fake streaming or non-streaming response
     if DEV_MODE:
+        import random, asyncio
+        msgs = body.get("messages", [])
+        last_msg = msgs[-1]["content"] if msgs else "hello"
+        _dev_responses = [
+            f"That's an interesting question about \"{last_msg[:40]}\". In DEV MODE I can only give you a stub answer, but the real model would elaborate on this topic in great detail.",
+            f"[DEV] I received your message with {len(msgs)} turn(s). Temperature={body.get('temperature', 0.7)}. Here's a simulated multi-paragraph response.\n\nThe LLM pipeline is working correctly — messages are flowing from the frontend through the proxy to this stub. In production, a real llama-server would be running on port {port}.",
+            f"[DEV] Echo: {last_msg}\n\nThis stub response confirms the chat pipeline works end-to-end. Instance: {instance_id}, port: {port}.",
+        ]
+        content = random.choice(_dev_responses)
+
         if body.get("stream"):
             async def _dev_stream():
-                words = "[DEV MODE] This is a stub streaming response from the simulated LLM server.".split()
+                words = content.split()
                 for i, word in enumerate(words):
                     token = (" " if i > 0 else "") + word
                     chunk = {
@@ -236,28 +254,18 @@ async def llm_chat(request: Request):
                         "choices": [{"index": 0, "delta": {"content": token}, "finish_reason": None}],
                     }
                     yield f"data: {json.dumps(chunk)}\n\n"
-                # Final chunk
-                done_chunk = {
-                    "id": "dev-stub",
-                    "object": "chat.completion.chunk",
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                }
-                yield f"data: {json.dumps(done_chunk)}\n\n"
+                    await asyncio.sleep(0.03)  # simulate token-by-token delay
+                yield f"data: {json.dumps({'id': 'dev-stub', 'object': 'chat.completion.chunk', 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
                 yield "data: [DONE]\n\n"
             return StreamingResponse(_dev_stream(), media_type="text/event-stream",
                                      headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        p_tokens = sum(len(m.get("content", "").split()) for m in msgs)
+        c_tokens = len(content.split())
         return JSONResponse({
             "id": "dev-stub",
             "object": "chat.completion",
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": f"[DEV MODE] Stub response from instance {instance_id}.",
-                },
-                "finish_reason": "stop",
-            }],
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": p_tokens, "completion_tokens": c_tokens, "total_tokens": p_tokens + c_tokens},
         })
 
     config = _load_llm_config()
@@ -306,6 +314,33 @@ async def llm_proxy(instance_id: str, path: str, request: Request):
         raise HTTPException(503, f"Cannot find port for instance '{instance_id}'")
 
     target_url = f"http://127.0.0.1:{port}/{path}"
+
+    # DEV_MODE: return stub responses for common llama-server API paths
+    if DEV_MODE:
+        if path in ("health", ""):
+            return JSONResponse({"status": "ok"})
+        if path == "v1/models":
+            return JSONResponse({"data": [{"id": instance_id, "object": "model"}]})
+        if path == "v1/chat/completions":
+            body = await request.body()
+            payload = json.loads(body) if body else {}
+            if payload.get("stream"):
+                async def _dev_proxy_stream():
+                    words = f"[DEV] Proxy stub response for {instance_id}.".split()
+                    for i, w in enumerate(words):
+                        token = (" " if i > 0 else "") + w
+                        chunk = {"id": "dev-proxy", "object": "chat.completion.chunk",
+                                 "choices": [{"index": 0, "delta": {"content": token}, "finish_reason": None}]}
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    yield f"data: {json.dumps({'id': 'dev-proxy', 'object': 'chat.completion.chunk', 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+                    yield "data: [DONE]\n\n"
+                return StreamingResponse(_dev_proxy_stream(), media_type="text/event-stream",
+                                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+            return JSONResponse({"id": "dev-proxy", "object": "chat.completion",
+                                 "choices": [{"index": 0, "message": {"role": "assistant", "content": f"[DEV] Proxy stub for {instance_id}."}, "finish_reason": "stop"}],
+                                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}})
+        # Fallback for unknown paths
+        return JSONResponse({"dev_mode": True, "path": path, "instance_id": instance_id})
 
     try:
         async with httpx.AsyncClient(timeout=300) as client:

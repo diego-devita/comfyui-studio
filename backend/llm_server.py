@@ -183,9 +183,10 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
     from events import _events
 
     with _instances_lock:
-        model_path = LLM_MODELS_DIR / model_file
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+        if not DEV_MODE:
+            model_path = LLM_MODELS_DIR / model_file
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model file not found: {model_path}")
 
         port = _next_port()
         instance_id = f"{model_file}:{port}"

@@ -344,6 +344,48 @@
     transition: all 0.15s;
   }
   .chat-clear-btn:hover { border-color: var(--error); color: var(--error); }
+  .chat-fullscreen-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: auto;
+  }
+  .chat-fullscreen-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Fullscreen overlay ── */
+  .chat-section.fullscreen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+    background: var(--bg);
+    margin: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chat-section.fullscreen .section-title { display: none; }
+  .chat-section.fullscreen .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
+  .chat-section.fullscreen .chat-messages {
+    flex: 1;
+    max-height: none;
+  }
+
   .chat-messages {
     min-height: 120px;
     max-height: 400px;
@@ -491,8 +533,9 @@
         <label>Threads <span class="help-tip" title="CPU threads for non-GPU operations (tokenization, sampling). Default 4 is fine for most cases. More threads help slightly with concurrent requests but the GPU does most of the work. Set at launch — requires restart to change.">?</span></label>
         <input type="number" id="threads" value="4" min="1" max="32" step="1">
       </div>
-      <div class="config-field" style="justify-content:flex-end;">
-        <button class="btn" id="launchBtn">Launch Instance</button>
+      <div class="config-field">
+        <label>&nbsp;</label>
+        <button class="btn" id="launchBtn" style="height:36px;">Launch Instance</button>
       </div>
     </div>
   </div>
@@ -514,6 +557,7 @@
           <option value="">-- select a running instance --</option>
         </select>
         <button class="chat-clear-btn" id="chatClearBtn">Clear</button>
+        <button class="chat-fullscreen-btn" id="chatFullscreenBtn" title="Toggle fullscreen">&#x26F6;</button>
       </div>
       <div class="chat-messages" id="chatMessages">
         <div class="chat-empty">Select a running instance and send a message to start chatting.</div>
@@ -1089,6 +1133,23 @@
       _chatHistories[instanceId] = [];
     }
     renderChatMessages(instanceId);
+  });
+
+  // ── Fullscreen toggle ──
+  var $chatFullscreenBtn = document.getElementById('chatFullscreenBtn');
+  $chatFullscreenBtn.addEventListener('click', function() {
+    $chatSection.classList.toggle('fullscreen');
+    var isFull = $chatSection.classList.contains('fullscreen');
+    this.innerHTML = isFull ? '&#x2716;' : '&#x26F6;';
+    this.title = isFull ? 'Exit fullscreen' : 'Toggle fullscreen';
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && $chatSection.classList.contains('fullscreen')) {
+      $chatSection.classList.remove('fullscreen');
+      $chatFullscreenBtn.innerHTML = '&#x26F6;';
+      $chatFullscreenBtn.title = 'Toggle fullscreen';
+    }
   });
 
   $chatSendBtn.addEventListener('click', sendChat);
