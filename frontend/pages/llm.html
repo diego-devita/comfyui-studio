@@ -1086,20 +1086,45 @@
     }
   }
 
+  var _lastInstanceIds = '';  // track if instance list changed
+
   function renderInstances(instances) {
     if (!instances.length) {
+      if ($instancesList.querySelector('.instances-empty')) return;
       $instancesList.innerHTML = '<div class="instances-empty">No instances running.</div>';
       return;
     }
 
+    // Check if the set of instances changed — only rebuild DOM if so
+    var newIds = instances.map(function(i) { return i.instance_id; }).sort().join(',');
+    if (newIds !== _lastInstanceIds) {
+      _lastInstanceIds = newIds;
+      _buildInstanceCards(instances);
+    }
+
+    // Always update dynamic values (health, VRAM) without rebuilding DOM
+    instances.forEach(function(inst) {
+      var card = $instancesList.querySelector('.instance-card[data-instance="' + inst.instance_id + '"]');
+      if (!card) return;
+      // Update health dot
+      var dot = card.querySelector('.health-dot');
+      if (dot) { dot.className = 'health-dot ' + (inst.health || 'unreachable'); dot.title = inst.health || 'unreachable'; }
+      // Update VRAM
+      var vramEl = card.querySelector('.vram-value');
+      if (vramEl && inst.vram_mb) {
+        vramEl.textContent = 'VRAM: ' + (inst.vram_mb >= 1024 ? (inst.vram_mb / 1024).toFixed(1) + ' GB' : inst.vram_mb + ' MB');
+      }
+    });
+  }
+
+  function _buildInstanceCards(instances) {
     var html = '<div class="instances-list">';
     instances.forEach(function(inst) {
       var healthClass = inst.health || 'unreachable';
       var logExpanded = !!_expandedLogs[inst.instance_id];
       var iidEsc = escHtml(inst.instance_id).replace(/'/g, '&#39;');
-      var proxyUrl = window.location.origin + (inst.proxy_base_path || '/api/admin/llm/' + encodeURIComponent(inst.instance_id) + '/api/');
+      var proxyUrl = window.location.origin + (inst.proxy_base_path || '/api/admin/llm/proxy/' + encodeURIComponent(inst.instance_id) + '/api/');
 
-      // Config summary
       var configParts = [];
       if (inst.config) {
         if (inst.config.ctx_size) configParts.push('ctx=' + inst.config.ctx_size);
@@ -1131,7 +1156,7 @@
           '<div class="instance-meta">' +
             '<span>Started: ' + escHtml(inst.started_at || '--') + '</span>' +
             (configParts.length ? '<span>' + escHtml(configParts.join(', ')) + '</span>' : '') +
-            (inst.vram_mb ? '<span style="color:var(--accent);">VRAM: ' + (inst.vram_mb >= 1024 ? (inst.vram_mb / 1024).toFixed(1) + ' GB' : inst.vram_mb + ' MB') + '</span>' : '') +
+            '<span class="vram-value" style="color:var(--accent);">' + (inst.vram_mb ? 'VRAM: ' + (inst.vram_mb >= 1024 ? (inst.vram_mb / 1024).toFixed(1) + ' GB' : inst.vram_mb + ' MB') : '') + '</span>' +
           '</div>' +
           '<div style="margin-top:4px;"><a class="proxy-link" href="' + escHtml(proxyUrl) + '" target="_blank" title="OpenAI-compatible API">' + escHtml(proxyUrl) + '</a></div>' +
           '<div class="log-console' + (logExpanded ? ' visible' : '') + '" id="log-' + escHtml(inst.instance_id).replace(/:/g, '_') + '"></div>' +
