@@ -189,7 +189,7 @@ def _start_llama_server(model_file: str, config: dict) -> tuple[str, int]:
 
         port = _next_port()
         instance_id = f"{model_file}:{port}"
-        started_at = _now_rome()
+        started_at = _now_rome().strftime("%Y-%m-%d %H:%M")
 
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         log_path = _LOG_DIR / f"{instance_id.replace(':', '_')}.log"
