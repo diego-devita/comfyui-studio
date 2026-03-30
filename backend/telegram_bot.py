@@ -499,12 +499,11 @@ def stop_bot() -> str:
     global _bot_app, _bot_thread, _bot_started_at
     if not bot_running():
         return "not running"
-    try:
-        if _bot_app:
-            _bot_app.stop_running()
-    except Exception as e:
-        logger.error(f"Error stopping bot: {e}")
+    # Signal the polling loop to exit (it checks _bot_started_at every second)
     _bot_started_at = None
+    # Wait for the thread to finish cleanup (updater.stop, app.stop, app.shutdown)
+    if _bot_thread and _bot_thread.is_alive():
+        _bot_thread.join(timeout=10)
     return "stopped"
 
 
