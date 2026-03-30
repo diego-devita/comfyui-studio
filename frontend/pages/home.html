@@ -346,7 +346,7 @@
           <th>Version</th>
           <th>Date</th>
           <th>Status</th>
-          <th>Latest <span class="help-tip" title="The most recent version available in the remote repository. Fetched when you open this page. If it differs from your current version, an update is available for that component.">?</span></th>
+          <th>Latest <span class="help-tip" id="latestHelpTip" title="The most recent version available in the remote repository, from the last Check for Updates.">?</span></th>
           <th>Update</th>
         </tr>
       </thead>
@@ -399,33 +399,9 @@
   const $comfyStatus  = document.getElementById('comfyStatus');
   const $diskInfo     = document.getElementById('diskInfo');
 
-  var _remoteVersions = {}; // component name → remote version
-
-  // ── Fetch remote versions ──
-  (function() {
-    apiFetch('/api/admin/system/remote-version')
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(data) {
-        if (data && data.remote && data.remote.components) {
-          var comps = data.remote.components;
-          for (var k in comps) {
-            _remoteVersions[k] = comps[k].version;
-          }
-          // Re-render table if already loaded
-          if ($compBody.children.length > 0) {
-            document.querySelectorAll('[data-latest-comp]').forEach(function(td) {
-              var name = td.dataset.latestComp;
-              var rv = _remoteVersions[name];
-              if (rv != null) {
-                var display = typeof rv === 'number' ? '#' + rv : rv;
-                td.innerHTML = '<span class="help-tip" title="Latest available: ' + display + '">?</span>';
-              }
-            });
-          }
-        }
-      })
-      .catch(function() {});
-  })();
+  var _remoteVersions = {}; // component name → {version, date}
+  var _remoteCheckedAt = '';
+  var _updatePrefs = {};
 
   // ── Status dot helper ──
   function dotHtml(color, text) {
@@ -442,6 +418,18 @@
 
   // ── Render status ──
   function renderStatus(data) {
+    // Extract remote version + prefs from status
+    var rv = data.remote_version;
+    if (rv && rv.components) {
+      for (var k in rv.components) {
+        _remoteVersions[k] = rv.components[k];
+      }
+      _remoteCheckedAt = rv._checked_at || '';
+    }
+    if (data.update_prefs) {
+      _updatePrefs = data.update_prefs;
+    }
+
     // Version
     const version = data.app_version || data.version || '0.0.0';
     $versionTag.textContent = 'v' + version;
@@ -467,8 +455,13 @@
     const labelMap = { backend: 'Backend', frontend: 'Frontend', runtime: 'Runtime', models: 'Models Catalog', loras: 'LoRAs Catalog', llm_models: 'LLM Models', workflows: 'Workflows' };
     const statusMap = { running: 'Running', loaded: 'Loaded' };
 
-    var _defaultUnchecked = { loras: true, llm_models: true };
     var _viewableComps = { models: '/api/admin/models', loras: '/api/admin/loras', llm_models: '/api/admin/llm/models' };
+
+    // Update Latest header tooltip with checked_at
+    if (_remoteCheckedAt) {
+      var tip = document.getElementById('latestHelpTip');
+      if (tip) tip.title = 'Latest version from remote repo. Last checked: ' + _remoteCheckedAt;
+    }
     var svgEye = '<span class="icon icon-eye icon-sm"></span>';
     components.forEach(c => {
       const row = document.createElement('tr');
@@ -482,12 +475,14 @@
         : '';
       var toggleHtml = '';
       if (c.updatable !== false) {
-        var checked = _defaultUnchecked[c.name] ? '' : 'checked';
-        toggleHtml = '<label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label>';
+        var isChecked = _updatePrefs.hasOwnProperty(c.name) ? _updatePrefs[c.name] : true;
+        toggleHtml = '<label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + (isChecked ? 'checked' : '') + '><span class="toggle-slider"></span></label>';
       }
-      var rv = _remoteVersions[c.name];
-      var latestDisplay = rv != null ? (typeof rv === 'number' ? '#' + rv : rv) : '...';
-      var latestHtml = '<span class="help-tip" title="Latest available: ' + escHtml(String(latestDisplay)) + '">?</span>';
+      var rc = _remoteVersions[c.name];
+      var latestVer = rc ? (typeof rc.version === 'number' ? '#' + rc.version : rc.version) : '--';
+      var latestDate = rc ? (rc.date || '') : '';
+      var latestTip = 'Latest: ' + latestVer + (latestDate ? ' (' + latestDate + ')' : '');
+      var latestHtml = '<span class="help-tip" title="' + escHtml(latestTip) + '">?</span>';
       row.innerHTML =
         '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
@@ -496,6 +491,17 @@
         '<td data-latest-comp="' + escHtml(c.name) + '">' + latestHtml + '</td>' +
         '<td>' + toggleHtml + '</td>';
       $compBody.appendChild(row);
+    });
+
+    // Save toggle prefs on change
+    $compBody.querySelectorAll('input[data-comp]').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var prefs = {};
+        $compBody.querySelectorAll('input[data-comp]').forEach(function(c) {
+          prefs[c.dataset.comp] = c.checked;
+        });
+        apiFetch('/api/admin/system/update-prefs', { method: 'POST', body: prefs }).catch(function() {});
+      });
     });
 
     // Stat cards

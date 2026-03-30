@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from config import (
     app, COMFY_URL, COMFYUI_DIR, MODELS_BASE, REPO_URL, REPO_DIR, REPO_BRANCH, RUNTIME_VERSION,
     VERSION_JSON, WORKFLOWS_DIR, CATALOGS_DIR, STUDIO_DIR, WWW_ROOT, BACKEND_DIR, DEV_MODE, HOSTING,
+    _now_rome,
 )
 from catalogs import _load_version, _reload_models, _all_categories, _loras_data, _llm_models_data
 from download import _download_state, _max_concurrent, _queue_lock, _schedule_downloads
@@ -245,6 +246,50 @@ async def remote_version():
 # ── System status ───────────────────────────────────────────────────────────
 
 
+_REMOTE_VERSION_PATH = STUDIO_DIR / "remote_version.json"
+_UPDATE_PREFS_PATH = STUDIO_DIR / "update_prefs.json"
+_DEFAULT_SKIP = {"loras": False, "llm_models": False}
+
+
+def _load_remote_version() -> dict | None:
+    if _REMOTE_VERSION_PATH.exists():
+        try:
+            return json.loads(_REMOTE_VERSION_PATH.read_text())
+        except Exception:
+            pass
+    return None
+
+
+def _load_update_prefs() -> dict:
+    if _UPDATE_PREFS_PATH.exists():
+        try:
+            return json.loads(_UPDATE_PREFS_PATH.read_text())
+        except Exception:
+            pass
+    # Create default prefs
+    prefs = {k: True for k in ["runtime", "backend", "frontend", "models", "workflows"]}
+    prefs.update({k: False for k in ["loras", "llm_models"]})
+    _UPDATE_PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UPDATE_PREFS_PATH.write_text(json.dumps(prefs, indent=2))
+    return prefs
+
+
+def _save_update_prefs(prefs: dict):
+    _UPDATE_PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UPDATE_PREFS_PATH.write_text(json.dumps(prefs, indent=2))
+
+
+@router.post("/api/admin/system/update-prefs")
+async def save_update_prefs(request: Request):
+    """Save component update toggle preferences."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    _save_update_prefs(body)
+    return JSONResponse({"status": "saved", "prefs": body})
+
+
 @router.get("/api/admin/system/status")
 async def system_status():
     ver = _load_version()
@@ -351,6 +396,8 @@ async def system_status():
             "name": os.environ.get("TELEGRAM_BOT_NAME", ""),
         },
         "docs_url": getattr(__import__('config'), 'DOCS_URL', ''),
+        "remote_version": _load_remote_version(),
+        "update_prefs": _load_update_prefs(),
     }
 
 
@@ -402,6 +449,11 @@ async def system_update(request: Request):
         if proc.returncode != 0:
             raise HTTPException(500, "Cannot read remote version.json")
         remote_ver = json.loads(proc.stdout)
+
+        # Save remote version + check timestamp for the frontend
+        remote_ver["_checked_at"] = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
+        remote_path = STUDIO_DIR / "remote_version.json"
+        remote_path.write_text(json.dumps(remote_ver, indent=2))
 
         local_ver = _load_version()
 
