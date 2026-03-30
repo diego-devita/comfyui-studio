@@ -154,7 +154,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_PREFER_BINARY=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
-ENV RUNTIME_VERSION=3
+ENV RUNTIME_VERSION=4
+ENV LD_LIBRARY_PATH=/opt/llama-lib:${LD_LIBRARY_PATH}
 
 # ── system dependencies ───────────────────────────────────
 # build-essential + cmake + gfortran + ninja: compile dlib, C++ extensions
@@ -216,6 +217,8 @@ RUN if [ "${ENABLE_LLM}" = "true" ]; then \
           -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined && \
       cmake --build build --config Release -j$(nproc) --target llama-server && \
       cp build/bin/llama-server /opt/llama-server && \
+      mkdir -p /opt/llama-lib && \
+      find build -name "*.so*" -exec cp -P {} /opt/llama-lib/ \; && \
       rm -rf /tmp/llama.cpp; \
     else \
       echo "=== Skipping llama-server (disabled) ==="; \

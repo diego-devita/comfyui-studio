@@ -117,14 +117,15 @@ def main():
             else:
                 log(f"  Catalog exists, skipping: {fname}")
 
-    # Workflows (don't overwrite existing)
+    # Workflows (copy if dir doesn't exist or is empty)
     workflows_dir = os.path.join(STUDIO_DIR, "workflows")
     src_workflows = os.path.join(repo_dir, "workflows")
-    if os.path.exists(src_workflows) and not os.path.exists(os.path.join(workflows_dir, "index.json")):
-        shutil.copytree(src_workflows, workflows_dir, dirs_exist_ok=True)
-        log("  Copied workflows")
-    else:
-        log("  Workflows exist, skipping")
+    if os.path.exists(src_workflows):
+        if not os.path.exists(workflows_dir) or not os.listdir(workflows_dir):
+            shutil.copytree(src_workflows, workflows_dir, dirs_exist_ok=True)
+            log("  Copied workflows")
+        else:
+            log("  Workflows exist, skipping")
 
     # Version.json (local working copy)
     local_ver = os.path.join(STUDIO_DIR, "version.json")
@@ -132,8 +133,15 @@ def main():
     log("  Copied version.json")
 
     # Step 4: Create runtime directories
-    for d in ["assets/input", "assets/output", "db", "llm/models", "presets"]:
+    for d in [
+        "assets/input", "assets/output",
+        "assets/images", "assets/images/lookup", "assets/images/media", "assets/images/models",
+        "database",
+        "llm/models", "llm/logs",
+        "presets",
+    ]:
         os.makedirs(os.path.join(STUDIO_DIR, d), exist_ok=True)
+
 
     log(f"Bootstrap complete — app v{app_version}")
 
