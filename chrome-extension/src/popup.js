@@ -407,6 +407,84 @@ function _retryBarHtml(podId) {
   '</div>';
 }
 
+// ── Launch retry ──
+
+var _launchRetry = null; // { timer, barTimer, attempt, globalStart, mutation, cancelled }
+
+function _startLaunchRetry(mutation) {
+  if (_launchRetry) _stopLaunchRetry();
+  _launchRetry = { attempt: 0, timer: null, barTimer: null, cancelled: false, globalStart: Date.now(), mutation: mutation };
+  _scheduleLaunchRetry();
+  _renderLaunchRetryBar();
+}
+
+function _stopLaunchRetry() {
+  if (!_launchRetry) return;
+  _launchRetry.cancelled = true;
+  if (_launchRetry.timer) clearTimeout(_launchRetry.timer);
+  if (_launchRetry.barTimer) clearInterval(_launchRetry.barTimer);
+  _launchRetry = null;
+  var el = $('launchRetryBox');
+  if (el) el.style.display = 'none';
+}
+
+function _renderLaunchRetryBar() {
+  var el = $('launchRetryBox');
+  if (!el) {
+    // Create the retry box after the launch button
+    var container = $('launchBtn').parentElement;
+    var div = document.createElement('div');
+    div.id = 'launchRetryBox';
+    div.className = 'retry-box';
+    div.style.marginTop = '8px';
+    div.innerHTML = '<div class="retry-info"><span>Retrying launch... #<span id="launchRetryAttempt">1</span> · <span id="launchRetryElapsed">00:00</span></span><button class="btn btn-sm retry-stop" id="launchRetryStop">Stop</button></div><div class="retry-bar-track"><div class="retry-bar-fill" id="launchRetryBar"></div></div>';
+    container.appendChild(div);
+    $('launchRetryStop').addEventListener('click', _stopLaunchRetry);
+  } else {
+    el.style.display = '';
+  }
+}
+
+function _scheduleLaunchRetry() {
+  if (!_launchRetry || _launchRetry.cancelled) return;
+  _launchRetry.barStart = Date.now();
+
+  _launchRetry.barTimer = setInterval(() => {
+    var bar = $('launchRetryBar');
+    if (bar) {
+      var pct = Math.min(100, ((Date.now() - _launchRetry.barStart) / RETRY_INTERVAL) * 100);
+      bar.style.width = pct + '%';
+    }
+    var el = $('launchRetryElapsed');
+    if (el) el.textContent = _fmtRetryTime(Date.now() - _launchRetry.globalStart);
+    var att = $('launchRetryAttempt');
+    if (att) att.textContent = _launchRetry.attempt + 1;
+  }, 1000);
+
+  _launchRetry.timer = setTimeout(async () => {
+    if (!_launchRetry || _launchRetry.cancelled) return;
+    if (_launchRetry.barTimer) clearInterval(_launchRetry.barTimer);
+    _launchRetry.attempt++;
+    try {
+      var data = await runpodMutation(_launchRetry.mutation);
+      var pod = data.podFindAndDeployOnDemand;
+      _startPodTimer(pod.id);
+      var attempts = _launchRetry.attempt;
+      _stopLaunchRetry();
+      showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
+      setTimeout(loadPods, 3000);
+    } catch (e) {
+      if (e.message && e.message.includes('not enough free GPUs')) {
+        showStatus('Launch retry #' + _launchRetry.attempt + ' — no GPU, retrying...', 'error');
+        _scheduleLaunchRetry();
+      } else {
+        showStatus('Launch retry failed: ' + e.message, 'error');
+        _stopLaunchRetry();
+      }
+    }
+  }, RETRY_INTERVAL);
+}
+
 // ── Storage panel ──
 
 async function loadStorage() {
@@ -677,25 +755,30 @@ $('launchBtn').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Launching...';
 
+  const launchMutation = `mutation {
+    podFindAndDeployOnDemand(input: {
+      cloudType: ${cloudType}
+      gpuTypeId: "${gpuId}"
+      gpuCount: 1
+      templateId: "${templateId}"
+      ${regionId ? `dataCenterId: "${regionId}"` : ''}
+      ${volumeId ? `networkVolumeId: "${volumeId}"` : ''}
+    }) { id name desiredStatus machine { podHostId } }
+  }`;
+
   try {
-    const tpl = templateId;
-    const mutation = `mutation {
-      podFindAndDeployOnDemand(input: {
-        cloudType: ${cloudType}
-        gpuTypeId: "${gpuId}"
-        gpuCount: 1
-        templateId: "${tpl}"
-        ${regionId ? `dataCenterId: "${regionId}"` : ''}
-        ${volumeId ? `networkVolumeId: "${volumeId}"` : ''}
-      }) { id name desiredStatus machine { podHostId } }
-    }`;
-    const data = await runpodMutation(mutation);
+    const data = await runpodMutation(launchMutation);
     const pod = data.podFindAndDeployOnDemand;
     _startPodTimer(pod.id);
     showStatus('Pod launched: ' + (pod.name || pod.id), 'success');
     setTimeout(loadPods, 3000);
   } catch (e) {
-    showStatus('Launch failed: ' + e.message, 'error');
+    if (e.message && e.message.includes('not enough free GPUs')) {
+      showStatus(e.message + ' — auto-retrying', 'error');
+      _startLaunchRetry(launchMutation);
+    } else {
+      showStatus('Launch failed: ' + e.message, 'error');
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Launch Pod';
