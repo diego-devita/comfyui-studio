@@ -8,7 +8,15 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
-  main { max-width: 960px; margin: 0 auto; }
+  main { max-width: 1060px; margin: 0 auto; }
+  .help-tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--border); color: var(--muted);
+    font-size: 9px; font-weight: 700; font-style: normal;
+    cursor: help; vertical-align: middle; margin-left: 4px;
+  }
+  .help-tip:hover { background: var(--accent); color: var(--bg); }
 
   .section-title {
     font-family: var(--mono);
@@ -21,115 +29,7 @@
     border-bottom: 1px solid var(--border);
   }
 
-  /* ── Server Panel ── */
-  .server-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: 24px;
-    margin-bottom: 32px;
-  }
-  .server-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-  .server-status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-family: var(--mono);
-    font-size: 13px;
-  }
-  .status-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    vertical-align: middle;
-  }
-  .status-dot.green { background: var(--success); }
-  .status-dot.grey { background: var(--muted); }
-  .status-dot.red { background: var(--error); }
-  .server-model-name {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    margin-left: 4px;
-  }
-  .server-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .config-row {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-  }
-  .config-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1 1 160px;
-  }
-  .config-field label {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .config-field select,
-  .config-field input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    padding: 8px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .config-field select:focus,
-  .config-field input:focus {
-    border-color: var(--accent);
-  }
-  .config-field .range-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .config-field input[type="range"] {
-    flex: 1;
-    padding: 0;
-    background: transparent;
-    border: none;
-    accent-color: var(--accent);
-  }
-  .config-field .range-val {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
-    min-width: 28px;
-    text-align: right;
-  }
-
-  @media (max-width: 768px) {
-    .server-panel { padding: 16px; }
-    .server-header { flex-direction: column; align-items: flex-start; }
-    .config-row { flex-direction: column; gap: 12px; }
-    .config-field { flex: none; width: 100%; }
-    .llm-model-card { flex-direction: column; align-items: flex-start; padding: 14px 16px; }
-    .model-actions { width: 100%; }
-  }
-
-  /* ── Model Catalog (LLM-specific, NOT the model manager .model-card) ── */
+  /* ── Model Catalog ── */
   .model-list {
     display: flex;
     flex-direction: column;
@@ -148,6 +48,7 @@
     transition: border-color 0.15s;
   }
   .llm-model-card:hover { border-color: #3a3a4a; }
+  .llm-model-card.is-running { border-color: var(--success); }
   .model-info {
     display: flex;
     flex-direction: column;
@@ -197,6 +98,11 @@
     color: var(--success);
     border: 1px solid var(--success);
   }
+  .model-badge.running {
+    color: #0a0a0f;
+    background: var(--success);
+    border: 1px solid var(--success);
+  }
   .model-badge.missing {
     color: var(--muted);
     border: 1px solid var(--border);
@@ -210,8 +116,179 @@
     gap: 8px;
     align-items: center;
   }
+  .port-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
 
-  /* ── Chat Area ── */
+  /* ── Running Instances ── */
+  .instances-section {
+    margin-bottom: 32px;
+  }
+  .instances-empty {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 24px 0;
+  }
+  .instances-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .instance-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 16px 20px;
+  }
+  .instance-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .instance-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .instance-model-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .health-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .health-dot.ok { background: var(--success); }
+  .health-dot.loading { background: var(--queued); animation: livePulse 2s ease-in-out infinite; }
+  .health-dot.unreachable { background: var(--error); }
+  .instance-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .instance-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .log-toggle {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .log-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .log-toggle.active { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Log Console ── */
+  .log-console {
+    background: #0a0a0f;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 10px;
+    display: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .log-console.visible { display: block; }
+
+  /* ── Config Row ── */
+  .config-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 20px;
+    margin-bottom: 32px;
+  }
+  .config-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 140px;
+  }
+  .config-field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .config-field select,
+  .config-field input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .config-field select:focus,
+  .config-field input:focus {
+    border-color: var(--accent);
+  }
+  .config-field .range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .config-field input[type="range"] {
+    flex: 1;
+    padding: 0;
+    background: transparent;
+    border: none;
+    accent-color: var(--accent);
+  }
+  .config-field .range-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  /* ── Chat Panel ── */
   .chat-section {
     margin-bottom: 32px;
   }
@@ -221,6 +298,38 @@
     border-radius: var(--radius-card);
     padding: 20px;
   }
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .chat-model-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  .chat-model-select:focus { border-color: var(--accent); }
+  .chat-clear-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .chat-clear-btn:hover { border-color: var(--error); color: var(--error); }
   .chat-messages {
     min-height: 120px;
     max-height: 400px;
@@ -288,9 +397,14 @@
     align-self: flex-end;
   }
 
-  @media (max-width: 640px) {
-    .config-row { flex-direction: column; }
-    .server-header { flex-direction: column; align-items: flex-start; }
+  @media (max-width: 768px) {
+    .config-panel { padding: 16px; }
+    .config-row { flex-direction: column; gap: 12px; }
+    .config-field { flex: none; width: 100%; }
+    .llm-model-card { flex-direction: column; align-items: flex-start; padding: 14px 16px; }
+    .model-actions { width: 100%; }
+    .instance-header { flex-direction: column; align-items: flex-start; }
+    .chat-header { flex-direction: column; align-items: flex-start; }
   }
 </style>
 </head>
@@ -319,57 +433,63 @@
 </header>
 
 <main>
-  <!-- Section 1: Server Status & Control -->
-  <div class="section-title">Server Status</div>
-  <div class="server-panel">
-    <div class="server-header">
-      <div class="server-status">
-        <span class="status-dot grey" id="serverDot"></span>
-        <span id="serverStatusText">Stopped</span>
-        <span class="server-model-name" id="serverModelName"></span>
-      </div>
-      <div class="server-actions">
-        <button class="btn" id="startBtn" disabled>Start</button>
-        <button class="btn" id="stopBtn" disabled>Stop</button>
-      </div>
-    </div>
-    <div class="config-row">
-      <div class="config-field">
-        <label>Model</label>
-        <select id="modelSelect" disabled>
-          <option value="">-- no models available --</option>
-        </select>
-      </div>
-      <div class="config-field">
-        <label>Context Size</label>
-        <input type="number" id="ctxSize" value="4096" min="512" max="131072" step="512">
-      </div>
-      <div class="config-field">
-        <label>GPU Layers</label>
-        <input type="number" id="gpuLayers" value="-1" min="-1" max="200" step="1">
-      </div>
-      <div class="config-field">
-        <label>Temperature</label>
-        <div class="range-wrap">
-          <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
-          <span class="range-val" id="tempVal">0.7</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Section 2: Model Catalog -->
+  <!-- Section 1: Model Catalog -->
   <div class="section-title">Model Catalog</div>
   <div class="model-list" id="modelList">
     <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">Loading models...</div>
   </div>
 
-  <!-- Section 3: Test Chat -->
+  <!-- Section 2: Start Config -->
+  <div class="section-title">Launch Configuration</div>
+  <div class="config-panel">
+    <div class="config-row">
+      <div class="config-field">
+        <label>Context Size <span class="help-tip" title="How many tokens the model can 'see' in a conversation. 1 token ≈ 0.75 words. Larger = more conversation memory but more VRAM. 4096 ≈ 3000 words, 8192 ≈ 6000 words, 32768 ≈ 24000 words. Maximum depends on the model (e.g. Qwen 2.5 supports up to 128k). Set at launch — requires restart to change.">?</span></label>
+        <input type="number" id="ctxSize" value="8192" min="512" max="131072" step="512">
+      </div>
+      <div class="config-field">
+        <label>GPU Layers <span class="help-tip" title="How many transformer layers to load into GPU VRAM. -1 or 99 = all layers in GPU (fastest). Lower values offload layers to CPU RAM (slower). With 192GB VRAM you should always use -1. Set at launch — requires restart to change.">?</span></label>
+        <input type="number" id="gpuLayers" value="99" min="-1" max="200" step="1">
+      </div>
+      <div class="config-field">
+        <label>Temperature <span class="help-tip" title="Controls response randomness/creativity. 0.0 = deterministic (always same answer). 0.3-0.5 = focused, good for code/facts. 0.7 = balanced (default). 1.0+ = creative but may hallucinate. This is the default for this instance — can be overridden per-message in the chat panel.">?</span></label>
+        <div class="range-wrap">
+          <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+          <span class="range-val" id="tempVal">0.7</span>
+        </div>
+      </div>
+      <div class="config-field">
+        <label>Threads <span class="help-tip" title="CPU threads for non-GPU operations (tokenization, sampling). Default 4 is fine for most cases. More threads help slightly with concurrent requests but the GPU does most of the work. Set at launch — requires restart to change.">?</span></label>
+        <input type="number" id="threads" value="4" min="1" max="32" step="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Running Instances -->
+  <div class="section-title">Running Instances</div>
+  <div class="instances-section">
+    <div id="instancesList">
+      <div class="instances-empty">No instances running.</div>
+    </div>
+  </div>
+
+  <!-- Section 4: Chat -->
   <div class="chat-section" id="chatSection" style="display:none;">
-    <div class="section-title">Test Chat</div>
+    <div class="section-title">Chat</div>
     <div class="chat-area">
+      <div class="chat-header">
+        <select class="chat-model-select" id="chatModelSelect">
+          <option value="">-- select a running model --</option>
+        </select>
+        <button class="chat-clear-btn" id="chatClearBtn">Clear</button>
+      </div>
       <div class="chat-messages" id="chatMessages">
-        <div class="chat-empty">Send a message to start chatting.</div>
+        <div class="chat-empty">Select a running model and send a message to start chatting.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <label style="font-size:10px;color:var(--muted);white-space:nowrap;">Temperature <span class="help-tip" title="Override temperature for this message. Lower = more focused, higher = more creative.">?</span></label>
+        <input type="range" id="chatTemp" min="0" max="2" step="0.1" value="0.7" style="flex:1;max-width:150px;">
+        <span id="chatTempVal" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:24px;">0.7</span>
       </div>
       <div class="chat-input-row">
         <textarea id="chatInput" placeholder="Type a message..." rows="2"></textarea>
@@ -385,79 +505,50 @@
   'use strict';
 
   // ── DOM refs ──
-  var $serverDot = document.getElementById('serverDot');
-  var $serverStatusText = document.getElementById('serverStatusText');
-  var $serverModelName = document.getElementById('serverModelName');
-  var $startBtn = document.getElementById('startBtn');
-  var $stopBtn = document.getElementById('stopBtn');
-  var $modelSelect = document.getElementById('modelSelect');
+  var $modelList = document.getElementById('modelList');
   var $ctxSize = document.getElementById('ctxSize');
   var $gpuLayers = document.getElementById('gpuLayers');
   var $temperature = document.getElementById('temperature');
   var $tempVal = document.getElementById('tempVal');
-  var $modelList = document.getElementById('modelList');
+  var $threads = document.getElementById('threads');
+  var $instancesList = document.getElementById('instancesList');
   var $chatSection = document.getElementById('chatSection');
+  var $chatModelSelect = document.getElementById('chatModelSelect');
+  var $chatClearBtn = document.getElementById('chatClearBtn');
   var $chatMessages = document.getElementById('chatMessages');
   var $chatInput = document.getElementById('chatInput');
   var $chatSendBtn = document.getElementById('chatSendBtn');
 
-  var _serverRunning = false;
-  var _serverModel = '';
-  var _chatHistory = [];
-  var _pollTimer = null;
+  var _models = [];
+  var _runningModels = {};  // model -> {port, started_at, health}
+  var _chatHistories = {};  // model -> [{role, content}]
+  var _expandedLogs = {};   // model -> true/false
+  var _logTimers = {};      // model -> intervalId
+  var _statusTimer = null;
   var _downloadPollTimer = null;
+  var _streaming = false;   // true while a streaming response is in progress
 
-  // ── Temperature slider ──
+  // ── Temperature sliders ──
   $temperature.addEventListener('input', function() {
     $tempVal.textContent = this.value;
   });
-
-  // ── Load Server Status ──
-  async function loadStatus() {
-    try {
-      var resp = await apiFetch('/api/admin/llm/status');
-      if (!resp.ok) return;
-      var data = await resp.json();
-      _serverRunning = data.running || false;
-      _serverModel = data.model || '';
-
-      if (_serverRunning) {
-        $serverDot.className = 'status-dot green';
-        $serverStatusText.textContent = 'Running';
-        $serverModelName.textContent = _serverModel ? '(' + _serverModel + ')' : '';
-        $startBtn.disabled = true;
-        $stopBtn.disabled = false;
-        $chatSection.style.display = '';
-      } else {
-        $serverDot.className = 'status-dot grey';
-        $serverStatusText.textContent = 'Stopped';
-        $serverModelName.textContent = '';
-        $startBtn.disabled = !$modelSelect.value;
-        $stopBtn.disabled = true;
-        $chatSection.style.display = 'none';
-      }
-    } catch (e) {
-      if (e.message !== 'auth') {
-        $serverDot.className = 'status-dot red';
-        $serverStatusText.textContent = 'Error';
-      }
-    }
-  }
+  var $chatTemp = document.getElementById('chatTemp');
+  var $chatTempVal = document.getElementById('chatTempVal');
+  $chatTemp.addEventListener('input', function() {
+    $chatTempVal.textContent = this.value;
+  });
 
   // ── Load Models ──
-  var _models = [];
   async function loadModels() {
     try {
       var resp = await apiFetch('/api/admin/llm/models');
       if (!resp.ok) return;
       var data = await resp.json();
-      // Flatten categories into a single models list
       _models = [];
       (data.categories || []).forEach(function(cat) {
         (cat.models || []).forEach(function(m) { _models.push(m); });
       });
       renderModels();
-      updateModelSelect();
     } catch (e) {
       if (e.message !== 'auth') {
         $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--error);text-align:center;padding:24px 0;">Failed to load models</div>';
@@ -478,9 +569,22 @@
       var status = m.status || 'missing';
       var tags = m.tags || [];
       var progress = m.download_progress || null;
+      var isRunning = !!m.running || !!_runningModels[m.file];
 
-      var badgeClass = status === 'present' ? 'present' : (status === 'downloading' ? 'downloading' : 'missing');
-      var badgeText = status === 'downloading' && progress != null ? 'Downloading ' + progress + '%' : status;
+      var badgeClass, badgeText;
+      if (isRunning) {
+        badgeClass = 'running';
+        badgeText = 'Running';
+      } else if (status === 'downloading') {
+        badgeClass = 'downloading';
+        badgeText = progress != null ? 'Downloading ' + progress + '%' : 'Downloading';
+      } else if (status === 'present') {
+        badgeClass = 'present';
+        badgeText = 'Downloaded';
+      } else {
+        badgeClass = 'missing';
+        badgeText = 'Missing';
+      }
 
       var tagsHtml = '';
       tags.forEach(function(t) { tagsHtml += '<span class="model-tag">' + escHtml(t) + '</span>'; });
@@ -488,22 +592,29 @@
       var metaParts = [];
       if (size) metaParts.push(size);
       if (quant) metaParts.push(quant);
+      if (m.context_max) metaParts.push('ctx ' + (m.context_max >= 1024 ? Math.round(m.context_max/1024) + 'k' : m.context_max));
 
-      var actionHtml = '';
       var fileEsc = escHtml(m.file).replace(/'/g, '&#39;');
-      if (status === 'present') {
-        actionHtml = '<button class="btn btn-sm" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
+      var actionHtml = '';
+
+      if (isRunning) {
+        var port = m.running_port || (_runningModels[m.file] && _runningModels[m.file].port) || '';
+        actionHtml = '<span class="port-label">:' + port + '</span>';
+        actionHtml += '<button class="btn btn--sm btn--danger" onclick="window._llmStopModel(\'' + fileEsc + '\')">Stop</button>';
+      } else if (status === 'present') {
+        actionHtml = '<button class="btn btn--sm" onclick="window._llmStartModel(\'' + fileEsc + '\')">Start</button>';
+        actionHtml += '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
       } else if (status === 'downloading') {
         actionHtml = '<span class="spinner sm"></span>';
       } else {
-        actionHtml = '<button class="btn btn-sm" onclick="window._llmDownloadModel(\'' + fileEsc + '\')">Download</button>';
+        actionHtml = '<button class="btn btn--sm" onclick="window._llmDownloadModel(\'' + fileEsc + '\')">Download</button>';
       }
 
       html +=
-        '<div class="llm-model-card">' +
+        '<div class="llm-model-card' + (isRunning ? ' is-running' : '') + '">' +
           '<div class="model-info">' +
             '<div class="model-name">' + escHtml(name) +
-              (m.hf_repo ? ' <a href="https://huggingface.co/' + m.hf_repo + '" target="_blank" style="text-decoration:none;opacity:0.4;" title="View on HuggingFace"><span class="icon icon-external-link icon-sm"></span></a>' : '') +
+              (m.hf_repo ? ' <a href="https://huggingface.co/' + m.hf_repo + '" target="_blank" style="text-decoration:none;color:#666;" title="View on HuggingFace"><span class="icon icon-external-link icon-sm"></span></a>' : '') +
             '</div>' +
             '<div class="model-meta">' +
               (metaParts.length ? '<span>' + escHtml(metaParts.join(' / ')) + '</span>' : '') +
@@ -517,25 +628,6 @@
     $modelList.innerHTML = html;
   }
 
-  function updateModelSelect() {
-    var presentModels = _models.filter(function(m) { return m.status === 'present'; });
-    $modelSelect.innerHTML = '';
-    if (!presentModels.length) {
-      $modelSelect.innerHTML = '<option value="">-- no models available --</option>';
-      $modelSelect.disabled = true;
-      if (!_serverRunning) $startBtn.disabled = true;
-      return;
-    }
-    presentModels.forEach(function(m) {
-      var opt = document.createElement('option');
-      opt.value = m.file;
-      opt.textContent = m.name || m.file;
-      $modelSelect.appendChild(opt);
-    });
-    $modelSelect.disabled = false;
-    if (!_serverRunning) $startBtn.disabled = false;
-  }
-
   function formatSize(bytes) {
     if (!bytes || bytes <= 0) return '';
     if (bytes < 1024) return bytes + ' B';
@@ -544,7 +636,57 @@
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   }
 
-  // ── Download / Delete ──
+  // ── Start / Stop / Download / Delete ──
+  window._llmStartModel = async function(modelFile) {
+    try {
+      var resp = await apiFetch('/api/admin/llm/start', {
+        method: 'POST',
+        body: {
+          model: modelFile,
+          ctx_size: parseInt($ctxSize.value) || 8192,
+          n_gpu_layers: parseInt($gpuLayers.value),
+          threads: parseInt($threads.value) || 4,
+        }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Start failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        return;
+      }
+      var data = await resp.json();
+      showToast('Starting ' + modelFile + ' on port ' + data.port, 3000);
+      setTimeout(function() { loadStatus(); loadModels(); }, 1500);
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Start error: ' + e.message, 5000, 'error');
+    }
+  };
+
+  window._llmStopModel = async function(modelFile) {
+    var ok = await studioConfirm('Stop instance "' + modelFile + '"?');
+    if (!ok) return;
+    try {
+      var resp = await apiFetch('/api/admin/llm/stop', {
+        method: 'POST',
+        body: { model: modelFile }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Stop failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
+        return;
+      }
+      showToast('Stopped: ' + modelFile, 3000);
+      // Clean up log polling for this instance
+      if (_logTimers[modelFile]) {
+        clearInterval(_logTimers[modelFile]);
+        delete _logTimers[modelFile];
+      }
+      delete _expandedLogs[modelFile];
+      setTimeout(function() { loadStatus(); loadModels(); }, 500);
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
+    }
+  };
+
   window._llmDownloadModel = async function(name) {
     try {
       var resp = await apiFetch('/api/admin/llm/models/download/' + encodeURIComponent(name), {method: 'POST'});
@@ -590,64 +732,182 @@
     }, 3000);
   }
 
-  // ── Start / Stop ──
-  $startBtn.addEventListener('click', async function() {
-    var model = $modelSelect.value;
-    if (!model) { showToast('Select a model first', 3000); return; }
-    $startBtn.disabled = true;
-    $startBtn.innerHTML = '<span class="spinner sm"></span>';
+  // ── Load Status (running instances) ──
+  async function loadStatus() {
     try {
-      var resp = await apiFetch('/api/admin/llm/start', {
-        method: 'POST',
-        body: {
-          model: model,
-          ctx_size: parseInt($ctxSize.value) || 4096,
-          gpu_layers: parseInt($gpuLayers.value),
-          temperature: parseFloat($temperature.value) || 0.7
-        }
-      });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        showToast('Start failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
-        $startBtn.disabled = false;
-        $startBtn.textContent = 'Start';
-        return;
-      }
-      showToast('Server starting...', 3000);
-      setTimeout(loadStatus, 2000);
-    } catch (e) {
-      if (e.message !== 'auth') showToast('Start error: ' + e.message, 5000, 'error');
-      $startBtn.disabled = false;
-      $startBtn.textContent = 'Start';
-    }
-  });
+      var resp = await apiFetch('/api/admin/llm/status');
+      if (!resp.ok) return;
+      var data = await resp.json();
 
-  $stopBtn.addEventListener('click', async function() {
-    var ok = await studioConfirm('Stop the LLM server?');
-    if (!ok) return;
-    $stopBtn.disabled = true;
-    $stopBtn.innerHTML = '<span class="spinner sm"></span>';
-    try {
-      var resp = await apiFetch('/api/admin/llm/stop', {method: 'POST'});
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        showToast('Stop failed: ' + (err.detail || err.error || resp.status), 5000, 'error');
-        $stopBtn.disabled = false;
-        $stopBtn.textContent = 'Stop';
-        return;
-      }
-      showToast('Server stopped', 3000);
-      _chatHistory = [];
-      setTimeout(loadStatus, 1000);
+      // Build running map
+      _runningModels = {};
+      (data.instances || []).forEach(function(inst) {
+        _runningModels[inst.model] = inst;
+      });
+
+      renderInstances(data.instances || []);
+      updateChatModelSelect();
+      renderModels();  // re-render to update running badges
+
+      // Show/hide chat section
+      var hasRunning = Object.keys(_runningModels).length > 0;
+      $chatSection.style.display = hasRunning ? '' : 'none';
     } catch (e) {
-      if (e.message !== 'auth') showToast('Stop error: ' + e.message, 5000, 'error');
-      $stopBtn.disabled = false;
-      $stopBtn.textContent = 'Stop';
+      // silent
     }
-  });
+  }
+
+  function renderInstances(instances) {
+    if (!instances.length) {
+      $instancesList.innerHTML = '<div class="instances-empty">No instances running.</div>';
+      return;
+    }
+
+    var html = '<div class="instances-list">';
+    instances.forEach(function(inst) {
+      var healthClass = inst.health || 'unreachable';
+      var logExpanded = !!_expandedLogs[inst.model];
+
+      html +=
+        '<div class="instance-card" data-model="' + escHtml(inst.model) + '">' +
+          '<div class="instance-header">' +
+            '<div class="instance-info">' +
+              '<span class="health-dot ' + healthClass + '" title="' + healthClass + '"></span>' +
+              '<span class="instance-model-name">' + escHtml(inst.model) + '</span>' +
+              '<span class="port-label">:' + inst.port + '</span>' +
+            '</div>' +
+            '<div class="instance-meta">' +
+              '<span>Started: ' + escHtml(inst.started_at || '--') + '</span>' +
+            '</div>' +
+            '<div class="instance-actions">' +
+              '<button class="log-toggle' + (logExpanded ? ' active' : '') + '" onclick="window._llmToggleLog(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Log</button>' +
+              '<button class="btn btn--sm" onclick="window._llmChatWith(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Chat</button>' +
+              '<button class="btn btn--sm btn--danger" onclick="window._llmStopModel(\'' + escHtml(inst.model).replace(/'/g, '&#39;') + '\')">Stop</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="log-console' + (logExpanded ? ' visible' : '') + '" id="log-' + escHtml(inst.model) + '"></div>' +
+        '</div>';
+    });
+    html += '</div>';
+    $instancesList.innerHTML = html;
+
+    // Restore log content for expanded logs
+    instances.forEach(function(inst) {
+      if (_expandedLogs[inst.model]) {
+        fetchLog(inst.model);
+      }
+    });
+  }
+
+  // ── Log Toggle & Fetch ──
+  window._llmToggleLog = function(modelFile) {
+    if (_expandedLogs[modelFile]) {
+      _expandedLogs[modelFile] = false;
+      if (_logTimers[modelFile]) {
+        clearInterval(_logTimers[modelFile]);
+        delete _logTimers[modelFile];
+      }
+      var el = document.getElementById('log-' + modelFile);
+      if (el) el.classList.remove('visible');
+      // Update toggle button
+      var card = document.querySelector('.instance-card[data-model="' + modelFile + '"]');
+      if (card) {
+        var btn = card.querySelector('.log-toggle');
+        if (btn) btn.classList.remove('active');
+      }
+    } else {
+      _expandedLogs[modelFile] = true;
+      var el = document.getElementById('log-' + modelFile);
+      if (el) el.classList.add('visible');
+      var card = document.querySelector('.instance-card[data-model="' + modelFile + '"]');
+      if (card) {
+        var btn = card.querySelector('.log-toggle');
+        if (btn) btn.classList.add('active');
+      }
+      fetchLog(modelFile);
+      // Start polling log
+      if (!_logTimers[modelFile]) {
+        _logTimers[modelFile] = setInterval(function() {
+          if (_expandedLogs[modelFile]) {
+            fetchLog(modelFile);
+          }
+        }, 3000);
+      }
+    }
+  };
+
+  async function fetchLog(modelFile) {
+    try {
+      var resp = await apiFetch('/api/admin/llm/log/' + encodeURIComponent(modelFile));
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var el = document.getElementById('log-' + modelFile);
+      if (el) {
+        var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+        el.textContent = data.log || '(no log output)';
+        if (wasAtBottom) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }
+    } catch (e) {
+      // silent
+    }
+  }
 
   // ── Chat ──
-  function appendChatMsg(role, text) {
+  window._llmChatWith = function(modelFile) {
+    $chatSection.style.display = '';
+    $chatModelSelect.value = modelFile;
+    switchChatModel(modelFile);
+    $chatSection.scrollIntoView({behavior: 'smooth'});
+  };
+
+  function updateChatModelSelect() {
+    var current = $chatModelSelect.value;
+    $chatModelSelect.innerHTML = '<option value="">-- select a running model --</option>';
+    Object.keys(_runningModels).forEach(function(model) {
+      var opt = document.createElement('option');
+      opt.value = model;
+      opt.textContent = model + ' (:' + _runningModels[model].port + ')';
+      $chatModelSelect.appendChild(opt);
+    });
+    // Restore selection if still running
+    if (current && _runningModels[current]) {
+      $chatModelSelect.value = current;
+    }
+  }
+
+  $chatModelSelect.addEventListener('change', function() {
+    switchChatModel(this.value);
+  });
+
+  function switchChatModel(model) {
+    renderChatMessages(model);
+  }
+
+  function renderChatMessages(model) {
+    var history = model ? (_chatHistories[model] || []) : [];
+    if (!history.length) {
+      $chatMessages.innerHTML = '<div class="chat-empty">Send a message to start chatting.</div>';
+      return;
+    }
+    $chatMessages.innerHTML = '';
+    history.forEach(function(msg) {
+      var div = document.createElement('div');
+      div.className = 'chat-msg ' + msg.role;
+      div.textContent = msg.content;
+      $chatMessages.appendChild(div);
+    });
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+  }
+
+  function appendChatMsg(model, role, text) {
+    if (!_chatHistories[model]) _chatHistories[model] = [];
+    _chatHistories[model].push({role: role, content: text});
+
+    // Only render if this model is selected
+    if ($chatModelSelect.value !== model) return null;
+
     var empty = $chatMessages.querySelector('.chat-empty');
     if (empty) empty.remove();
     var div = document.createElement('div');
@@ -658,6 +918,14 @@
     return div;
   }
 
+  $chatClearBtn.addEventListener('click', function() {
+    var model = $chatModelSelect.value;
+    if (model) {
+      _chatHistories[model] = [];
+    }
+    renderChatMessages(model);
+  });
+
   $chatSendBtn.addEventListener('click', sendChat);
   $chatInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
@@ -665,51 +933,122 @@
 
   async function sendChat() {
     var text = $chatInput.value.trim();
-    if (!text || !_serverRunning) return;
+    var model = $chatModelSelect.value;
+    if (!text || !model || _streaming) return;
+
+    if (!_runningModels[model]) {
+      showToast('Model is not running', 3000, 'error');
+      return;
+    }
 
     $chatInput.value = '';
-    appendChatMsg('user', text);
-    _chatHistory.push({role: 'user', content: text});
+    appendChatMsg(model, 'user', text);
+
+    if (!_chatHistories[model]) _chatHistories[model] = [];
+    var messages = _chatHistories[model]
+      .filter(function(m) { return m.role === 'user' || m.role === 'assistant'; })
+      .map(function(m) { return {role: m.role, content: m.content}; });
 
     $chatSendBtn.disabled = true;
     $chatSendBtn.innerHTML = '<span class="spinner sm"></span>';
+    _streaming = true;
 
     try {
       var resp = await apiFetch('/api/admin/llm/chat', {
         method: 'POST',
         body: {
-          model: _serverModel,
-          messages: _chatHistory,
-          temperature: parseFloat($temperature.value) || 0.7
-        }
+          model: model,
+          messages: messages,
+          temperature: parseFloat($chatTemp.value) || 0.7,
+          stream: true,
+        },
+        raw: true,
       });
+
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        appendChatMsg('error', 'Error: ' + (err.detail || err.error || resp.status));
-        _chatHistory.pop();
-      } else {
-        var data = await resp.json();
-        var reply = data.content || data.message || data.choices?.[0]?.message?.content || '(empty response)';
-        appendChatMsg('assistant', reply);
-        _chatHistory.push({role: 'assistant', content: reply});
+        appendChatMsg(model, 'error', 'Error: ' + (err.detail || err.error || resp.status));
+        // Remove last user message from history since it failed
+        if (_chatHistories[model]) _chatHistories[model].pop();
+        _streaming = false;
+        $chatSendBtn.disabled = false;
+        $chatSendBtn.textContent = 'Send';
+        return;
       }
+
+      // Create assistant message element for streaming
+      var empty = $chatMessages.querySelector('.chat-empty');
+      if (empty) empty.remove();
+      var assistantDiv = document.createElement('div');
+      assistantDiv.className = 'chat-msg assistant';
+      assistantDiv.textContent = '';
+      if ($chatModelSelect.value === model) {
+        $chatMessages.appendChild(assistantDiv);
+      }
+
+      var fullContent = '';
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+
+        buffer += decoder.decode(result.value, {stream: true});
+        var lines = buffer.split('\n');
+        buffer = lines.pop();  // keep incomplete line in buffer
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line || !line.startsWith('data:')) continue;
+          var payload = line.substring(5).trim();
+          if (payload === '[DONE]') continue;
+
+          try {
+            var chunk = JSON.parse(payload);
+            var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            if (delta && delta.content) {
+              fullContent += delta.content;
+              assistantDiv.textContent = fullContent;
+              $chatMessages.scrollTop = $chatMessages.scrollHeight;
+            }
+          } catch (parseErr) {
+            // skip unparseable lines
+          }
+        }
+      }
+
+      // Store completed message in history
+      if (!_chatHistories[model]) _chatHistories[model] = [];
+      _chatHistories[model].push({role: 'assistant', content: fullContent || '(empty response)'});
+      if (!fullContent) {
+        assistantDiv.textContent = '(empty response)';
+      }
+
     } catch (e) {
-      if (e.message !== 'auth') appendChatMsg('error', 'Error: ' + e.message);
-      _chatHistory.pop();
+      if (e.message !== 'auth') {
+        appendChatMsg(model, 'error', 'Error: ' + e.message);
+      }
+      // Remove last user message from history since it failed
+      if (_chatHistories[model] && _chatHistories[model].length && _chatHistories[model][_chatHistories[model].length - 1].role === 'user') {
+        _chatHistories[model].pop();
+      }
     }
 
+    _streaming = false;
     $chatSendBtn.disabled = false;
     $chatSendBtn.textContent = 'Send';
   }
 
   // ── Polling ──
   function startPoll() {
-    _pollTimer = setInterval(loadStatus, 3000);
+    _statusTimer = setInterval(loadStatus, 3000);
   }
 
   // ── Boot ──
-  loadStatus();
   loadModels();
+  loadStatus();
   startPoll();
 })();
 </script>
