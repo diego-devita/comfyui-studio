@@ -500,7 +500,11 @@
         $compBody.querySelectorAll('input[data-comp]').forEach(function(c) {
           prefs[c.dataset.comp] = c.checked;
         });
-        apiFetch('/api/admin/system/update-prefs', { method: 'POST', body: prefs }).catch(function() {});
+        var compName = cb.dataset.comp;
+        var state = cb.checked ? 'on' : 'off';
+        apiFetch('/api/admin/system/update-prefs', { method: 'POST', body: prefs })
+          .then(function(r) { if (r.ok) showToast(compName + ' update ' + state, 2000); })
+          .catch(function() {});
       });
     });
 
