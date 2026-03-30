@@ -481,8 +481,11 @@
       var rc = _remoteVersions[c.name];
       var latestVer = rc ? (typeof rc.version === 'number' ? '#' + rc.version : rc.version) : '--';
       var latestDate = rc ? (rc.date || '') : '';
-      var latestTip = 'Latest: ' + latestVer + (latestDate ? ' (' + latestDate + ')' : '');
-      var latestHtml = '<span class="help-tip" title="' + escHtml(latestTip) + '">?</span>';
+      var isMatch = rc && String(rc.version) === String(c.version);
+      var matchLabel = rc ? (isMatch ? 'Match' : 'Mismatch') : '';
+      var latestTip = (matchLabel ? matchLabel + ' — ' : '') + 'Latest: ' + latestVer + (latestDate ? ' (' + latestDate + ')' : '');
+      var tipColor = rc ? (isMatch ? 'background:var(--success);color:var(--bg);' : 'background:var(--error);color:#fff;') : '';
+      var latestHtml = '<span class="help-tip" style="' + tipColor + '" title="' + escHtml(latestTip) + '">?</span>';
       row.innerHTML =
         '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
