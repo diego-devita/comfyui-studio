@@ -56,6 +56,44 @@ async def chat_preset_delete(preset_id: str):
     return JSONResponse({"status": "deleted", "id": preset_id})
 
 
+# ── Preset example endpoints ─────────────────────────────────────────────────
+
+@router.post("/api/admin/llm/chat-presets/{preset_id}/examples")
+async def preset_example_add(preset_id: str, request: Request):
+    if not db.get_preset(preset_id):
+        raise HTTPException(404, "Preset not found")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(400, "Missing 'text' field")
+    example = db.add_example(preset_id, text)
+    return JSONResponse(example)
+
+
+@router.patch("/api/admin/llm/chat-presets/examples/{example_id}")
+async def preset_example_update(example_id: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(400, "Missing 'text' field")
+    if not db.update_example(example_id, text):
+        raise HTTPException(404, "Example not found")
+    return JSONResponse({"status": "updated", "id": example_id})
+
+
+@router.delete("/api/admin/llm/chat-presets/examples/{example_id}")
+async def preset_example_delete(example_id: str):
+    if not db.delete_example(example_id):
+        raise HTTPException(404, "Example not found")
+    return JSONResponse({"status": "deleted", "id": example_id})
+
+
 # ── Conversation endpoints ───────────────────────────────────────────────────
 
 @router.get("/api/admin/llm/conversations")

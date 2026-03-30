@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "date": "2026-03-24 18:44",
+  "version": 5,
+  "date": "2026-03-30 18:38",
   "categories": [
     {
       "id": "general",
@@ -14,12 +14,7 @@
           "size_gb": 4.7,
           "hf_repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
           "hf_file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-          "tags": [
-            "chat",
-            "instruct",
-            "7b",
-            "multilingual"
-          ],
+          "tags": ["chat", "instruct", "7b", "multilingual"],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
@@ -32,12 +27,7 @@
           "size_gb": 8.9,
           "hf_repo": "bartowski/Qwen2.5-14B-Instruct-GGUF",
           "hf_file": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
-          "tags": [
-            "chat",
-            "instruct",
-            "14b",
-            "multilingual"
-          ],
+          "tags": ["chat", "instruct", "14b", "multilingual"],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
@@ -50,14 +40,140 @@
           "size_gb": 4.9,
           "hf_repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
           "hf_file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
-          "tags": [
-            "chat",
-            "instruct",
-            "8b"
-          ],
+          "tags": ["chat", "instruct", "8b"],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
+        }
+      ]
+    },
+    {
+      "id": "uncensored",
+      "name": "Uncensored (Abliterated)",
+      "models": [
+        {
+          "name": "Qwen 3.5 27B Abliterated (Q4_K_M)",
+          "file": "Huihui-Qwen3.5-27B-abliterated.Q4_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 16.6,
+          "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q4_K_M.gguf",
+          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering"],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q4_K_M",
+          "params": "27B"
+        },
+        {
+          "name": "Qwen 3.5 27B Abliterated (Q5_K_M)",
+          "file": "Huihui-Qwen3.5-27B-abliterated.Q5_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 19.5,
+          "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q5_K_M.gguf",
+          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering"],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q5_K_M",
+          "params": "27B"
+        },
+        {
+          "name": "Qwen 3.5 27B Abliterated (Q8_0)",
+          "file": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 28.7,
+          "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
+          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering", "high-quality"],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q8_0",
+          "params": "27B"
+        },
+        {
+          "name": "Qwen 3.5 35B-A3B MoE Abliterated (Q4_K_M)",
+          "file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q4_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 21.3,
+          "hf_repo": "mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q4_K_M.gguf",
+          "tags": ["chat", "uncensored", "abliterated", "35b", "moe", "prompt-engineering"],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q4_K_M",
+          "params": "35B (3B active)"
+        },
+        {
+          "name": "Qwen 3.5 35B-A3B MoE Abliterated (Q8_0)",
+          "file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 37.0,
+          "hf_repo": "mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q8_0.gguf",
+          "tags": ["chat", "uncensored", "abliterated", "35b", "moe", "prompt-engineering", "high-quality"],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q8_0",
+          "params": "35B (3B active)"
+        }
+      ]
+    },
+    {
+      "id": "vision",
+      "name": "Vision-Language (Image to Prompt)",
+      "models": [
+        {
+          "name": "Qwen3-VL 8B Thinking Abliterated (Q4_K_M)",
+          "file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q4_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 5.1,
+          "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q4_K_M.gguf",
+          "tags": ["vision", "uncensored", "abliterated", "8b", "image-to-prompt", "thinking"],
+          "context_default": 4096,
+          "context_max": 32768,
+          "quant": "Q4_K_M",
+          "params": "8B"
+        },
+        {
+          "name": "Qwen3-VL 8B Thinking Abliterated (Q8_0)",
+          "file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 8.8,
+          "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
+          "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q8_0.gguf",
+          "tags": ["vision", "uncensored", "abliterated", "8b", "image-to-prompt", "thinking", "high-quality"],
+          "context_default": 4096,
+          "context_max": 32768,
+          "quant": "Q8_0",
+          "params": "8B"
+        }
+      ]
+    },
+    {
+      "id": "prompt-tools",
+      "name": "Prompt Tools",
+      "models": [
+        {
+          "name": "DanTagGen Beta (Q8_0)",
+          "file": "DanTagGen-beta.Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 0.4,
+          "hf_repo": "KBlueLeaf/DanTagGen-beta-GGUF",
+          "hf_file": "DanTagGen-beta.Q8_0.gguf",
+          "tags": ["tag-generator", "danbooru", "small"],
+          "context_default": 2048,
+          "context_max": 2048,
+          "quant": "Q8_0",
+          "params": "0.4B"
         }
       ]
     }

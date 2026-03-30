@@ -632,11 +632,11 @@
     <div class="chat-layout">
       <!-- Sidebar -->
       <div class="chat-sidebar">
+        <button class="btn" id="newChatBtn" style="width:100%;">+ New Chat</button>
         <div class="chat-sidebar-header">
           <select id="convModelFilter">
             <option value="">All models</option>
           </select>
-          <button class="btn btn--sm" id="newChatBtn">+ New</button>
         </div>
         <div class="conv-list" id="convList"></div>
         <button class="chat-clear-btn" id="managePresetsBtn" style="width:100%;">System Prompts</button>
@@ -672,26 +672,29 @@
   </div><!-- /tabChat -->
 
   <!-- System Prompts Dialog -->
-  <dialog id="presetsDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:24px;max-width:600px;width:90%;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <dialog id="presetsDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:0;max-width:800px;width:95%;margin:auto;max-height:90vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
       <span style="font-family:var(--mono);font-size:14px;font-weight:700;">System Prompts</span>
       <button class="chat-clear-btn" onclick="document.getElementById('presetsDialog').close()">Close</button>
     </div>
-    <div id="presetsList" style="margin-bottom:16px;"></div>
-    <div style="border-top:1px solid var(--border);padding-top:16px;">
-      <input id="presetName" placeholder="Name" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;">
-      <textarea id="presetPrompt" placeholder="System prompt..." rows="4" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;"></textarea>
-      <button class="btn btn--sm" id="presetSaveBtn">Save Preset</button>
+    <div style="overflow-y:auto;flex:1;padding:20px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">
+      <div id="presetsList"></div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">New Preset</div>
+        <input id="presetName" placeholder="Name" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;box-sizing:border-box;">
+        <textarea id="presetPrompt" placeholder="System prompt..." rows="3" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;box-sizing:border-box;"></textarea>
+        <button class="btn btn--sm" id="presetSaveBtn">Create Preset</button>
+      </div>
     </div>
   </dialog>
 
   <!-- New Chat Dialog -->
-  <dialog id="newChatDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:24px;max-width:400px;width:90%;">
+  <dialog id="newChatDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:24px;max-width:400px;width:90%;margin:auto;">
     <div style="font-family:var(--mono);font-size:14px;font-weight:700;margin-bottom:16px;">New Chat</div>
     <div style="display:flex;flex-direction:column;gap:12px;">
       <div class="config-field">
-        <label>Model</label>
-        <select id="newChatModel"></select>
+        <label>Running Instance</label>
+        <select id="newChatInstance"></select>
       </div>
       <div class="config-field">
         <label>System Prompt</label>
@@ -1257,16 +1260,39 @@
 
   function _renderPresetsDialog() {
     var html = '';
+    if (!_presets.length) {
+      html = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:12px 0;">No presets yet. Create one below.</div>';
+    }
     _presets.forEach(function(p) {
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);">' + escHtml(p.name) + '</div>' +
-          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(p.system_prompt).substring(0, 100) + '</div>' +
+      var pid = escHtml(p.id);
+      var examples = p.examples || [];
+      var exHtml = '';
+      examples.forEach(function(ex) {
+        var eid = escHtml(ex.id);
+        exHtml += '<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:4px;" data-example="' + eid + '">' +
+          '<textarea style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:28px;box-sizing:border-box;" data-eid="' + eid + '">' + escHtml(ex.text) + '</textarea>' +
+          '<button class="btn btn--sm btn--danger" onclick="window._deleteExample(\'' + eid + '\')">x</button>' +
+        '</div>';
+      });
+
+      html += '<div style="padding:12px 0;border-bottom:1px solid var(--border);" data-preset="' + pid + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<input value="' + escHtml(p.name) + '" data-pname="' + pid + '" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);padding:2px 6px;flex:1;" onfocus="this.style.borderColor=\'var(--border)\'" onblur="this.style.borderColor=\'transparent\'">' +
+          '<div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">' +
+            '<button class="btn btn--sm" onclick="window._savePresetInline(\'' + pid + '\')">Save</button>' +
+            '<button class="btn btn--sm btn--danger" onclick="window._deletePreset(\'' + pid + '\')">Delete</button>' +
+          '</div>' +
         '</div>' +
-        '<button class="btn btn--sm btn--danger" onclick="window._deletePreset(\'' + escHtml(p.id) + '\')">Delete</button>' +
+        '<textarea data-pprompt="' + pid + '" rows="4" style="width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 10px;resize:vertical;box-sizing:border-box;">' + escHtml(p.system_prompt) + '</textarea>' +
+        '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Example prompts</div>' +
+        exHtml +
+        '<div style="display:flex;gap:6px;">' +
+          '<input placeholder="Add an example prompt..." data-newex="' + pid + '" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 8px;box-sizing:border-box;">' +
+          '<button class="btn btn--sm" onclick="window._addExample(\'' + pid + '\')">Add</button>' +
+        '</div>' +
       '</div>';
     });
-    document.getElementById('presetsList').innerHTML = html || '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:12px 0;">No presets yet.</div>';
+    document.getElementById('presetsList').innerHTML = html;
   }
 
   document.getElementById('presetSaveBtn').addEventListener('click', async function() {
@@ -1279,14 +1305,51 @@
       document.getElementById('presetPrompt').value = '';
       await _loadPresets();
       _renderPresetsDialog();
-      showToast('Preset saved', 2000);
+      showToast('Preset created', 2000);
     } catch (_) {}
   });
 
+  window._savePresetInline = async function(pid) {
+    var nameEl = document.querySelector('[data-pname="' + pid + '"]');
+    var promptEl = document.querySelector('[data-pprompt="' + pid + '"]');
+    if (!nameEl || !promptEl) return;
+    // Also save any edited examples
+    var exEls = document.querySelectorAll('[data-preset="' + pid + '"] textarea[data-eid]');
+    for (var i = 0; i < exEls.length; i++) {
+      var eid = exEls[i].dataset.eid;
+      var text = exEls[i].value.trim();
+      if (text) await apiFetch('/api/admin/llm/chat-presets/examples/' + eid, { method: 'PATCH', body: { text: text } });
+    }
+    await apiFetch('/api/admin/llm/chat-presets', {
+      method: 'POST',
+      body: { id: pid, name: nameEl.value.trim(), system_prompt: promptEl.value.trim() }
+    });
+    await _loadPresets();
+    _renderPresetsDialog();
+    showToast('Preset saved', 2000);
+  };
+
   window._deletePreset = async function(id) {
-    var ok = await studioConfirm('Delete this preset?', {yes: 'Delete', danger: true});
+    var ok = await studioConfirm('Delete this preset and all its examples?', {yes: 'Delete', danger: true});
     if (!ok) return;
     await apiFetch('/api/admin/llm/chat-presets/' + id, { method: 'DELETE' });
+    await _loadPresets();
+    _renderPresetsDialog();
+  };
+
+  window._addExample = async function(pid) {
+    var input = document.querySelector('[data-newex="' + pid + '"]');
+    if (!input) return;
+    var text = input.value.trim();
+    if (!text) return;
+    await apiFetch('/api/admin/llm/chat-presets/' + pid + '/examples', { method: 'POST', body: { text: text } });
+    input.value = '';
+    await _loadPresets();
+    _renderPresetsDialog();
+  };
+
+  window._deleteExample = async function(eid) {
+    await apiFetch('/api/admin/llm/chat-presets/examples/' + eid, { method: 'DELETE' });
     await _loadPresets();
     _renderPresetsDialog();
   };
@@ -1354,15 +1417,18 @@
     $chatConvArea.style.display = 'flex';
     $convTitle.textContent = conv.title || 'New Chat';
 
-    // System prompt
-    if (conv.preset_id) {
-      var preset = _presets.find(function(p) { return p.id === conv.preset_id; });
-      if (preset && preset.system_prompt) {
-        $convSystemMsg.textContent = 'System: ' + preset.system_prompt;
-        $convSystemMsg.style.display = '';
-      } else {
-        $convSystemMsg.style.display = 'none';
+    // System prompt + examples
+    var preset = conv.preset_id ? _presets.find(function(p) { return p.id === conv.preset_id; }) : null;
+    if (preset && preset.system_prompt) {
+      var sysHtml = '<div style="margin-bottom:4px;">System: ' + escHtml(preset.system_prompt).substring(0, 200) + (preset.system_prompt.length > 200 ? '...' : '') + '</div>';
+      if (preset.examples && preset.examples.length) {
+        sysHtml += '<div style="margin-top:6px;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px;">Try:</div>';
+        preset.examples.forEach(function(ex) {
+          sysHtml += '<div style="cursor:pointer;padding:3px 6px;border-radius:3px;margin-bottom:2px;border:1px solid var(--border);font-size:11px;" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'" onclick="document.getElementById(\'chatInput\').value=this.textContent;document.getElementById(\'chatInput\').focus();">' + escHtml(ex.text) + '</div>';
+        });
       }
+      $convSystemMsg.innerHTML = sysHtml;
+      $convSystemMsg.style.display = '';
     } else {
       $convSystemMsg.style.display = 'none';
     }
@@ -1395,21 +1461,18 @@
   // ── New Chat ──
   document.getElementById('newChatBtn').addEventListener('click', function() {
     var dlg = document.getElementById('newChatDialog');
-    // Populate model select from running instances
-    var sel = document.getElementById('newChatModel');
+    var sel = document.getElementById('newChatInstance');
     sel.innerHTML = '';
-    var models = {};
     Object.values(_runningInstances).forEach(function(i) {
-      if (i.alive && !models[i.model]) {
-        models[i.model] = true;
+      if (i.alive) {
         var opt = document.createElement('option');
-        opt.value = i.model;
-        opt.textContent = i.model.replace(/\.gguf$/i, '');
+        opt.value = i.instance_id + '|' + i.model;
+        opt.textContent = i.model.replace(/\.gguf$/i, '') + ' (:' + i.port + ')';
         sel.appendChild(opt);
       }
     });
     if (!sel.options.length) {
-      showToast('No running instances. Start a model first.', 3000, 'error');
+      showToast('No running instances. Start a model in the Server tab first.', 3000, 'error');
       return;
     }
     _populatePresetSelects();
@@ -1417,9 +1480,12 @@
   });
 
   document.getElementById('newChatCreateBtn').addEventListener('click', async function() {
-    var model = document.getElementById('newChatModel').value;
+    var selVal = document.getElementById('newChatInstance').value;
+    if (!selVal) return;
+    var parts = selVal.split('|');
+    var instanceId = parts[0];
+    var model = parts[1];
     var presetId = document.getElementById('newChatPreset').value || undefined;
-    if (!model) return;
     document.getElementById('newChatDialog').close();
     try {
       var resp = await apiFetch('/api/admin/llm/conversations', {
@@ -1489,65 +1555,38 @@
     try {
       var resp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId + '/message', {
         method: 'POST',
-        body: { content: text, temperature: parseFloat($chatTemp.value) || 0.7, stream: true },
-        raw: true,
+        body: { content: text, temperature: parseFloat($chatTemp.value) || 0.7, stream: false },
       });
 
+      clearInterval(_timerInterval);
+
       if (!resp.ok) {
-        clearInterval(_timerInterval);
         var err = await resp.json().catch(function() { return {}; });
         showToast('Error: ' + (err.detail || resp.status), 5000, 'error');
-        userDiv.remove();  // remove optimistic user msg
+        userDiv.remove();
         _chatStreaming = false;
         $chatSendBtn.disabled = false;
         $chatSendBtn.textContent = 'Send';
         return;
       }
 
-      // Stream assistant response
+      var data = await resp.json();
+      var content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '(empty response)';
+
       var assistantDiv = document.createElement('div');
       assistantDiv.className = 'chat-msg assistant';
+      assistantDiv.textContent = content;
       $chatMessages.appendChild(assistantDiv);
 
-      var fullContent = '';
-      var reader = resp.body.getReader();
-      var decoder = new TextDecoder();
-      var buffer = '';
-
-      while (true) {
-        var result = await reader.read();
-        if (result.done) break;
-        buffer += decoder.decode(result.value, {stream: true});
-        var lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim();
-          if (!line || !line.startsWith('data:')) continue;
-          var payload = line.substring(5).trim();
-          if (payload === '[DONE]') continue;
-          try {
-            var chunk = JSON.parse(payload);
-            var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
-            if (delta && delta.content) {
-              fullContent += delta.content;
-              assistantDiv.textContent = fullContent;
-              $chatMessages.scrollTop = $chatMessages.scrollHeight;
-            }
-          } catch (_) {}
-        }
-      }
-
-      if (!fullContent) assistantDiv.textContent = '(empty response)';
-
       // Timer tag
-      clearInterval(_timerInterval);
       var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
       var timeTag = document.createElement('div');
       timeTag.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:2px;';
       timeTag.textContent = elapsed + 's';
       assistantDiv.appendChild(timeTag);
+      $chatMessages.scrollTop = $chatMessages.scrollHeight;
 
-      // Refresh conversation to update token count
+      // Refresh token count
       _loadConversations();
       var convResp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId);
       if (convResp.ok) {

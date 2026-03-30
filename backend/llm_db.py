@@ -38,7 +38,7 @@ def _gen_id() -> str:
 # ── Schema ───────────────────────────────────────────────────────────────────
 
 def init_llm_db():
-    """Create tables and seed defaults."""
+    """Create tables and indexes."""
     conn = _get_conn()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS chat_presets (
@@ -48,6 +48,16 @@ def init_llm_db():
             temperature   REAL DEFAULT 0.7,
             created_at    TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS chat_preset_examples (
+            id         TEXT PRIMARY KEY,
+            preset_id  TEXT NOT NULL,
+            text       TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (preset_id) REFERENCES chat_presets(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_examples_preset ON chat_preset_examples(preset_id);
 
         CREATE TABLE IF NOT EXISTS conversations (
             id               TEXT PRIMARY KEY,
@@ -65,47 +75,33 @@ def init_llm_db():
         CREATE INDEX IF NOT EXISTS idx_conv_model ON conversations(model);
         CREATE INDEX IF NOT EXISTS idx_conv_updated ON conversations(updated_at);
     """)
-    _seed_defaults(conn)
-
-
-def _seed_defaults(conn: sqlite3.Connection):
-    """Insert default presets if table is empty."""
-    count = conn.execute("SELECT COUNT(*) FROM chat_presets").fetchone()[0]
-    if count > 0:
-        return
-    now = _now()
-    conn.execute(
-        "INSERT INTO chat_presets (id, name, system_prompt, temperature, created_at) VALUES (?, ?, ?, ?, ?)",
-        ("prompt-engineer", "Prompt Engineer",
-         "You are an expert Stable Diffusion prompt engineer. "
-         "The user describes what they want in natural language (any language). "
-         "You respond ONLY with the optimized prompt in English, using comma-separated tags. "
-         "Include quality tags (masterpiece, best quality), subject description, style, lighting, composition. "
-         "No explanations unless the user explicitly asks. "
-         "When the user asks to modify, output the full updated prompt, not just the changes.",
-         0.7, now),
-    )
-    conn.execute(
-        "INSERT INTO chat_presets (id, name, system_prompt, temperature, created_at) VALUES (?, ?, ?, ?, ?)",
-        ("general", "General Chat",
-         "You are a helpful assistant. Answer concisely and clearly.",
-         0.7, now),
-    )
-    conn.commit()
 
 
 # ── Presets CRUD ─────────────────────────────────────────────────────────────
 
+def _attach_examples(preset: dict) -> dict:
+    """Attach examples list to a preset dict."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, text, sort_order FROM chat_preset_examples WHERE preset_id = ? ORDER BY sort_order",
+        (preset["id"],),
+    ).fetchall()
+    preset["examples"] = [dict(r) for r in rows]
+    return preset
+
+
 def list_presets() -> list[dict]:
     conn = _get_conn()
     rows = conn.execute("SELECT * FROM chat_presets ORDER BY name").fetchall()
-    return [dict(r) for r in rows]
+    return [_attach_examples(dict(r)) for r in rows]
 
 
 def get_preset(preset_id: str) -> dict | None:
     conn = _get_conn()
     row = conn.execute("SELECT * FROM chat_presets WHERE id = ?", (preset_id,)).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    return _attach_examples(dict(row))
 
 
 def upsert_preset(data: dict) -> dict:
@@ -126,7 +122,42 @@ def upsert_preset(data: dict) -> dict:
 
 def delete_preset(preset_id: str) -> bool:
     conn = _get_conn()
+    # Examples deleted by ON DELETE CASCADE
     cur = conn.execute("DELETE FROM chat_presets WHERE id = ?", (preset_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+# ── Preset Examples CRUD ─────────────────────────────────────────────────────
+
+def add_example(preset_id: str, text: str, sort_order: int = 0) -> dict:
+    conn = _get_conn()
+    eid = _gen_id()
+    if sort_order == 0:
+        # Auto: max sort_order + 1
+        row = conn.execute(
+            "SELECT MAX(sort_order) as mx FROM chat_preset_examples WHERE preset_id = ?",
+            (preset_id,),
+        ).fetchone()
+        sort_order = (row["mx"] or 0) + 1 if row else 1
+    conn.execute(
+        "INSERT INTO chat_preset_examples (id, preset_id, text, sort_order) VALUES (?, ?, ?, ?)",
+        (eid, preset_id, text, sort_order),
+    )
+    conn.commit()
+    return {"id": eid, "text": text, "sort_order": sort_order}
+
+
+def update_example(example_id: str, text: str) -> bool:
+    conn = _get_conn()
+    cur = conn.execute("UPDATE chat_preset_examples SET text = ? WHERE id = ?", (text, example_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def delete_example(example_id: str) -> bool:
+    conn = _get_conn()
+    cur = conn.execute("DELETE FROM chat_preset_examples WHERE id = ?", (example_id,))
     conn.commit()
     return cur.rowcount > 0
 
