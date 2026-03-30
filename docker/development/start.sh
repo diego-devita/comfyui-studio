@@ -56,9 +56,16 @@ fi
 # ── Symlink persistent dirs into STUDIO_DIR ──
 # The backend expects catalogs/, database/, assets/, llm/ under STUDIO_DIR.
 # We symlink them from the persistent data volume.
+# Only symlink dirs that are NOT bind-mounted from host.
+# backend, frontend, workflows, version.json are mounted directly — never touch them.
 for name in catalogs database assets llm presets; do
     target="${STUDIO_DIR}/${name}"
     source="${DATA_DIR}/${name}"
+    # Safety: skip if target is a real directory with content (likely a bind mount)
+    if [ -d "${target}" ] && [ ! -L "${target}" ] && [ "$(ls -A "${target}" 2>/dev/null)" ]; then
+        echo "      WARNING: ${target} is a non-empty directory, skipping symlink (possible bind mount)"
+        continue
+    fi
     if [ -e "${target}" ] || [ -L "${target}" ]; then
         rm -rf "${target}"
     fi
