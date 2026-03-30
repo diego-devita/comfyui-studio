@@ -691,9 +691,11 @@ async def restart_backend():
 async def telegram_bot_status():
     try:
         from telegram_bot import bot_status
-        return bot_status()
+        status = bot_status()
     except ImportError:
-        return {"running": False, "name": "", "started_at": None, "error": "python-telegram-bot not installed"}
+        status = {"running": False, "name": "", "started_at": None, "error": "python-telegram-bot not installed"}
+    status["notifications_enabled"] = _db.get_setting("TELEGRAM_NOTIFICATIONS", "0") == "1"
+    return status
 
 
 @router.post("/api/admin/telegram/start")
@@ -704,6 +706,14 @@ async def telegram_bot_start():
         return {"result": result}
     except ImportError:
         raise HTTPException(500, "python-telegram-bot not installed. Run: pip install python-telegram-bot")
+
+
+@router.post("/api/admin/telegram/notifications")
+async def telegram_notifications_toggle(request: Request):
+    body = await request.json()
+    enabled = body.get("enabled", False)
+    _db.set_setting("TELEGRAM_NOTIFICATIONS", "1" if enabled else "0")
+    return {"notifications_enabled": enabled}
 
 
 @router.post("/api/admin/telegram/stop")

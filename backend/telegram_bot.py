@@ -462,18 +462,20 @@ def start_bot() -> str:
                     BotCommand(cmd, desc) for cmd, desc in COMMANDS
                 ])
 
-                # Notify active contacts that bot is online
-                now_str = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
-                bot_name = os.environ.get("TELEGRAM_BOT_NAME", "ComfyUI Studio")
-                online_msg = f"🟢 {bot_name} is online — {now_str}"
-                for contact in _tdb.get_active_contacts():
-                    try:
-                        await _bot_app.bot.send_message(chat_id=contact["chat_id"], text=online_msg)
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        if "forbidden" in err_str or "blocked" in err_str:
-                            _tdb.set_blocked(contact["chat_id"])
-                        logger.warning(f"Failed to notify {contact['chat_id']}: {e}")
+                # Notify active contacts that bot is online (if notifications enabled)
+                import db as _db
+                if _db.get_setting("TELEGRAM_NOTIFICATIONS", "0") == "1":
+                    now_str = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
+                    bot_name = os.environ.get("TELEGRAM_BOT_NAME", "ComfyUI Studio")
+                    online_msg = f"🟢 {bot_name} is online — {now_str}"
+                    for contact in _tdb.get_active_contacts():
+                        try:
+                            await _bot_app.bot.send_message(chat_id=contact["chat_id"], text=online_msg)
+                        except Exception as e:
+                            err_str = str(e).lower()
+                            if "forbidden" in err_str or "blocked" in err_str:
+                                _tdb.set_blocked(contact["chat_id"])
+                            logger.warning(f"Failed to notify {contact['chat_id']}: {e}")
 
                 # Keep running until stopped
                 while _bot_app and _bot_started_at:

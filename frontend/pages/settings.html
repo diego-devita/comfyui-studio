@@ -343,6 +343,9 @@
       <h3>Telegram Bot</h3>
       <p id="telegramStatus">Loading...</p>
       <p style="font-size:10px;color:var(--muted);margin-top:4px;">Configure token and name in Environment Variables below, then start.</p>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="telegramNotifToggle"> Notifications
+      </label>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;">
       <button class="btn" id="telegramStartBtn" disabled>Start</button>
@@ -730,11 +733,22 @@
   var $tgStatus = document.getElementById('telegramStatus');
   var $tgStartBtn = document.getElementById('telegramStartBtn');
   var $tgStopBtn = document.getElementById('telegramStopBtn');
+  var $tgNotifToggle = document.getElementById('telegramNotifToggle');
+
+  $tgNotifToggle.addEventListener('change', function() {
+    apiFetch('/api/admin/telegram/notifications', {
+      method: 'POST',
+      body: { enabled: this.checked }
+    }).then(function() {
+      showToast('Notifications ' + ($tgNotifToggle.checked ? 'enabled' : 'disabled'), 2000);
+    });
+  });
 
   function refreshTelegramStatus() {
     apiFetch('/api/admin/telegram/status')
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        $tgNotifToggle.checked = !!data.notifications_enabled;
         if (data.running) {
           var info = 'Running since ' + (data.started_at || '?');
           if (data.name) info += ' — <a href="https://t.me/' + data.name + '" target="_blank" style="color:var(--accent);">@' + data.name + '</a>';
