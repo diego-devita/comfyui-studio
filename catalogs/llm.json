@@ -21,6 +21,7 @@
             "multilingual"
           ],
           "context_default": 8192,
+          "context_max": 131072,
           "quant": "Q4_K_M"
         },
         {
@@ -38,6 +39,7 @@
             "multilingual"
           ],
           "context_default": 8192,
+          "context_max": 131072,
           "quant": "Q4_K_M"
         },
         {
@@ -54,6 +56,7 @@
             "8b"
           ],
           "context_default": 8192,
+          "context_max": 131072,
           "quant": "Q4_K_M"
         }
       ]
