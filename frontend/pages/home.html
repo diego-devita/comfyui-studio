@@ -721,7 +721,8 @@
         return;
       }
 
-      // No updates — show overlay, then retry or stop
+      // No updates — refresh table with remote version data, then show overlay
+      initialLoad();
       showOverlay('Everything is up to date.', 'var(--muted)', 5000);
 
       if (attempt >= MAX_ATTEMPTS) {
