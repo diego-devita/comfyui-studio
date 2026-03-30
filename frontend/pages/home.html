@@ -346,7 +346,7 @@
           <th>Version</th>
           <th>Date</th>
           <th>Status</th>
-          <th>Latest <span class="help-tip" id="latestHelpTip" title="The most recent version available in the remote repository, from the last Check for Updates.">?</span></th>
+          <th style="text-align:center;">Latest <span class="help-tip" id="latestHelpTip" title="The most recent version available in the remote repository, from the last Check for Updates.">?</span></th>
           <th>Update</th>
         </tr>
       </thead>
@@ -488,7 +488,7 @@
         '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
         '<td>' + dotHtml(color, displayStatus) + '</td>' +
-        '<td data-latest-comp="' + escHtml(c.name) + '">' + latestHtml + '</td>' +
+        '<td data-latest-comp="' + escHtml(c.name) + '" style="text-align:center;">' + latestHtml + '</td>' +
         '<td>' + toggleHtml + '</td>';
       $compBody.appendChild(row);
     });

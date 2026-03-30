@@ -416,6 +416,18 @@ async def system_update(request: Request):
         except Exception:
             pass
 
+        # DEV_MODE: read local version.json as "remote", no git, no file copy
+        if DEV_MODE:
+            remote_ver = _load_version()
+            remote_ver["_checked_at"] = _now_rome().strftime("%Y-%m-%d %H:%M:%S")
+            remote_path = STUDIO_DIR / "remote_version.json"
+            remote_path.write_text(json.dumps(remote_ver, indent=2))
+            return {
+                "updated": [], "restart_needed": False,
+                "message": "DEV MODE — versions read from local version.json",
+                "debug": {"local_version_json": remote_ver, "remote_version_json": remote_ver},
+            }
+
         # Step 1: git fetch to get latest remote state (no working tree change)
         if not REPO_DIR.exists():
             # First time — clone

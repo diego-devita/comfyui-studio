@@ -93,12 +93,50 @@ Or use the shortcut script (from repo root):
 | Aspect | Production | Development |
 |--------|-----------|-------------|
 | Bootstrap | `bootstrap.py` clones repo, copies to working dirs | Repo mounted directly, no bootstrap |
-| ComfyUI | Real ComfyUI with GPU | Stub server (fake responses) |
-| DEV_MODE | `false` | `true` (stubs downloads, GPU stats, LLM) |
+| ComfyUI | Real ComfyUI with GPU | Stub server (fake responses on port 8188) |
+| DEV_MODE | `false` | `true` |
 | Code reload | Manual restart or in-app update | Automatic hot reload on file changes |
 | Database browser | None | sqlite-web on port 8002 |
 | GPU | Required | Not required |
 | Image size | ~25GB | ~200MB |
+| Check for Updates | Git fetch from remote repo, compares, copies changed files | Reads local version.json as "remote", no git, no file copy |
+| DEV ribbon | Not shown | Yellow "DEV" ribbon in top-left corner of every page |
+
+### DEV_MODE Stubs
+
+When `DEV_MODE=true`, several subsystems are stubbed to work without real infrastructure:
+
+**Downloads (`download.py`)**
+Model downloads don't actually fetch files. Instead, they create empty placeholder files after a configurable delay (`DEV_DOWNLOAD_DELAY`, default 5 seconds). Progress events are emitted as if a real download were happening. This lets you test the download queue, status polling, and UI without waiting for multi-GB files.
+
+**ComfyUI Stub (`comfyui_stub.py`)**
+A fake HTTP server on port 8188 that responds to all ComfyUI API endpoints:
+- `GET /system_stats` — returns fake GPU stats (RTX 4090, 24GB VRAM)
+- `GET /object_info` — returns a minimal node registry
+- `POST /prompt` — accepts any workflow JSON, returns a fake prompt_id
+- `GET /history/{prompt_id}` — returns a fake completed job after a short delay
+- `POST /upload/image` — accepts uploads, saves to `STUDIO_DIR/assets/input/`
+- WebSocket `/ws` — sends fake execution progress messages
+
+**LLM Server (`llm_server.py`)**
+When starting a model in DEV_MODE, no real llama-server process is spawned. Instead:
+- The instance is registered in the registry with a fake port
+- `_is_running()` returns `true` for registered instances
+- Health checks return `{"status": "ok"}`
+- Chat requests return stub responses (both streaming and non-streaming)
+- Log files contain a single "DEV MODE stub started" line
+
+**GPU & Telemetry (`system_api.py`)**
+- GPU stats return fake values (0% load, 24GB VRAM)
+- Disk stats use standard `statvfs` (not RunPod volume API)
+- `HOSTING` is not auto-detected (no `RUNPOD_POD_ID` in dev)
+
+**Check for Updates**
+- Reads the local `version.json` (from the mounted repo) as if it were the remote version
+- No git clone, no git fetch, no file copying
+- Saves `remote_version.json` with `_checked_at` timestamp (same as production)
+- Always reports "Everything up to date" since local == "remote"
+- Useful for testing the version comparison UI without a real remote repo
 
 ## Ports
 
