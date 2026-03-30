@@ -202,8 +202,9 @@ _runs: dict[str, PipelineContext] = {}  # run_id → context
 
 
 def check_requirements(pipeline_mod) -> list[dict]:
-    """Check if all required models are running. Returns list of {requirement, status, instance}."""
+    """Check if all required models are running. Returns list of {requirement, status, instance, model_present}."""
     from llm_server import _get_running_instances
+    from config import LLM_MODELS_DIR
 
     instances = _get_running_instances()
     results = []
@@ -211,14 +212,15 @@ def check_requirements(pipeline_mod) -> list[dict]:
         found = None
         for inst in instances:
             if inst["model"] == req["model"] and inst.get("alive"):
-                # Check ctx_size
                 ctx = inst.get("config", {}).get("ctx_size", 0)
                 if ctx >= req.get("min_ctx", 0):
                     found = inst
                     break
+        model_present = (LLM_MODELS_DIR / req["model"]).exists()
         results.append({
             "requirement": req,
             "satisfied": found is not None,
+            "model_present": model_present,
             "instance": found,
         })
     return results

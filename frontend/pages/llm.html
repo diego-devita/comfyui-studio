@@ -561,12 +561,12 @@
   <a href="/admin/nodes" class="nav-link">Nodes</a>
   <a href="/admin/models" class="nav-link">Models</a>
   <a href="/admin/loras" class="nav-link">LoRAs</a>
+  <a href="/admin/llm" class="nav-link active">LLM</a>
   <a href="/admin/workflows" class="nav-link">Workflows</a>
   <a href="/admin/presets" class="nav-link">Presets</a>
   <a href="/admin/queue" class="nav-link">Queue</a>
   <a href="/admin/history" class="nav-link">History</a>
   <a href="/admin/assets" class="nav-link">Assets</a>
-  <a href="/admin/llm" class="nav-link active">LLM</a>
   <a href="/admin/settings" class="nav-link"><span class="icon icon-gear icon-lg"></span></a>
   <a href="#" class="nav-link nav-activity" id="activityToggle" onclick="event.preventDefault()"><span class="icon icon-bell icon-lg"></span><span class="activity-dot" id="activityDot"></span></a>
   <a id="docsLink" href="#" target="_blank" class="nav-link" title="Documentation"><span class="icon icon-circle-question icon-lg"></span></a>
@@ -598,6 +598,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;min-width:50px;">Status</span>
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-status="present" checked><span>Downloaded</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-status="downloading" checked><span>Downloading</span></label>
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-status="missing" checked><span>Missing</span></label>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -914,6 +915,10 @@
       });
       renderModels();
       updateLaunchModelSelect();
+      // Auto-start download poll if any model is downloading
+      if (_models.some(function(m) { return m.status === 'downloading'; })) {
+        startDownloadPoll();
+      }
     } catch (e) {
       if (e.message !== 'auth') {
         $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--error);text-align:center;padding:24px 0;">Failed to load models</div>';
@@ -930,7 +935,8 @@
     var filtered = _models.filter(function(m) {
       var status = m.status || 'missing';
       var statusMatch = (status === 'present' && filters.statuses.indexOf('present') >= 0) ||
-                        (status !== 'present' && filters.statuses.indexOf('missing') >= 0);
+                        (status === 'downloading' && filters.statuses.indexOf('downloading') >= 0) ||
+                        (status !== 'present' && status !== 'downloading' && filters.statuses.indexOf('missing') >= 0);
       var family = _getModelFamily(m);
       var familyMatch = filters.families.indexOf(family) >= 0;
       return statusMatch && familyMatch;
@@ -952,7 +958,13 @@
       var badgeClass, badgeText;
       if (status === 'downloading') {
         badgeClass = 'downloading';
-        badgeText = progress != null ? 'Downloading ' + progress + '%' : 'Downloading';
+        var dlBytes = m.on_disk_bytes || 0;
+        var dlTotal = m.expected_bytes || 0;
+        if (dlTotal > 0) {
+          badgeText = formatSize(dlBytes) + ' / ' + formatSize(dlTotal) + (progress != null ? ' (' + progress + '%)' : '');
+        } else {
+          badgeText = progress != null ? 'Downloading ' + progress + '%' : 'Downloading';
+        }
       } else if (status === 'present') {
         badgeClass = 'present';
         badgeText = 'Downloaded';
@@ -975,6 +987,13 @@
       var fileEsc = escHtml(m.file).replace(/'/g, '&#39;');
       var actionHtml = '';
 
+      // Progress bar for downloading
+      var progressBarHtml = '';
+      if (status === 'downloading' && progress != null) {
+        progressBarHtml = '<div style="width:100%;height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden;">' +
+          '<div style="height:100%;background:var(--accent);border-radius:2px;width:' + Math.min(100, progress) + '%;transition:width 0.5s;"></div></div>';
+      }
+
       if (status === 'present') {
         actionHtml = '<button class="btn btn--sm btn--danger" onclick="window._llmDeleteModel(\'' + fileEsc + '\')">Delete</button>';
       } else if (status === 'downloading') {
@@ -987,7 +1006,7 @@
 
       html +=
         '<div class="llm-model-card">' +
-          '<div class="model-info">' +
+          '<div class="model-info" style="flex:1;min-width:0;">' +
             '<div class="model-name">' + escHtml(name) +
               (m.hf_repo ? ' <a href="https://huggingface.co/' + m.hf_repo + '" target="_blank" style="text-decoration:none;color:#666;" title="View on HuggingFace"><span class="icon icon-external-link icon-sm"></span></a>' : '') +
             '</div>' +
@@ -995,8 +1014,9 @@
               (metaParts.length ? '<span>' + escHtml(metaParts.join(' / ')) + '</span>' : '') +
               tagsHtml +
             '</div>' +
+            progressBarHtml +
           '</div>' +
-          '<span class="model-badge ' + badgeClass + '">' + escHtml(badgeText) + '</span>' +
+          '<span class="model-badge ' + badgeClass + '">' + badgeText + '</span>' +
           '<div class="model-actions">' + actionHtml + '</div>' +
         '</div>';
     });
@@ -1147,7 +1167,7 @@
           _downloadPollTimer = null;
         }
       });
-    }, 3000);
+    }, 2000);
   }
 
   // ── Load Status (running instances) ──
@@ -1914,12 +1934,42 @@
       if (!ok) allMet = false;
       var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:' + (ok ? 'var(--success)' : 'var(--error)') + ';"></span>';
       var label = r.requirement.label + ' — ' + r.requirement.model.replace(/\.gguf$/i, '');
-      if (!ok) label += ' (not running, min ctx: ' + (r.requirement.min_ctx || 0) + ')';
-      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:4px;">' + dot + escHtml(label) + '</div>';
+      var launchBtn = '';
+      if (!ok) {
+        var minCtx = r.requirement.min_ctx || 8192;
+        var modelFile = escHtml(r.requirement.model).replace(/'/g, '&#39;');
+        if (r.model_present) {
+          launchBtn = ' <button class="btn btn--sm" style="margin-left:8px;" onclick="window._pipelineLaunchModel(\'' + modelFile + '\',' + minCtx + ')">Launch</button>';
+        } else {
+          launchBtn = ' <button class="btn btn--sm" style="margin-left:8px;" disabled title="Model not downloaded">Launch</button>';
+        }
+        label += ' (not running, min ctx: ' + minCtx + ')';
+      }
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;">' + dot + escHtml(label) + launchBtn + '</div>';
     });
     document.getElementById('pipelineReqs').innerHTML = html;
     document.getElementById('pipelineRunBtn').disabled = !allMet;
   }
+
+  window._pipelineLaunchModel = async function(modelFile, minCtx) {
+    try {
+      var resp = await apiFetch('/api/admin/llm/start', {
+        method: 'POST',
+        body: { model: modelFile, ctx_size: minCtx, n_gpu_layers: 99, threads: 4 },
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Launch failed: ' + (err.detail || resp.status), 5000, 'error');
+        return;
+      }
+      var data = await resp.json();
+      showToast('Launched ' + modelFile.replace(/\.gguf$/i, '') + ' on port ' + data.port, 3000);
+      // Refresh requirements after launch
+      setTimeout(function() { window._openPipeline(_pipelineData.id); }, 3000);
+    } catch (e) {
+      showToast('Launch error: ' + e.message, 5000, 'error');
+    }
+  };
 
   function _renderPipelineInputs() {
     var inputs = _pipelineData.inputs || [];

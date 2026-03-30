@@ -21,7 +21,7 @@ PIPELINE = {
         },
         {
             "id": "text_model",
-            "model": "Huihui-Qwen3.5-27B-abliterated.Q5_K_M.gguf",
+            "model": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
             "label": "Text model (Scene Generator)",
             "preset": "3c37f623145d",
             "min_ctx": 16384,
