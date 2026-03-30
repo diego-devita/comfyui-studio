@@ -151,7 +151,8 @@ async def flush_status():
     import db as _db
     import gallery_db as _gdb
 
-    db_paths = [("jobs", str(_db.DB_PATH)), ("gallery", str(_gdb.GALLERY_DB_PATH))]
+    import telegram_db as _tdb
+    db_paths = [("studio", str(_db.DB_PATH)), ("gallery", str(_gdb.GALLERY_DB_PATH)), ("telegram", str(_tdb.DB_PATH))]
     results = {}
     for name, path in db_paths:
         try:
@@ -189,19 +190,14 @@ async def prepare_shutdown():
 
     errors = []
 
-    # Checkpoint gallery DB
-    try:
-        conn = _gdb._get_conn()
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except Exception as e:
-        errors.append(f"gallery: {e}")
-
-    # Checkpoint jobs DB
-    try:
-        conn = _db._get_conn()
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except Exception as e:
-        errors.append(f"jobs: {e}")
+    # Checkpoint all databases
+    import telegram_db as _tdb
+    for name, get_conn in [("studio", _db._get_conn), ("gallery", _gdb._get_conn), ("telegram", _tdb._get_conn)]:
+        try:
+            conn = get_conn()
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception as e:
+            errors.append(f"{name}: {e}")
 
     # Stop any running gallery downloads
     from loras_api import _gallery_state

@@ -391,7 +391,7 @@
   <div class="studio-dialog-body">
     <h4>What it does</h4>
     <ul>
-      <li>Runs <code>PRAGMA wal_checkpoint(TRUNCATE)</code> on both SQLite databases (jobs and gallery), merging WAL files into the main <code>.db</code> files</li>
+      <li>Runs <code>PRAGMA wal_checkpoint(TRUNCATE)</code> on all three SQLite databases (studio, gallery, telegram), merging WAL files into the main <code>.db</code> files</li>
       <li>Stops any running gallery image downloads</li>
     </ul>
 
@@ -403,8 +403,9 @@
 
     <h4>What can go wrong without flushing</h4>
     <ul>
-      <li><strong>Jobs &amp; events database</strong> (<code>db/studio.db</code>) — No recovery mechanism. Contains job records (prompt_id, status, params, timestamps) and the activity event log. Recent entries can be permanently lost. In the worst case the DB file becomes unreadable.</li>
-      <li><strong>Gallery database</strong> (<code>db/gallery.db</code>) — Has built-in recovery: at startup, if corruption is detected, it deletes the DB and rebuilds from the image files on disk. No real data loss, but the rebuild takes time.</li>
+      <li><strong>Studio database</strong> (<code>database/studio.db</code>) — No recovery mechanism. Contains job records, settings, events, and saved prompts. Recent entries can be permanently lost. In the worst case the DB file becomes unreadable.</li>
+      <li><strong>Gallery database</strong> (<code>assets/images/gallery.db</code>) — Has built-in recovery: at startup, if corruption is detected, it deletes the DB and rebuilds from the image files on disk. No real data loss, but the rebuild takes time.</li>
+      <li><strong>Telegram database</strong> (<code>database/telegram.db</code>) — Stores Telegram bot contacts. If lost, contacts are re-created when users message the bot again. No critical data loss.</li>
       <li><strong>Downloads in progress</strong> — Interrupted gallery downloads leave partial files. They can be retried.</li>
       <li><strong>Job output markers</strong> (<code>.incomplete</code> files) — If a job was running, the marker stays. Assets page will show an ".incomplete" badge until manually cleaned.</li>
       <li><strong>Anything else using the DB</strong> — Any backend component that writes to SQLite (e.g. model download state tracking) follows the same WAL logic. Unmerged writes in the WAL file are lost if the process dies before checkpoint.</li>
