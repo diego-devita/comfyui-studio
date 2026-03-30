@@ -65,14 +65,23 @@ for i in $(seq 1 60); do
     sleep 2
 done
 
-# ── STEP 3: Start Studio backend ─────────────────────────────────
-echo "[3/3] Starting Studio backend on port 8000..."
-cd "${STUDIO_DIR}/backend"
-uvicorn main:app \
-    --host 0.0.0.0 \
-    --port ${STUDIO_PORT} \
-    --workers 1 \
-    2>&1 | tee -a /var/log/admin.log &
+# ── STEP 3: Start Studio backend (auto-restart loop) ─────────────
+echo "[3/3] Starting Studio backend on port ${STUDIO_PORT}..."
+
+_studio_loop() {
+    while true; do
+        echo "[studio] Backend starting..."
+        cd "${STUDIO_DIR}/backend"
+        uvicorn main:app \
+            --host 0.0.0.0 \
+            --port ${STUDIO_PORT} \
+            --workers 1 \
+            2>&1 | tee -a /var/log/admin.log
+        echo "[studio] Backend exited — restarting in 2s..."
+        sleep 2
+    done
+}
+_studio_loop &
 
 echo "=== Services started ==="
 echo "    ComfyUI Studio: https://PODID-${STUDIO_PORT}.proxy.runpod.net"
