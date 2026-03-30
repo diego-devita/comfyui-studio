@@ -36,6 +36,33 @@ router = APIRouter()
 
 
 
+# ── Graceful restart ─────────────────────────────────────────────────────────
+
+def _graceful_restart():
+    """Stop Telegram bot cleanly, spawn new uvicorn, then exit."""
+    import sys
+    # Stop telegram bot if running
+    try:
+        from telegram_bot import stop_bot, bot_running
+        if bot_running():
+            stop_bot()
+    except Exception:
+        pass
+    # Spawn replacement process
+    port = os.environ.get("STUDIO_PORT", "8000")
+    subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "main:app",
+         "--host", "0.0.0.0", "--port", port, "--workers", "1"],
+        cwd=str(BACKEND_DIR),
+        start_new_session=True,
+        stdout=open("/var/log/admin.log", "a"),
+        stderr=subprocess.STDOUT,
+    )
+    # Give replacement a moment to bind the port
+    time.sleep(0.5)
+    os._exit(0)
+
+
 # ── Disk usage helpers ───────────────────────────────────────────────────────
 
 _cached_volume_size = 0
@@ -609,15 +636,7 @@ async def system_update(request: Request):
         if restart_needed:
             async def _restart():
                 await asyncio.sleep(1)
-                import sys, subprocess
-                port = os.environ.get("STUDIO_PORT", "8000")
-                subprocess.Popen(
-                    [sys.executable, "-m", "uvicorn", "main:app",
-                     "--host", "0.0.0.0", "--port", port, "--workers", "1"],
-                    cwd=str(BACKEND_DIR),
-                    start_new_session=True,
-                )
-                os._exit(0)
+                _graceful_restart()
             asyncio.get_event_loop().create_task(_restart())
 
         return result
@@ -670,15 +689,7 @@ async def restart_backend():
 
     async def _do_restart():
         await asyncio.sleep(1)
-        import sys, subprocess
-        port = os.environ.get("STUDIO_PORT", "8000")
-        subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "main:app",
-             "--host", "0.0.0.0", "--port", port, "--workers", "1"],
-            cwd=str(BACKEND_DIR),
-            start_new_session=True,
-        )
-        os._exit(0)
+        _graceful_restart()
 
     asyncio.get_event_loop().create_task(_do_restart())
     return {"message": "Restarting..."}
