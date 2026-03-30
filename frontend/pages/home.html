@@ -8,6 +8,14 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
+  .help-tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--border); color: var(--muted);
+    font-size: 9px; font-weight: 700; font-style: normal;
+    cursor: help; vertical-align: middle; margin-left: 4px;
+  }
+  .help-tip:hover { background: var(--accent); color: var(--bg); }
   /* Home page: logo has no small, uses version-tag instead */
   .logo { white-space: normal; }
 
@@ -338,6 +346,7 @@
           <th>Version</th>
           <th>Date</th>
           <th>Status</th>
+          <th>Latest <span class="help-tip" title="The most recent version available in the remote repository. Fetched when you open this page. If it differs from your current version, an update is available for that component.">?</span></th>
           <th>Update</th>
         </tr>
       </thead>
@@ -389,6 +398,34 @@
   const $nodesSub     = document.getElementById('nodesSub');
   const $comfyStatus  = document.getElementById('comfyStatus');
   const $diskInfo     = document.getElementById('diskInfo');
+
+  var _remoteVersions = {}; // component name → remote version
+
+  // ── Fetch remote versions ──
+  (function() {
+    apiFetch('/api/admin/system/remote-version')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data && data.remote && data.remote.components) {
+          var comps = data.remote.components;
+          for (var k in comps) {
+            _remoteVersions[k] = comps[k].version;
+          }
+          // Re-render table if already loaded
+          if ($compBody.children.length > 0) {
+            document.querySelectorAll('[data-latest-comp]').forEach(function(td) {
+              var name = td.dataset.latestComp;
+              var rv = _remoteVersions[name];
+              if (rv != null) {
+                var display = typeof rv === 'number' ? '#' + rv : rv;
+                td.innerHTML = '<span class="help-tip" title="Latest available: ' + display + '">?</span>';
+              }
+            });
+          }
+        }
+      })
+      .catch(function() {});
+  })();
 
   // ── Status dot helper ──
   function dotHtml(color, text) {
@@ -448,11 +485,15 @@
         var checked = _defaultUnchecked[c.name] ? '' : 'checked';
         toggleHtml = '<label class="toggle"><input type="checkbox" data-comp="' + escHtml(c.name) + '" ' + checked + '><span class="toggle-slider"></span></label>';
       }
+      var rv = _remoteVersions[c.name];
+      var latestDisplay = rv != null ? (typeof rv === 'number' ? '#' + rv : rv) : '...';
+      var latestHtml = '<span class="help-tip" title="Latest available: ' + escHtml(String(latestDisplay)) + '">?</span>';
       row.innerHTML =
         '<td>' + escHtml(displayName) + eyeHtml + '</td>' +
         '<td>' + escHtml(displayVersion) + '</td>' +
         '<td>' + escHtml(displayDate) + '</td>' +
         '<td>' + dotHtml(color, displayStatus) + '</td>' +
+        '<td data-latest-comp="' + escHtml(c.name) + '">' + latestHtml + '</td>' +
         '<td>' + toggleHtml + '</td>';
       $compBody.appendChild(row);
     });
