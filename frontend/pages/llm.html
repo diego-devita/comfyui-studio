@@ -1800,16 +1800,15 @@
     }, 100);
 
     try {
-      var msgBody = { content: text || '', temperature: parseFloat($chatTemp.value) || 0.7, stream: false };
+      var msgBody = { content: text || '', temperature: parseFloat($chatTemp.value) || 0.7, stream: true };
       if (imageId) msgBody.image_id = imageId;
       var resp = await apiFetch('/api/admin/llm/conversations/' + _currentConvId + '/message', {
         method: 'POST',
         body: msgBody,
       });
 
-      clearInterval(_timerInterval);
-
       if (!resp.ok) {
+        clearInterval(_timerInterval);
         var err = await resp.json().catch(function() { return {}; });
         showToast('Error: ' + (err.detail || resp.status), 5000, 'error');
         userDiv.remove();
@@ -1819,14 +1818,42 @@
         return;
       }
 
-      var data = await resp.json();
-      var content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '(empty response)';
-
+      // Stream assistant response
       var assistantDiv = document.createElement('div');
       assistantDiv.className = 'chat-msg assistant';
-      assistantDiv.textContent = content;
       $chatMessages.appendChild(assistantDiv);
 
+      var fullContent = '';
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, {stream: true});
+        var lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (var si = 0; si < lines.length; si++) {
+          var line = lines[si].trim();
+          if (!line || !line.startsWith('data:')) continue;
+          var sPayload = line.substring(5).trim();
+          if (sPayload === '[DONE]') continue;
+          try {
+            var chunk = JSON.parse(sPayload);
+            var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            if (delta && delta.content) {
+              fullContent += delta.content;
+              assistantDiv.textContent = fullContent;
+              $chatMessages.scrollTop = $chatMessages.scrollHeight;
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (!fullContent) assistantDiv.textContent = '(empty response)';
+
+      clearInterval(_timerInterval);
       // Timer tag
       var elapsed = ((performance.now() - _sendStart) / 1000).toFixed(1);
       var timeTag = document.createElement('div');
@@ -2076,7 +2103,7 @@
 
       var resp = await apiFetch(proxyBase + 'v1/chat/completions', {
         method: 'POST',
-        body: { messages: apiMessages, temperature: 0.7, stream: false },
+        body: { messages: apiMessages, temperature: 0.7, stream: true },
       });
 
       var pending = document.getElementById('pbPending_' + inputId);
@@ -2088,21 +2115,51 @@
         return;
       }
 
-      var data = await resp.json();
-      var reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      // Stream response token by token
+      var replyDiv = document.createElement('div');
+      replyDiv.style.cssText = 'color:var(--accent);margin:4px 0;';
+      replyDiv.innerHTML = '<b>AI:</b> ';
+      msgs.appendChild(replyDiv);
+      var replySpan = document.createElement('span');
+      replyDiv.appendChild(replySpan);
 
-      _pbHistory[inputId].push({role: 'assistant', content: reply});
-      msgs.innerHTML += '<div style="color:var(--accent);margin:4px 0;"><b>AI:</b> ' + escHtml(reply) + '</div>';
-      msgs.scrollTop = msgs.scrollHeight;
+      var fullReply = '';
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, {stream: true});
+        var lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li].trim();
+          if (!line || !line.startsWith('data:')) continue;
+          var payload = line.substring(5).trim();
+          if (payload === '[DONE]') continue;
+          try {
+            var chunk = JSON.parse(payload);
+            var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            if (delta && delta.content) {
+              fullReply += delta.content;
+              replySpan.textContent = fullReply;
+              msgs.scrollTop = msgs.scrollHeight;
+            }
+          } catch (_) {}
+        }
+      }
+
+      _pbHistory[inputId].push({role: 'assistant', content: fullReply});
 
       // Check if reply contains PROMPT:
-      var promptMatch = reply.match(/PROMPT:\s*([\s\S]+)/i);
+      var promptMatch = fullReply.match(/PROMPT:\s*([\s\S]+)/i);
       if (promptMatch) {
         var extracted = promptMatch[1].trim();
         var textarea = document.querySelector('[data-pipeline-input="' + inputId + '"]');
         if (textarea) textarea.value = extracted;
         showToast('Prompt extracted!', 2000, 'success');
-        // Auto-close after a moment
         setTimeout(function() { window._closePromptBuilder(inputId); }, 1500);
       }
     } catch (e) {

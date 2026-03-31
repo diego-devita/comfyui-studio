@@ -355,7 +355,8 @@ async def conversation_message(conv_id: str, request: Request):
                 async with httpx.AsyncClient(timeout=300) as client:
                     async with client.stream("POST", f"http://127.0.0.1:{port}/v1/chat/completions", json=payload) as resp:
                         async for line in resp.aiter_lines():
-                            yield line + "\n"
+                            if line.strip():
+                                yield line + "\n\n"
                             if line.startswith("data:"):
                                 data_str = line[5:].strip()
                                 if data_str and data_str != "[DONE]":

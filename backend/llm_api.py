@@ -387,7 +387,8 @@ async def llm_proxy(instance_id: str, path: str, request: Request):
                         async def _stream():
                             async with client.stream("POST", target_url, json=payload, headers=headers) as resp:
                                 async for line in resp.aiter_lines():
-                                    yield line + "\n"
+                                    if line.strip():
+                                        yield line + "\n\n"
                         return StreamingResponse(_stream(), media_type="text/event-stream",
                                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
                 r = await client.post(target_url, content=body, headers=headers)
