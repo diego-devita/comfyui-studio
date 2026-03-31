@@ -687,7 +687,9 @@
       var resp = await apiFetch('/api/admin/assets/sync-inputs', {method: 'POST'});
       if (resp.ok) {
         var data = await resp.json();
-        showToast('Synced: ' + data.added + ' new file(s) tracked', 3000);
+        var msg = 'Synced: ' + data.added + ' added';
+        if (data.deduped) msg += ', ' + data.deduped + ' duplicates removed';
+        showToast(msg, 5000);
         loadInputStats();
       }
     } catch (e) {

@@ -188,10 +188,14 @@ def sync_input_assets() -> dict:
     conn = _db._get_conn()
     comfyui_input = Path(COMFYUI_DIR) / "input"
 
-    # Get all filenames already in DB
-    existing = set()
-    for row in conn.execute("SELECT filename FROM input_assets").fetchall():
-        existing.add(row[0])
+    # Build hash index from DB records
+    existing_by_name = {}  # filename → {sha256, size}
+    hash_to_canonical = {}  # "sha256:size" → filename (first one wins = canonical)
+    for row in conn.execute("SELECT filename, sha256, size FROM input_assets").fetchall():
+        existing_by_name[row[0]] = {"sha256": row[1], "size": row[2]}
+        hkey = f"{row[1]}:{row[2]}"
+        if hkey not in hash_to_canonical:
+            hash_to_canonical[hkey] = row[0]
 
     added = 0
     deduped = 0
@@ -199,55 +203,68 @@ def sync_input_assets() -> dict:
     files_on_disk = 0
     now = _now_rome().strftime("%Y-%m-%d %H:%M")
 
+    # Collect all media files first (so we can iterate safely while deleting)
+    media_files = []
     for f in ASSETS_INPUT_DIR.iterdir():
         if not f.is_file():
             continue
         ext = f.suffix.lower()
-        if ext not in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm"):
-            continue
+        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm"):
+            media_files.append(f)
+
+    for f in media_files:
+        ext = f.suffix.lower()
         files_on_disk += 1
 
-        if f.name in existing:
-            continue
-
-        # Calculate hash
+        # Calculate hash for every file (even if in DB — needed for dedup)
         data = f.read_bytes()
         sha256 = _hash_bytes(data)
         size = len(data)
+        hkey = f"{sha256}:{size}"
 
-        # Check if same hash+size exists under different name
-        canonical = _find_by_hash(sha256, size)
-        if canonical:
-            # This file is a duplicate — rewrite deps and delete
-            dup_name = f.name
-            canon_name = canonical["filename"]
-            _rewrite_dependencies(conn, dup_name, canon_name, PRESETS_DIR)
-            # Delete from assets/input/
+        # Is there already a canonical file with this hash?
+        canon_name = hash_to_canonical.get(hkey)
+
+        if canon_name and canon_name != f.name:
+            # This file is a duplicate of canon_name — rewrite deps and delete
+            _rewrite_dependencies(conn, f.name, canon_name, PRESETS_DIR)
+            # Remove DB record if exists
+            conn.execute("DELETE FROM input_assets WHERE filename = ?", (f.name,))
+            # Delete from disk
             f.unlink(missing_ok=True)
-            # Delete from ComfyUI/input/
-            comfy_dup = comfyui_input / dup_name
+            comfy_dup = comfyui_input / f.name
             if comfy_dup.exists():
                 comfy_dup.unlink(missing_ok=True)
             deduped += 1
-            removed.append({"duplicate": dup_name, "canonical": canon_name})
+            removed.append({"duplicate": f.name, "canonical": canon_name})
             files_on_disk -= 1
             continue
 
-        mime = "image/png"
-        if ext in (".jpg", ".jpeg"):
-            mime = "image/jpeg"
-        elif ext == ".gif":
-            mime = "image/gif"
-        elif ext == ".webp":
-            mime = "image/webp"
-        elif ext in (".mp4", ".webm"):
-            mime = "video/" + ext[1:]
+        # Not a duplicate — register if not in DB
+        if f.name not in existing_by_name:
+            mime = "image/png"
+            if ext in (".jpg", ".jpeg"):
+                mime = "image/jpeg"
+            elif ext == ".gif":
+                mime = "image/gif"
+            elif ext == ".webp":
+                mime = "image/webp"
+            elif ext in (".mp4", ".webm"):
+                mime = "video/" + ext[1:]
 
-        conn.execute("""
-            INSERT INTO input_assets (filename, sha256, size, original_name, source, mime_type, comfyui_synced, created_at)
-            VALUES (?, ?, ?, ?, 'scan', ?, 1, ?)
-        """, (f.name, sha256, size, f.name, mime, now))
-        added += 1
+            conn.execute("""
+                INSERT INTO input_assets (filename, sha256, size, original_name, source, mime_type, comfyui_synced, created_at)
+                VALUES (?, ?, ?, ?, 'scan', ?, 1, ?)
+            """, (f.name, sha256, size, f.name, mime, now))
+            added += 1
+            hash_to_canonical[hkey] = f.name
+        elif not existing_by_name[f.name].get("sha256"):
+            # Record exists but has no hash — update it
+            conn.execute("UPDATE input_assets SET sha256 = ?, size = ? WHERE filename = ?", (sha256, size, f.name))
+
+        # Track canonical
+        if hkey not in hash_to_canonical:
+            hash_to_canonical[hkey] = f.name
 
     conn.commit()
 
