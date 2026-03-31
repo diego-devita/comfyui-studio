@@ -1249,30 +1249,46 @@ _thumb_cancel = threading.Event()
 
 
 def _backfill_thumbs_stream():
-    """SSE generator: generate missing thumbnails for all gallery images."""
+    """SSE generator: generate missing thumbnails and fix file sizes for all gallery images.
+
+    Phase 1: Generate .thumb.jpg for images without thumb_path
+    Phase 2: Fix file_size=0 and thumb_size=0 for all rows
+    """
     import json as _json, time as _time
 
     _thumb_cancel.clear()
-
     conn = _gdb._get_conn()
-    rows = conn.execute(
-        "SELECT civitai_id, file_path, type, thumb_path FROM gallery_images WHERE thumb_path IS NULL"
+
+    # Phase 1: missing thumbnails
+    rows_no_thumb = conn.execute(
+        "SELECT civitai_id, file_path, type FROM gallery_images WHERE thumb_path IS NULL"
     ).fetchall()
 
-    total = len(rows)
+    # Phase 2: missing sizes (file_size or thumb_size is 0/NULL but file exists)
+    rows_no_size = conn.execute(
+        "SELECT civitai_id, file_path, thumb_path FROM gallery_images WHERE file_size = 0 OR file_size IS NULL OR thumb_size = 0 OR thumb_size IS NULL"
+    ).fetchall()
+
+    total_thumbs = len(rows_no_thumb)
+    total_sizes = len(rows_no_size)
+    total = total_thumbs + total_sizes
+
     if total == 0:
-        yield f"event: log\ndata: {_json.dumps('All images already have thumbnails')}\n\n"
-        yield f"event: done\ndata: {_json.dumps({'total': 0, 'generated': 0, 'failed': 0, 'skipped': 0})}\n\n"
+        yield f"event: log\ndata: {_json.dumps('Everything up to date')}\n\n"
+        yield f"event: done\ndata: {_json.dumps({'total': 0, 'thumbs_generated': 0, 'sizes_fixed': 0, 'failed': 0})}\n\n"
         return
 
-    yield f"event: log\ndata: {_json.dumps(f'Found {total} images without thumbnails')}\n\n"
-    yield f"event: progress\ndata: {_json.dumps({'current': 0, 'total': total, 'generated': 0, 'failed': 0})}\n\n"
+    yield f"event: log\ndata: {_json.dumps(f'{total_thumbs} missing thumbs, {total_sizes} missing sizes')}\n\n"
+    yield f"event: progress\ndata: {_json.dumps({'current': 0, 'total': total, 'thumbs_generated': 0, 'sizes_fixed': 0, 'failed': 0, 'phase': 'thumbs'})}\n\n"
 
-    generated = 0
+    thumbs_gen = 0
+    sizes_fixed = 0
     failed = 0
+    processed = 0
     start = _time.time()
 
-    for i, row in enumerate(rows):
+    # Phase 1: generate thumbnails
+    for row in rows_no_thumb:
         if _thumb_cancel.is_set():
             yield f"event: log\ndata: {_json.dumps('Cancelled by user')}\n\n"
             break
@@ -1281,40 +1297,77 @@ def _backfill_thumbs_stream():
         fpath = row["file_path"]
         ftype = row["type"]
         abs_file = _gdb.abs_path(fpath)
+        processed += 1
 
         if not abs_file.exists():
             failed += 1
-            yield f"event: progress\ndata: {_json.dumps({'current': i + 1, 'total': total, 'generated': generated, 'failed': failed})}\n\n"
-            continue
-
-        # Derive thumb path from file path
-        thumb_rel = str(Path(fpath).with_suffix(".thumb.jpg"))
-        thumb_abs = _gdb.abs_path(thumb_rel)
-
-        ok = False
-        if ftype == "video":
-            ok = _extract_thumbnail(abs_file)
         else:
-            ok = _generate_image_thumb(abs_file)
+            thumb_rel = str(Path(fpath).with_suffix(".thumb.jpg"))
+            thumb_abs = _gdb.abs_path(thumb_rel)
 
-        if ok and thumb_abs.exists():
-            conn.execute("UPDATE gallery_images SET thumb_path = ? WHERE civitai_id = ?", (thumb_rel, cid))
-            if (generated + 1) % 20 == 0:
-                conn.commit()
-            generated += 1
-        else:
-            failed += 1
+            ok = _extract_thumbnail(abs_file) if ftype == "video" else _generate_image_thumb(abs_file)
+
+            if ok and thumb_abs.exists():
+                fs = abs_file.stat().st_size
+                ts = thumb_abs.stat().st_size
+                conn.execute(
+                    "UPDATE gallery_images SET thumb_path = ?, thumb_size = ?, file_size = ? WHERE civitai_id = ?",
+                    (thumb_rel, ts, fs, cid))
+                if thumbs_gen % 20 == 0:
+                    conn.commit()
+                thumbs_gen += 1
+            else:
+                failed += 1
 
         elapsed = _time.time() - start
-        rate = (i + 1) / elapsed if elapsed > 0 else 0
-        eta = int((total - i - 1) / rate) if rate > 0 else 0
-
-        yield f"event: progress\ndata: {_json.dumps({'current': i + 1, 'total': total, 'generated': generated, 'failed': failed, 'rate': round(rate, 1), 'eta_seconds': eta})}\n\n"
+        rate = processed / elapsed if elapsed > 0 else 0
+        eta = int((total - processed) / rate) if rate > 0 else 0
+        yield f"event: progress\ndata: {_json.dumps({'current': processed, 'total': total, 'thumbs_generated': thumbs_gen, 'sizes_fixed': sizes_fixed, 'failed': failed, 'rate': round(rate, 1), 'eta_seconds': eta, 'phase': 'thumbs'})}\n\n"
 
     conn.commit()
 
-    summary = {'total': total, 'generated': generated, 'failed': failed, 'cancelled': _thumb_cancel.is_set()}
-    yield f"event: log\ndata: {_json.dumps(f'Done: {generated} generated, {failed} failed out of {total}')}\n\n"
+    if not _thumb_cancel.is_set():
+        yield f"event: log\ndata: {_json.dumps(f'Phase 2: fixing file sizes ({total_sizes} rows)')}\n\n"
+
+    # Phase 2: fix sizes
+    for row in rows_no_size:
+        if _thumb_cancel.is_set():
+            yield f"event: log\ndata: {_json.dumps('Cancelled by user')}\n\n"
+            break
+
+        cid = row["civitai_id"]
+        fpath = row["file_path"]
+        tpath = row["thumb_path"]
+        processed += 1
+
+        updates = []
+        params = []
+        abs_file = _gdb.abs_path(fpath) if fpath else None
+        if abs_file and abs_file.exists():
+            updates.append("file_size = ?")
+            params.append(abs_file.stat().st_size)
+        abs_thumb = _gdb.abs_path(tpath) if tpath else None
+        if abs_thumb and abs_thumb.exists():
+            updates.append("thumb_size = ?")
+            params.append(abs_thumb.stat().st_size)
+
+        if updates:
+            params.append(cid)
+            conn.execute(f"UPDATE gallery_images SET {', '.join(updates)} WHERE civitai_id = ?", params)
+            sizes_fixed += 1
+
+        if sizes_fixed % 50 == 0:
+            conn.commit()
+
+        elapsed = _time.time() - start
+        rate = processed / elapsed if elapsed > 0 else 0
+        eta = int((total - processed) / rate) if rate > 0 else 0
+        yield f"event: progress\ndata: {_json.dumps({'current': processed, 'total': total, 'thumbs_generated': thumbs_gen, 'sizes_fixed': sizes_fixed, 'failed': failed, 'rate': round(rate, 1), 'eta_seconds': eta, 'phase': 'sizes'})}\n\n"
+
+    conn.commit()
+
+    summary = {'total': total, 'thumbs_generated': thumbs_gen, 'sizes_fixed': sizes_fixed, 'failed': failed, 'cancelled': _thumb_cancel.is_set()}
+    yield f"event: log\ndata: {_json.dumps(f'Done: {thumbs_gen} thumbs, {sizes_fixed} sizes fixed, {failed} failed')}\n\n"
     yield f"event: done\ndata: {_json.dumps(summary)}\n\n"
 
 

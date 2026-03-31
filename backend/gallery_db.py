@@ -180,6 +180,13 @@ def init_gallery_db():
     """)
     conn.commit()
 
+    # Migration: add thumb_size column if missing
+    try:
+        conn.execute("SELECT thumb_size FROM gallery_images LIMIT 0")
+    except Exception:
+        conn.execute("ALTER TABLE gallery_images ADD COLUMN thumb_size INTEGER DEFAULT 0")
+        conn.commit()
+
 
 # ── Path helpers ─────────────────────────────────────────────────────────────
 

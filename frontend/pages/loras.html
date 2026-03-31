@@ -2620,7 +2620,8 @@
       fill.style.width = pct + '%';
       var rateStr = d.rate ? d.rate.toFixed(1) + '/s' : '...';
       var etaStr = d.eta_seconds != null ? (d.eta_seconds >= 60 ? Math.floor(d.eta_seconds / 60) + 'm ' + (d.eta_seconds % 60) + 's' : d.eta_seconds + 's') : '';
-      stats.textContent = d.current + '/' + d.total + ' \u00b7 ' + d.generated + ' generated \u00b7 ' + d.failed + ' failed \u00b7 ' + rateStr + (etaStr ? ' \u00b7 ~' + etaStr + ' left' : '');
+      var phase = d.phase === 'sizes' ? 'Fixing sizes' : 'Generating thumbs';
+      stats.textContent = phase + ': ' + d.current + '/' + d.total + ' \u00b7 ' + (d.thumbs_generated || 0) + ' thumbs \u00b7 ' + (d.sizes_fixed || 0) + ' sizes \u00b7 ' + d.failed + ' failed \u00b7 ' + rateStr + (etaStr ? ' \u00b7 ~' + etaStr + ' left' : '');
     });
 
     es.addEventListener('done', function(e) {
@@ -2628,7 +2629,7 @@
       es.close();
       var d = JSON.parse(e.data);
       fill.style.width = '100%';
-      stats.textContent = 'Complete: ' + d.generated + ' generated, ' + d.failed + ' failed' + (d.cancelled ? ' (cancelled)' : '');
+      stats.textContent = 'Complete: ' + (d.thumbs_generated || 0) + ' thumbs, ' + (d.sizes_fixed || 0) + ' sizes, ' + d.failed + ' failed' + (d.cancelled ? ' (cancelled)' : '');
       cancelBtn.style.display = 'none';
       closeBtn.style.display = '';
       btn.disabled = false;
