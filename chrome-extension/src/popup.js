@@ -87,28 +87,48 @@ async function detectCivitaiPage() {
 
 function $(id) { return document.getElementById(id); }
 
-// ── Detach to side panel ──
-var _isPanel = window.location.search.includes('panel=1') || (typeof chrome !== 'undefined' && chrome.sidePanel);
+// Side panel only — no popup mode
 
-document.addEventListener('DOMContentLoaded', () => {
-  var detachBtn = document.getElementById('detachBtn');
-  if (!detachBtn) return;
+// ── Width monitor ──
+var MIN_WIDTH = 680;
+var _tooNarrow = false;
+var _widthHideTimer = null;
 
-  // Hide detach button if already in side panel
-  if (_isPanel && document.documentElement.clientWidth > 700) {
-    detachBtn.classList.add('is-panel');
-  }
+function _checkWidth() {
+  var w = window.innerWidth;
+  var overlay = $('tooNarrowOverlay');
+  var overlayW = $('overlayWidth');
+  var widthEl = $('statusBarWidth');
 
-  detachBtn.addEventListener('click', async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      await chrome.sidePanel.open({ tabId: tab.id });
-      window.close();
-    } catch (e) {
-      console.error('Side panel error:', e);
+  if (w < MIN_WIDTH) {
+    if (!_tooNarrow) {
+      overlay.style.display = 'flex';
+      document.body.classList.add('too-narrow');
+      _tooNarrow = true;
     }
-  });
-});
+    overlayW.textContent = w + 'px';
+    widthEl.textContent = w + 'px';
+    widthEl.style.opacity = '1';
+    if (_widthHideTimer) clearTimeout(_widthHideTimer);
+  } else {
+    if (_tooNarrow) {
+      overlay.style.display = 'none';
+      document.body.classList.remove('too-narrow');
+      _tooNarrow = false;
+    }
+    widthEl.textContent = w + 'px';
+    widthEl.style.opacity = '1';
+    if (_widthHideTimer) clearTimeout(_widthHideTimer);
+    _widthHideTimer = setTimeout(function() {
+      widthEl.style.opacity = '0';
+    }, 5000);
+  }
+}
+
+window.addEventListener('resize', _checkWidth);
+new ResizeObserver(_checkWidth).observe(document.body);
+_checkWidth();
+
 
 var _statusTimer = null;
 function showStatus(msg, type) {

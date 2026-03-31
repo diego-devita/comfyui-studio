@@ -29,9 +29,10 @@ Browser companion for [ComfyUI Studio](https://github.com/diego-devita/comfyui-s
 - Create presets from CivitAI images with full parameter mapping and workflow auto-selection
 
 ### Side Panel
-- Click ⧉ icon to detach popup into a persistent side panel
+- Opens as a side panel (no popup) — click the extension icon to open/close
 - Stays open when switching tabs/windows
 - Auto-refreshes CivitAI page detection on navigation
+- Minimum width enforcement (680px) with forbidden overlay
 
 ### Status
 - Online/Offline status badge in header with color-coded border and hover
@@ -59,7 +60,7 @@ Browser companion for [ComfyUI Studio](https://github.com/diego-devita/comfyui-s
 
 ## Setup
 
-1. Open the extension popup
+1. Click the extension icon to open the side panel
 2. Go to **Settings** tab
 3. Enter your **RunPod API Key** ([runpod.io/console/user/settings](https://www.runpod.io/console/user/settings))
 4. Enter your **Studio URL** (e.g. `https://PODID-8000.proxy.runpod.net`) — or use the search button to find running pods

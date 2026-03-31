@@ -1,5 +1,13 @@
 # Chrome Extension Changelog
 
+## v3.0.0 — 2026-03-31 12:25
+- **BREAKING: Side panel only** — popup removed, extension icon opens/closes side panel directly
+- Background service worker with `openPanelOnActionClick: true`
+- **New permission**: `background` service worker
+- Minimum width overlay: ⛔ forbidden screen when panel < 680px with live width display
+- Width indicator in status bar: appears during resize, fades after 5s
+- Header tabs and studio status hidden when panel too narrow
+
 ## v2.1.0 — 2026-03-31 11:39
 - Studio connection badge in header: Online (green border, clickable link) / Offline (red border)
 - Hover: colored background fill with tooltip ("Clicca per visitare..." / "Istanza non collegata")
