@@ -1,5 +1,11 @@
 # Chrome Extension Changelog
 
+## v3.3.0 — 2026-03-31 23:00
+- **Pod link status**: link icon on pod cards — green if linked to Settings URL, orange if not (click to set)
+- **Event log**: timestamped log panel below content area for health checks and events
+- **Detailed health check**: shows Studio version in badge, distinguishes auth_fail vs unreachable vs offline
+- Badge padding normalization
+
 ## v3.2.0 — 2026-03-31 22:30
 - **Tab icons**: RunPod and CivitAI brand icons (PNG), Notify (circle-exclamation) and Settings (gear) FA icons
 - **Notifications tab**: webhook configuration (URL, method, headers, body template), event toggles (pod ready, launch success, retry success), test button
