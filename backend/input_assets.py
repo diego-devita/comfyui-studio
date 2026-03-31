@@ -313,16 +313,16 @@ def _rewrite_dependencies(conn, old_name: str, new_name: str, presets_dir: Path)
             if updated != params_str:
                 conn.execute("UPDATE jobs SET params = ? WHERE rowid = ?", (updated, rowid))
 
-    # 3. saved_prompts.params (JSON text)
+    # 3. saved_prompts.text (prompt text)
     rows = conn.execute(
-        "SELECT rowid, params FROM saved_prompts WHERE params LIKE ?",
+        "SELECT rowid, text FROM saved_prompts WHERE text LIKE ?",
         (f"%{old_name}%",)
     ).fetchall()
-    for rowid, params_str in rows:
-        if params_str:
-            updated = params_str.replace(old_name, new_name)
-            if updated != params_str:
-                conn.execute("UPDATE saved_prompts SET params = ? WHERE rowid = ?", (updated, rowid))
+    for rowid, text_str in rows:
+        if text_str:
+            updated = text_str.replace(old_name, new_name)
+            if updated != text_str:
+                conn.execute("UPDATE saved_prompts SET text = ? WHERE rowid = ?", (updated, rowid))
 
     # 4. Preset JSON files on disk
     if presets_dir.exists():

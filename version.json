@@ -4,7 +4,7 @@
   "date": "2026-04-01 02:30",
   "components": {
     "runtime": {"version": 4, "date": "2026-03-30 12:00"},
-    "backend": {"version": "27.5.1", "date": "2026-04-01 03:00", "dir": "backend/"},
+    "backend": {"version": "27.5.2", "date": "2026-04-01 03:10", "dir": "backend/"},
     "frontend": {"version": "27.1.0", "date": "2026-04-01 02:45", "dir": "frontend/"},
     "models": {"version": 25, "date": "2026-03-31 15:06", "file": "catalogs/models.json"},
     "loras": {"version": 4, "date": "2026-03-26 18:24", "file": "catalogs/loras.json"},
