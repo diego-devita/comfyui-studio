@@ -752,13 +752,18 @@
     const st = stats || {};
     var busy = (st.downloading_count || 0) + (st.queued_count || 0);
     // Also poll if any model has an active gallery download
-    if (!busy && cats) {
-      busy = cats.some(function(cat) {
-        return cat.models.some(function(m) { return m.gallery_dl; });
-      }) ? 1 : 0;
-    }
+    var galleryBusy = cats && cats.some(function(cat) {
+      return cat.models.some(function(m) { return m.gallery_dl; });
+    });
+    if (galleryBusy) busy = 1;
     if (busy > 0) {
-      if (!pollTimer) startPolling();
+      // Faster polling during gallery downloads (1s vs 3s)
+      var interval = galleryBusy ? 1000 : 3000;
+      if (!pollTimer || pollTimer._interval !== interval) {
+        stopPolling();
+        pollTimer = setInterval(pollModels, interval);
+        pollTimer._interval = interval;
+      }
     } else {
       stopPolling();
     }
@@ -1248,12 +1253,33 @@
     var gd = m.gallery_dl;
     if (gd && refs.galleryBtn) {
       var gdl = gd.downloaded + gd.skipped;
-      var gtot = gd.total || '?';
+      var gtot = gd.total || 0;
       refs.galleryBtn.textContent = 'Gallery \u2193 ' + gdl + '/' + gtot;
       refs.galleryBtn.style.display = '';
+      // Show progress bar for gallery download (only when model itself is not downloading)
+      if (m.status !== 'downloading') {
+        progress.classList.add('visible');
+        if (gtot > 0) {
+          var gpct = Math.min(100, (gdl / gtot) * 100);
+          fill.classList.remove('indeterminate');
+          fill.style.width = gpct.toFixed(1) + '%';
+          pct.textContent = gpct.toFixed(0) + '%';
+          pbytes.textContent = gdl + ' / ' + gtot + ' images';
+        } else {
+          fill.classList.add('indeterminate');
+          fill.style.width = '';
+          pct.textContent = '';
+          pbytes.textContent = 'downloading...';
+        }
+      }
     } else if (refs.galleryBtn && m.civitai_model_id && m.status === 'present') {
       var imgCount = m.gallery_count || 0;
       refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
+      // Hide gallery progress bar when not downloading gallery (and model is not downloading either)
+      if (m.status !== 'downloading') {
+        progress.classList.remove('visible');
+        fill.classList.remove('indeterminate');
+      }
     }
 
     // Update thumbnail if changed
