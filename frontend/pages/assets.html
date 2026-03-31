@@ -679,24 +679,91 @@
     } catch (_) {}
   }
 
-  document.getElementById('syncInputsBtn').addEventListener('click', async function() {
-    var btn = this;
-    btn.disabled = true;
-    btn.textContent = 'Syncing...';
-    try {
-      var resp = await apiFetch('/api/admin/assets/sync-inputs', {method: 'POST'});
-      if (resp.ok) {
-        var data = await resp.json();
-        var msg = 'Synced: ' + data.added + ' added';
-        if (data.deduped) msg += ', ' + data.deduped + ' duplicates removed';
-        showToast(msg, 5000);
-        loadInputStats();
-      }
-    } catch (e) {
-      showToast('Sync failed: ' + e.message, 3000, 'error');
+  document.getElementById('syncInputsBtn').addEventListener('click', function() {
+    // Open sync dialog
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:999;display:flex;align-items:center;justify-content:center;';
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:8px;width:90%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;';
+    modal.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border,#333);">' +
+        '<span style="font-weight:600;font-size:13px;">Input Sync</span>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<span id="syncProgress" style="font-size:11px;color:var(--muted,#888);"></span>' +
+          '<button id="syncCancelBtn" class="btn btn-sm btn-danger" style="font-size:11px;">Stop</button>' +
+          '<button id="syncCloseBtn" class="btn btn-sm" style="font-size:11px;display:none;">Close</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="syncLog" style="flex:1;overflow-y:auto;padding:10px 14px;font-family:monospace;font-size:11px;line-height:1.7;color:var(--text,#eee);white-space:pre-wrap;scrollbar-width:thin;"></div>';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    var logEl = document.getElementById('syncLog');
+    var progressEl = document.getElementById('syncProgress');
+    var cancelBtn = document.getElementById('syncCancelBtn');
+    var closeBtn = document.getElementById('syncCloseBtn');
+
+    function appendLog(text, color) {
+      var line = document.createElement('div');
+      if (color) line.style.color = color;
+      line.textContent = text;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
     }
-    btn.disabled = false;
-    btn.textContent = 'Sync DB';
+
+    var evtSource = new EventSource('/api/admin/assets/sync-inputs');
+
+    evtSource.addEventListener('log', function(e) {
+      appendLog(JSON.parse(e.data));
+    });
+
+    evtSource.addEventListener('progress', function(e) {
+      var d = JSON.parse(e.data);
+      progressEl.textContent = d.current + '/' + d.total;
+    });
+
+    evtSource.addEventListener('added', function(e) {
+      var d = JSON.parse(e.data);
+      appendLog('+ ' + d.file, '#2ed573');
+    });
+
+    evtSource.addEventListener('dedup', function(e) {
+      var d = JSON.parse(e.data);
+      appendLog('✕ ' + d.file + ' → ' + d.canonical, '#f0a030');
+    });
+
+    evtSource.addEventListener('done', function(e) {
+      var d = JSON.parse(e.data);
+      evtSource.close();
+      appendLog('');
+      appendLog('Done: ' + d.added + ' added, ' + d.deduped + ' deduped, ' + d.skipped + ' unchanged', '#2ed573');
+      appendLog('Files on disk: ' + d.files_on_disk + ' — DB records: ' + d.records_in_db);
+      cancelBtn.style.display = 'none';
+      closeBtn.style.display = '';
+      loadInputStats();
+    });
+
+    evtSource.onerror = function() {
+      evtSource.close();
+      appendLog('Connection lost', '#ff4757');
+      cancelBtn.style.display = 'none';
+      closeBtn.style.display = '';
+    };
+
+    cancelBtn.addEventListener('click', function() {
+      apiFetch('/api/admin/assets/sync-inputs/cancel', {method: 'POST'});
+      appendLog('Cancelling...', '#f0a030');
+    });
+
+    closeBtn.addEventListener('click', function() {
+      document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay && closeBtn.style.display !== 'none') {
+        document.body.removeChild(overlay);
+      }
+    });
   });
 
   // Initial state

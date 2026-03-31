@@ -167,43 +167,37 @@ async def register_input_async(file_bytes: bytes, original_name: str, source: st
 
 # ── Sync ─────────────────────────────────────────────────────────────────────
 
-def sync_input_assets() -> dict:
-    """Scan assets/input/, register new files, dedup duplicates.
+import threading
+_sync_cancel = threading.Event()
 
-    For each file on disk:
-    - If already in DB by filename → skip
-    - If same hash+size exists under another name → it's a duplicate:
-      rewrite all dependencies to point to the canonical name, then
-      delete the duplicate from disk (assets/input/ + ComfyUI/input/)
-    - Otherwise → register as new
 
-    Returns summary with added/deduped counts and list of removed files.
-    """
-    if not ASSETS_INPUT_DIR.exists():
-        return {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0, "removed": []}
-
+def sync_input_assets_stream():
+    """Generator that yields SSE log lines during sync. Supports cancellation via _sync_cancel."""
     import json as _json
     from config import PRESETS_DIR, COMFYUI_DIR
+
+    _sync_cancel.clear()
+
+    if not ASSETS_INPUT_DIR.exists():
+        yield _sse("done", {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0})
+        return
 
     conn = _db._get_conn()
     comfyui_input = Path(COMFYUI_DIR) / "input"
 
-    # Build hash index from DB records
-    existing_by_name = {}  # filename → {sha256, size}
-    hash_to_canonical = {}  # "sha256:size" → filename (first one wins = canonical)
+    yield _sse("log", "Building hash index from DB...")
+
+    existing_by_name = {}
+    hash_to_canonical = {}
     for row in conn.execute("SELECT filename, sha256, size FROM input_assets").fetchall():
         existing_by_name[row[0]] = {"sha256": row[1], "size": row[2]}
         hkey = f"{row[1]}:{row[2]}"
         if hkey not in hash_to_canonical:
             hash_to_canonical[hkey] = row[0]
 
-    added = 0
-    deduped = 0
-    removed = []
-    files_on_disk = 0
-    now = _now_rome().strftime("%Y-%m-%d %H:%M")
+    yield _sse("log", f"DB has {len(existing_by_name)} records, {len(hash_to_canonical)} unique hashes")
 
-    # Collect all media files first (so we can iterate safely while deleting)
+    # Collect media files
     media_files = []
     for f in ASSETS_INPUT_DIR.iterdir():
         if not f.is_file():
@@ -212,36 +206,41 @@ def sync_input_assets() -> dict:
         if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm"):
             media_files.append(f)
 
-    for f in media_files:
-        ext = f.suffix.lower()
-        files_on_disk += 1
+    total = len(media_files)
+    yield _sse("log", f"Found {total} media files on disk")
+    yield _sse("progress", {"current": 0, "total": total})
 
-        # Calculate hash for every file (even if in DB — needed for dedup)
+    added = 0
+    deduped = 0
+    skipped = 0
+    files_on_disk = total
+    now = _now_rome().strftime("%Y-%m-%d %H:%M")
+
+    for i, f in enumerate(media_files):
+        if _sync_cancel.is_set():
+            yield _sse("log", "⚠ Cancelled by user")
+            conn.commit()
+            break
+
+        ext = f.suffix.lower()
         data = f.read_bytes()
         sha256 = _hash_bytes(data)
         size = len(data)
         hkey = f"{sha256}:{size}"
 
-        # Is there already a canonical file with this hash?
         canon_name = hash_to_canonical.get(hkey)
 
         if canon_name and canon_name != f.name:
-            # This file is a duplicate of canon_name — rewrite deps and delete
             _rewrite_dependencies(conn, f.name, canon_name, PRESETS_DIR)
-            # Remove DB record if exists
             conn.execute("DELETE FROM input_assets WHERE filename = ?", (f.name,))
-            # Delete from disk
             f.unlink(missing_ok=True)
             comfy_dup = comfyui_input / f.name
             if comfy_dup.exists():
                 comfy_dup.unlink(missing_ok=True)
             deduped += 1
-            removed.append({"duplicate": f.name, "canonical": canon_name})
             files_on_disk -= 1
-            continue
-
-        # Not a duplicate — register if not in DB
-        if f.name not in existing_by_name:
+            yield _sse("dedup", {"file": f.name, "canonical": canon_name})
+        elif f.name not in existing_by_name:
             mime = "image/png"
             if ext in (".jpg", ".jpeg"):
                 mime = "image/jpeg"
@@ -251,32 +250,41 @@ def sync_input_assets() -> dict:
                 mime = "image/webp"
             elif ext in (".mp4", ".webm"):
                 mime = "video/" + ext[1:]
-
             conn.execute("""
                 INSERT INTO input_assets (filename, sha256, size, original_name, source, mime_type, comfyui_synced, created_at)
                 VALUES (?, ?, ?, ?, 'scan', ?, 1, ?)
             """, (f.name, sha256, size, f.name, mime, now))
             added += 1
             hash_to_canonical[hkey] = f.name
-        elif not existing_by_name[f.name].get("sha256"):
-            # Record exists but has no hash — update it
-            conn.execute("UPDATE input_assets SET sha256 = ?, size = ? WHERE filename = ?", (sha256, size, f.name))
+            yield _sse("added", {"file": f.name})
+        else:
+            if not existing_by_name[f.name].get("sha256"):
+                conn.execute("UPDATE input_assets SET sha256 = ?, size = ? WHERE filename = ?", (sha256, size, f.name))
+            skipped += 1
+            if hkey not in hash_to_canonical:
+                hash_to_canonical[hkey] = f.name
 
-        # Track canonical
-        if hkey not in hash_to_canonical:
-            hash_to_canonical[hkey] = f.name
+        yield _sse("progress", {"current": i + 1, "total": total})
 
     conn.commit()
-
     records_in_db = conn.execute("SELECT COUNT(*) FROM input_assets").fetchone()[0]
 
-    return {
+    yield _sse("done", {
         "files_on_disk": files_on_disk,
         "records_in_db": records_in_db,
         "added": added,
         "deduped": deduped,
-        "removed": removed,
-    }
+        "skipped": skipped,
+    })
+
+
+def cancel_sync():
+    _sync_cancel.set()
+
+
+def _sse(event: str, data) -> str:
+    import json
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def _rewrite_dependencies(conn, old_name: str, new_name: str, presets_dir: Path):

@@ -276,19 +276,19 @@ async def input_asset_stats():
     return get_stats()
 
 
-@router.post("/api/admin/assets/sync-inputs")
-async def sync_inputs():
-    """Scan assets/input/ and register untracked files in DB."""
-    from input_assets import sync_input_assets
-    result = sync_input_assets()
-    parts = []
-    if result["added"] > 0:
-        parts.append(f"{result['added']} added")
-    if result.get("deduped", 0) > 0:
-        parts.append(f"{result['deduped']} deduped")
-    if parts:
-        _events.emit("assets.synced", f"Input sync: {', '.join(parts)}")
-    return result
+@router.get("/api/admin/assets/sync-inputs")
+async def sync_inputs_stream():
+    """SSE stream of input sync progress."""
+    from input_assets import sync_input_assets_stream
+    return StreamingResponse(sync_input_assets_stream(), media_type="text/event-stream")
+
+
+@router.post("/api/admin/assets/sync-inputs/cancel")
+async def sync_inputs_cancel():
+    """Cancel a running sync."""
+    from input_assets import cancel_sync
+    cancel_sync()
+    return {"status": "cancelled"}
 
 
 @router.get("/api/admin/assets/{asset_type}")
