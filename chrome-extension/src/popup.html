@@ -10,11 +10,17 @@
 <div id="appShell" class="app-shell">
 <div class="header">
   <h1 id="headerTitle">ComfyUI <span style="color:var(--accent);">Studio</span></h1>
+  <button id="aboutBtn" class="about-btn" title="About this extension"><span class="icon icon-circle-question"></span></button>
   <div class="header-tabs">
-    <button class="header-tab active" data-tab="runpod">RunPod</button>
-    <button class="header-tab" data-tab="studio">CivitAI</button>
-    <button class="header-tab" data-tab="settings">Settings</button>
+    <button class="header-tab active" data-tab="runpod"><span class="icon-runpod"></span> RunPod</button>
+    <button class="header-tab" data-tab="studio"><span class="icon-civitai"></span> CivitAI</button>
+    <button class="header-tab" data-tab="notifications"><span class="icon icon-circle-exclamation"></span> Notify</button>
+    <button class="header-tab" data-tab="settings"><span class="icon icon-gear"></span> Settings</button>
   </div>
+  <label class="studio-poll-toggle" title="Enable/disable connection polling">
+    <input type="checkbox" id="studioPollToggle" checked>
+    <span class="studio-poll-slider"></span>
+  </label>
   <div id="studioStatus" class="studio-status offline">
     <span class="studio-refresh" id="studioRefresh" title="Refresh connection">&#x21bb;</span>
     <span class="dot" id="studioDot"></span>
@@ -116,6 +122,47 @@
     </div>
   </div>
 
+  <!-- ── NOTIFICATIONS ── -->
+  <div class="tab-panel" id="panel-notifications">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text);">Webhook Configuration</div>
+    <div class="input-group">
+      <label class="input-label">URL</label>
+      <input class="input" id="notifyUrl" type="text" placeholder="https://notify.example.workers.dev/send">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Method</label>
+      <select class="input" id="notifyMethod" style="padding:6px 8px;">
+        <option value="POST">POST</option>
+        <option value="GET">GET</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Headers <span style="font-weight:normal;color:var(--muted);font-size:10px;">(one per line: Key: Value)</span></label>
+      <textarea class="input" id="notifyHeaders" rows="2" placeholder="Content-Type: application/json" style="resize:vertical;font-size:11px;"></textarea>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Body template <span style="font-weight:normal;color:var(--muted);font-size:10px;">(JSON, use {event} {podName} {gpu} {message} {timestamp})</span></label>
+      <textarea class="input" id="notifyBody" rows="3" style="resize:vertical;font-size:11px;"></textarea>
+    </div>
+
+    <div style="font-size:13px;font-weight:600;margin-top:16px;margin-bottom:12px;color:var(--text);">Events</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="notifyOnPodReady" checked> Pod becomes ready
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="notifyOnLaunchSuccess" checked> Pod launched successfully
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="notifyOnRetrySuccess" checked> Resume retry succeeded
+      </label>
+    </div>
+
+    <button class="btn btn-accent" id="saveNotifyBtn" style="width:100%;margin-top:12px;">Save</button>
+    <button class="btn" id="testNotifyBtn" style="width:100%;margin-top:4px;">Test Notification</button>
+    <div style="margin-top:8px;font-size:10px;color:var(--muted);text-align:center;" id="notifyTestResult"></div>
+  </div>
+
   <!-- ── SETTINGS ── -->
   <div class="tab-panel" id="panel-settings">
     <div class="input-group">
@@ -152,6 +199,26 @@
   <div class="changelog-modal">
     <div class="changelog-header"><span>Changelog</span><button class="changelog-close" id="changelogClose">&times;</button></div>
     <div class="changelog-body" id="changelogBody"></div>
+  </div>
+</div>
+
+<div id="aboutOverlay" class="changelog-overlay" style="display:none;">
+  <div class="changelog-modal" style="max-width:420px;">
+    <div class="changelog-header"><span>About</span><button class="changelog-close" id="aboutClose">&times;</button></div>
+    <div class="about-body">
+      <div class="about-title">ComfyUI <span style="color:var(--accent);">Studio</span></div>
+      <div class="about-version" id="aboutVersion"></div>
+      <div class="about-desc">Chrome extension for managing RunPod GPU pods and browsing CivitAI models with one-click integration into your ComfyUI Studio instance.</div>
+      <a class="about-link" href="https://github.com/diegodevita/comfyui-studio" target="_blank">GitHub Repository</a>
+      <hr class="about-hr">
+      <div class="about-section">Built on the ComfyUI Studio RunPod template</div>
+      <a class="about-link-sm" href="https://runpod.io/console/deploy?template=comfyui-studio" target="_blank">Deploy on RunPod</a>
+      <hr class="about-hr">
+      <div class="about-attr">
+        Icons: <a href="https://fontawesome.com" target="_blank">Font Awesome 6 Free</a> (CC BY 4.0)<br>
+        <a href="https://civitai.com" target="_blank">CivitAI</a> and <a href="https://runpod.io" target="_blank">RunPod</a> logos used with attribution
+      </div>
+    </div>
   </div>
 </div>
 

@@ -1,5 +1,12 @@
 # Chrome Extension Changelog
 
+## v3.2.0 — 2026-03-31 22:30
+- **Tab icons**: RunPod and CivitAI brand icons (PNG), Notify (circle-exclamation) and Settings (gear) FA icons
+- **Notifications tab**: webhook configuration (URL, method, headers, body template), event toggles (pod ready, launch success, retry success), test button
+- **About dialog**: accessible via ? icon next to title — shows version, GitHub link, description, attributions (FA, CivitAI, RunPod), RunPod template reference
+- **Poll toggle**: enable/disable studio connection polling with persistent state
+- Version font bump to 10px in status bar
+
 ## v3.1.1 — 2026-03-31 15:05
 - Side panel background: dark gray (#1a1a2e) visible below and around the extension content
 - Content shadow: drop shadow under the app shell in panel mode

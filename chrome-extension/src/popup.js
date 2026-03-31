@@ -279,6 +279,7 @@ async function loadPods() {
         var elapsed = Math.round((Date.now() - _podTimers[pod.id].start) / 1000);
         _podJustReady[pod.id] = { at: Date.now(), elapsed: elapsed };
         delete _podTimers[pod.id];
+        if (_notifyConfig.onPodReady) sendNotification('pod_ready', { podName: pod.name || pod.id, gpu: pod.machine?.gpuDisplayName || '?', message: 'Pod is ready (' + elapsed + 's)' });
       }
       var timerHtml = _tickerHtml(pod.id);
       const gpu = pod.machine?.gpuDisplayName || '?';
@@ -444,6 +445,7 @@ function _runRetryTick(podId) {
         _startPodTimer(podId);
         delete _retryState[podId];
         showStatus('Resume succeeded after ' + state.attempt + ' attempt' + (state.attempt > 1 ? 's' : ''), 'success');
+        if (_notifyConfig.onRetrySuccess) sendNotification('resume_retry_success', { podName: podId, gpu: '', message: 'Resume succeeded after ' + state.attempt + ' attempts' });
         setTimeout(loadPods, 2000);
       } catch (e) {
         if (_isGpuUnavailable(e.message)) {
@@ -548,6 +550,7 @@ function _runLaunchRetryTick() {
         var attempts = _launchRetry.attempt;
         _stopLaunchRetry();
         showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
+        if (_notifyConfig.onRetrySuccess) sendNotification('launch_retry_success', { podName: pod.name || pod.id, gpu: '', message: 'Launch succeeded after ' + attempts + ' attempts' });
         setTimeout(loadPods, 3000);
       } catch (e) {
         if (_isGpuUnavailable(e.message)) {
@@ -849,6 +852,7 @@ $('launchBtn').addEventListener('click', async () => {
     const pod = data.podFindAndDeployOnDemand;
     _startPodTimer(pod.id);
     showStatus('Pod launched: ' + (pod.name || pod.id), 'success');
+    if (_notifyConfig.onLaunchSuccess) sendNotification('pod_launched', { podName: pod.name || pod.id, gpu: $('gpuSelect').value, message: 'Pod launched successfully' });
     setTimeout(loadPods, 3000);
   } catch (e) {
     if (_isGpuUnavailable(e.message)) {
@@ -931,6 +935,88 @@ getSettings().then(s => {
   $('studioKey').value = s.studioKey || '';
 });
 
+// ── Notifications ──
+
+var _notifyConfig = {};
+
+async function loadNotifyConfig() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['notifyConfig'], r => {
+      _notifyConfig = r.notifyConfig || {};
+      if ($('notifyUrl')) $('notifyUrl').value = _notifyConfig.url || '';
+      if ($('notifyMethod')) $('notifyMethod').value = _notifyConfig.method || 'POST';
+      if ($('notifyHeaders')) $('notifyHeaders').value = _notifyConfig.headers || 'Content-Type: application/json';
+      if ($('notifyBody')) $('notifyBody').value = _notifyConfig.body || '{"key":"YOUR_KEY","msg":"{event}: {message}"}';
+      if ($('notifyOnPodReady')) $('notifyOnPodReady').checked = _notifyConfig.onPodReady !== false;
+      if ($('notifyOnLaunchSuccess')) $('notifyOnLaunchSuccess').checked = _notifyConfig.onLaunchSuccess !== false;
+      if ($('notifyOnRetrySuccess')) $('notifyOnRetrySuccess').checked = _notifyConfig.onRetrySuccess !== false;
+      resolve();
+    });
+  });
+}
+
+function saveNotifyConfig() {
+  _notifyConfig = {
+    url: $('notifyUrl').value.trim(),
+    method: $('notifyMethod').value,
+    headers: $('notifyHeaders').value.trim(),
+    body: $('notifyBody').value.trim(),
+    onPodReady: $('notifyOnPodReady').checked,
+    onLaunchSuccess: $('notifyOnLaunchSuccess').checked,
+    onRetrySuccess: $('notifyOnRetrySuccess').checked,
+  };
+  chrome.storage.local.set({ notifyConfig: _notifyConfig }, function() {
+    console.log('Saved notifyConfig:', _notifyConfig);
+  });
+  showStatus('Notification settings saved', 'success');
+}
+
+async function sendNotification(event, vars) {
+  console.log('sendNotification called, config:', _notifyConfig);
+  if (!_notifyConfig.url) return null;
+  var tpl = _notifyConfig.body || '';
+  var allVars = Object.assign({ event: event, timestamp: new Date().toISOString() }, vars || {});
+  for (var k in allVars) {
+    tpl = tpl.replace(new RegExp('\\{' + k + '\\}', 'g'), allVars[k] || '');
+  }
+
+  var headers = {};
+  (_notifyConfig.headers || '').split('\n').forEach(function(line) {
+    var idx = line.indexOf(':');
+    if (idx > 0) headers[line.substring(0, idx).trim()] = line.substring(idx + 1).trim();
+  });
+
+  try {
+    var opts = { method: _notifyConfig.method || 'POST', headers: headers };
+    if (opts.method === 'POST') {
+      opts.body = tpl;
+    }
+    var url = _notifyConfig.url;
+    if (opts.method === 'GET' && tpl) {
+      url += (url.includes('?') ? '&' : '?') + 'data=' + encodeURIComponent(tpl);
+    }
+    var r = await fetch(url, opts);
+    return await r.json();
+  } catch (e) {
+    console.error('Notification failed:', e);
+    return null;
+  }
+}
+
+$('saveNotifyBtn').addEventListener('click', saveNotifyConfig);
+$('testNotifyBtn').addEventListener('click', async function() {
+  $('notifyTestResult').textContent = 'Sending...';
+  try {
+    var result = await sendNotification('test', { podName: 'test-pod', gpu: 'NVIDIA Test', message: 'This is a test notification' });
+    $('notifyTestResult').textContent = result ? JSON.stringify(result) : 'No URL configured';
+    $('notifyTestResult').style.color = (result && result.status === 'sent') ? 'var(--success)' : 'var(--error)';
+  } catch (e) {
+    $('notifyTestResult').textContent = 'Error: ' + e.message;
+    $('notifyTestResult').style.color = 'var(--error)';
+  }
+});
+loadNotifyConfig();
+
 // ── Studio status dot ──
 
 var _studioConnected = false;
@@ -1009,8 +1095,47 @@ $('studioRefresh').addEventListener('click', function(e) {
   checkStudio().then(() => setTimeout(() => self.classList.remove('spinning'), 600));
 });
 
-// Poll studio status every 10s
-setInterval(checkStudio, 10000);
+// Poll studio status every 10s (if enabled)
+var _studioPollInterval = null;
+var _studioPollEnabled = true;
+
+function startStudioPoll() {
+  if (_studioPollInterval) clearInterval(_studioPollInterval);
+  _studioPollInterval = setInterval(checkStudio, 10000);
+}
+
+function stopStudioPoll() {
+  if (_studioPollInterval) { clearInterval(_studioPollInterval); _studioPollInterval = null; }
+  _studioConnected = false;
+  var container = $('studioStatus');
+  container.className = 'studio-status offline';
+  container.title = 'Polling stopped';
+  $('studioLink').textContent = 'Offline';
+  $('studioLink').href = '#';
+  chrome.action.setIcon({ path: { '16': 'icons/icon16_disconnected.png', '48': 'icons/icon48_disconnected.png', '128': 'icons/icon128_disconnected.png' } });
+}
+
+// Load saved state
+chrome.storage.local.get(['studioPollEnabled'], function(r) {
+  _studioPollEnabled = r.studioPollEnabled !== false;
+  $('studioPollToggle').checked = _studioPollEnabled;
+  if (_studioPollEnabled) {
+    startStudioPoll();
+  } else {
+    stopStudioPoll();
+  }
+});
+
+$('studioPollToggle').addEventListener('change', function() {
+  _studioPollEnabled = this.checked;
+  chrome.storage.local.set({ studioPollEnabled: _studioPollEnabled });
+  if (_studioPollEnabled) {
+    checkStudio();
+    startStudioPoll();
+  } else {
+    stopStudioPoll();
+  }
+});
 
 // ── Toggle password visibility ──
 
@@ -1072,6 +1197,18 @@ $('changelogClose').addEventListener('click', function() {
   $('changelogOverlay').style.display = 'none';
 });
 $('changelogOverlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
+// About dialog
+$('aboutBtn').addEventListener('click', function() {
+  $('aboutVersion').textContent = 'v' + chrome.runtime.getManifest().version;
+  $('aboutOverlay').style.display = 'flex';
+});
+$('aboutClose').addEventListener('click', function() {
+  $('aboutOverlay').style.display = 'none';
+});
+$('aboutOverlay').addEventListener('click', function(e) {
   if (e.target === this) this.style.display = 'none';
 });
 

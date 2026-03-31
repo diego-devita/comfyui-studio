@@ -34,11 +34,18 @@ Browser companion for [ComfyUI Studio](https://github.com/diego-devita/comfyui-s
 - Auto-refreshes CivitAI page detection on navigation
 - Minimum width enforcement (680px) with forbidden overlay
 
+### Notifications
+- Webhook notifications for pod events (ready, launched, retry success)
+- Configurable URL, method, headers, body template with variables
+- Test notification button
+
 ### Status
 - Online/Offline status badge in header with color-coded border and hover
+- Connection polling toggle (enable/disable, persisted)
 - Green icon bar when connected to Studio, red when disconnected
 - Status banner in fixed bottom bar (no layout shift)
 - Click version number to view changelog
+- About dialog with version, description, attributions
 
 ### Permissions
 - `storage` — save settings
@@ -79,6 +86,8 @@ chrome-extension/
 │   ├── popup.js
 │   ├── popup.css
 │   ├── icons.css
+│   ├── background.js
+│   ├── CHANGELOG.md
 │   └── icons/
 ├── screens/           ← screenshots (originals + cropped)
 └── dist/              ← built ZIP for distribution

@@ -8,7 +8,8 @@ Browser companion for ComfyUI Studio — connects your RunPod GPU pods and Civit
 - Stop, resume, and terminate pods
 - Billing overview with credit balance, spend rate, and estimated time remaining
 - Network volume storage costs
-- Auto-retry resume when GPU unavailable
+- Auto-retry resume/launch when GPU unavailable
+- Webhook notifications for pod events (ready, launched, retry success)
 
 ### CivitAI Integration
 - Browse any CivitAI model page and see which versions are in your catalog, downloaded, or missing
