@@ -150,11 +150,16 @@ def _get_db_counts() -> dict:
 
 @router.get("/api/health")
 async def health(request: Request):
+    from auth import _api_key
     api_key = request.headers.get("X-API-Key", "")
     result = {"status": "ok"}
     if api_key:
-        expected = os.environ.get("API_KEY", "")
-        result["authenticated"] = (api_key == expected) if expected else False
+        authed = api_key == _api_key()
+        result["authenticated"] = authed
+        if authed:
+            ver = _load_version()
+            result["app_version"] = ver.get("app_version", "0.0.0")
+            result["pod_id"] = os.environ.get("RUNPOD_POD_ID", "")
     return result
 
 
