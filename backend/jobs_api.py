@@ -281,8 +281,13 @@ async def sync_inputs():
     """Scan assets/input/ and register untracked files in DB."""
     from input_assets import sync_input_assets
     result = sync_input_assets()
+    parts = []
     if result["added"] > 0:
-        _events.emit("assets.synced", f"Synced {result['added']} input file(s) to database")
+        parts.append(f"{result['added']} added")
+    if result.get("deduped", 0) > 0:
+        parts.append(f"{result['deduped']} deduped")
+    if parts:
+        _events.emit("assets.synced", f"Input sync: {', '.join(parts)}")
     return result
 
 

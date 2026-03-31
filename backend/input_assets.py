@@ -168,11 +168,25 @@ async def register_input_async(file_bytes: bytes, original_name: str, source: st
 # ── Sync ─────────────────────────────────────────────────────────────────────
 
 def sync_input_assets() -> dict:
-    """Scan assets/input/ and add missing files to DB. Does not touch existing records."""
+    """Scan assets/input/, register new files, dedup duplicates.
+
+    For each file on disk:
+    - If already in DB by filename → skip
+    - If same hash+size exists under another name → it's a duplicate:
+      rewrite all dependencies to point to the canonical name, then
+      delete the duplicate from disk (assets/input/ + ComfyUI/input/)
+    - Otherwise → register as new
+
+    Returns summary with added/deduped counts and list of removed files.
+    """
     if not ASSETS_INPUT_DIR.exists():
-        return {"files_on_disk": 0, "records_in_db": 0, "added": 0}
+        return {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0, "removed": []}
+
+    import json as _json
+    from config import PRESETS_DIR, COMFYUI_DIR
 
     conn = _db._get_conn()
+    comfyui_input = Path(COMFYUI_DIR) / "input"
 
     # Get all filenames already in DB
     existing = set()
@@ -180,6 +194,8 @@ def sync_input_assets() -> dict:
         existing.add(row[0])
 
     added = 0
+    deduped = 0
+    removed = []
     files_on_disk = 0
     now = _now_rome().strftime("%Y-%m-%d %H:%M")
 
@@ -200,9 +216,22 @@ def sync_input_assets() -> dict:
         size = len(data)
 
         # Check if same hash+size exists under different name
-        dup = _find_by_hash(sha256, size)
-        if dup:
-            continue  # Same content already tracked under another name
+        canonical = _find_by_hash(sha256, size)
+        if canonical:
+            # This file is a duplicate — rewrite deps and delete
+            dup_name = f.name
+            canon_name = canonical["filename"]
+            _rewrite_dependencies(conn, dup_name, canon_name, PRESETS_DIR)
+            # Delete from assets/input/
+            f.unlink(missing_ok=True)
+            # Delete from ComfyUI/input/
+            comfy_dup = comfyui_input / dup_name
+            if comfy_dup.exists():
+                comfy_dup.unlink(missing_ok=True)
+            deduped += 1
+            removed.append({"duplicate": dup_name, "canonical": canon_name})
+            files_on_disk -= 1
+            continue
 
         mime = "image/png"
         if ext in (".jpg", ".jpeg"):
@@ -224,7 +253,53 @@ def sync_input_assets() -> dict:
 
     records_in_db = conn.execute("SELECT COUNT(*) FROM input_assets").fetchone()[0]
 
-    return {"files_on_disk": files_on_disk, "records_in_db": records_in_db, "added": added}
+    return {
+        "files_on_disk": files_on_disk,
+        "records_in_db": records_in_db,
+        "added": added,
+        "deduped": deduped,
+        "removed": removed,
+    }
+
+
+def _rewrite_dependencies(conn, old_name: str, new_name: str, presets_dir: Path):
+    """Rewrite all references from old_name to new_name across jobs, saved_prompts, and presets."""
+    import json as _json
+
+    # 1. jobs.input_image (direct column)
+    conn.execute("UPDATE jobs SET input_image = ? WHERE input_image = ?", (new_name, old_name))
+
+    # 2. jobs.params (JSON text — search and replace)
+    rows = conn.execute(
+        "SELECT rowid, params FROM jobs WHERE params LIKE ?",
+        (f"%{old_name}%",)
+    ).fetchall()
+    for rowid, params_str in rows:
+        if params_str:
+            updated = params_str.replace(old_name, new_name)
+            if updated != params_str:
+                conn.execute("UPDATE jobs SET params = ? WHERE rowid = ?", (updated, rowid))
+
+    # 3. saved_prompts.params (JSON text)
+    rows = conn.execute(
+        "SELECT rowid, params FROM saved_prompts WHERE params LIKE ?",
+        (f"%{old_name}%",)
+    ).fetchall()
+    for rowid, params_str in rows:
+        if params_str:
+            updated = params_str.replace(old_name, new_name)
+            if updated != params_str:
+                conn.execute("UPDATE saved_prompts SET params = ? WHERE rowid = ?", (updated, rowid))
+
+    # 4. Preset JSON files on disk
+    if presets_dir.exists():
+        for pf in presets_dir.glob("*.json"):
+            try:
+                text = pf.read_text()
+                if old_name in text:
+                    pf.write_text(text.replace(old_name, new_name))
+            except Exception:
+                pass
 
 
 def get_stats() -> dict:
