@@ -15,8 +15,10 @@
     <button class="header-tab" data-tab="studio">CivitAI</button>
     <button class="header-tab" data-tab="settings">Settings</button>
   </div>
-  <a id="studioLink" href="#" target="_blank" class="studio-link" style="display:none;">↗</a>
-  <span class="dot dot-gray" id="studioDot" title="Studio status"></span>
+  <div id="studioStatus" class="studio-status offline">
+    <span class="dot" id="studioDot"></span>
+    <a id="studioLink" href="#" target="_blank">Offline</a>
+  </div>
 </div>
 
 <div class="content">
@@ -142,6 +144,13 @@
     <div style="margin-top:12px;font-size:10px;color:var(--muted);text-align:center;">
       Keys are stored locally in Chrome. Never sent to third parties.
     </div>
+  </div>
+</div>
+
+<div id="changelogOverlay" class="changelog-overlay" style="display:none;">
+  <div class="changelog-modal">
+    <div class="changelog-header"><span>Changelog</span><button class="changelog-close" id="changelogClose">&times;</button></div>
+    <div class="changelog-body" id="changelogBody"></div>
   </div>
 </div>
 

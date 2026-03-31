@@ -19,7 +19,8 @@ Browser companion for [ComfyUI Studio](https://github.com/diego-devita/comfyui-s
 - Billing: credit balance, spend rate, estimated time remaining
 - Storage: network volumes with cost breakdown
 - GPU selection with sort, favorites, region, and availability check
-- Auto-retry resume when GPU unavailable
+- Auto-retry resume/launch when GPU unavailable (configurable interval 5s–30s)
+- GPU name badge, network volume badge on pod cards
 
 ### CivitAI
 - Model pages: see all versions with catalog status (downloaded / in catalog / missing)
@@ -27,9 +28,22 @@ Browser companion for [ComfyUI Studio](https://github.com/diego-devita/comfyui-s
 - Add models to catalog and queue downloads with one click
 - Create presets from CivitAI images with full parameter mapping and workflow auto-selection
 
+### Side Panel
+- Click ⧉ icon to detach popup into a persistent side panel
+- Stays open when switching tabs/windows
+- Auto-refreshes CivitAI page detection on navigation
+
 ### Status
-- Green bar on icon when connected to Studio
-- Red bar when disconnected
+- Online/Offline status badge in header with color-coded border and hover
+- Green icon bar when connected to Studio, red when disconnected
+- Status banner in fixed bottom bar (no layout shift)
+- Click version number to view changelog
+
+### Permissions
+- `storage` — save settings
+- `tabs` — detect CivitAI pages
+- `sidePanel` — persistent side panel mode
+- `activeTab` — detect current tab URL from side panel
 
 ## Install
 

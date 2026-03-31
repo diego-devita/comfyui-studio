@@ -914,32 +914,34 @@ var _studioConnected = false;
 var _studioCheckDone = null; // promise that resolves when check completes
 
 async function checkStudio() {
-  const dot = $('studioDot');
+  const container = $('studioStatus');
   const link = $('studioLink');
   const settings = await getSettings();
   const studioUrl = settings.studioUrl ? settings.studioUrl.replace(/\/$/, '') : '';
   try {
     const status = await studioGet('/api/admin/system/status');
     _studioConnected = true;
-    dot.className = 'dot dot-green';
-    dot.title = 'Studio: Connected';
+    container.className = 'studio-status online';
+    container.title = 'Clicca per visitare la pagina ComfyUI Studio collegata';
+    link.href = studioUrl || '#';
+    link.textContent = 'Online';
     chrome.action.setBadgeText({ text: '' });
     chrome.action.setIcon({ path: { '16': 'icons/icon16_connected.png', '48': 'icons/icon48_connected.png', '128': 'icons/icon128_connected.png' } });
-    if (studioUrl) {
-      link.href = studioUrl;
-      link.textContent = 'Studio';
-      link.style.display = '';
-    }
   } catch {
     _studioConnected = false;
-    dot.className = 'dot dot-red';
-    dot.title = 'Studio: Not connected';
+    container.className = 'studio-status offline';
+    container.title = 'Istanza ComfyUI Studio non collegata';
+    link.textContent = 'Offline';
+    link.href = '#';
     chrome.action.setIcon({ path: { '16': 'icons/icon16_disconnected.png', '48': 'icons/icon48_disconnected.png', '128': 'icons/icon128_disconnected.png' } });
-    link.style.display = 'none';
   }
   // Status bar
   const extVer = chrome.runtime.getManifest().version;
-  $('statusBarText').textContent = 'v' + extVer;
+  var verSpan = $('statusBarText');
+  verSpan.textContent = 'v' + extVer;
+  verSpan.style.cursor = 'pointer';
+  verSpan.title = 'View changelog';
+  verSpan.addEventListener('click', showChangelog);
 }
 
 // ── Toggle password visibility ──
@@ -951,7 +953,61 @@ document.querySelectorAll('.toggle-vis').forEach(btn => {
   });
 });
 
-// ─�� Init ──
+// ── Changelog ──
+
+function _parseMd(md) {
+  var html = '';
+  var inList = false;
+  md.split('\n').forEach(function(line) {
+    var trimmed = line.trim();
+    if (!trimmed) {
+      if (inList) { html += '</ul>'; inList = false; }
+      return;
+    }
+    if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += '<h1>' + _escMd(trimmed.substring(2)) + '</h1>';
+    } else if (trimmed.startsWith('## ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += '<h2>' + _escMd(trimmed.substring(3)) + '</h2>';
+    } else if (trimmed.startsWith('- ')) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      var content = trimmed.substring(2);
+      content = content.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+      content = content.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:2px;font-size:11px;">$1</code>');
+      html += '<li>' + content + '</li>';
+    }
+  });
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function _escMd(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function showChangelog() {
+  var overlay = $('changelogOverlay');
+  var body = $('changelogBody');
+  overlay.style.display = 'flex';
+  body.innerHTML = '<div style="color:var(--muted);">Loading...</div>';
+  try {
+    var resp = await fetch('CHANGELOG.md');
+    var md = await resp.text();
+    body.innerHTML = _parseMd(md);
+  } catch (e) {
+    body.innerHTML = '<div style="color:var(--error);">Failed to load changelog</div>';
+  }
+}
+
+$('changelogClose').addEventListener('click', function() {
+  $('changelogOverlay').style.display = 'none';
+});
+$('changelogOverlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
+// ── Init ──
 
 async function init() {
   const s = await getSettings();
@@ -1083,10 +1139,10 @@ async function loadModelVersions(modelId, currentVersionId) {
         actionHtml = '<button class="btn btn-sm btn-download-ver" data-file="' + entry.file + '">Download</button>';
       } else if (otherVersions.length > 0) {
         statusBadge = '<span class="ver-badge ver-other">Other version</span>';
-        actionHtml = '<button class="btn btn-sm btn-add-catalog" data-vid="' + vid + '">+ Add</button>';
+        actionHtml = '<button class="btn btn-sm btn-add-catalog" style="margin-top:2px;" data-vid="' + vid + '">+ Add</button>';
       } else {
         statusBadge = '<span class="ver-badge ver-missing">Not in catalog</span>';
-        actionHtml = '<button class="btn btn-sm btn-add-catalog" data-vid="' + vid + '">+ Add</button>';
+        actionHtml = '<button class="btn btn-sm btn-add-catalog" style="margin-top:2px;" data-vid="' + vid + '">+ Add</button>';
       }
 
       var primaryFile = (ver.files || []).find(function(f) { return f.primary; }) || (ver.files || [])[0] || {};
@@ -1191,7 +1247,7 @@ async function loadImageGenData(imageId) {
         if (res.catalog_status === 'missing' && res.catalog_file) {
           actionBtn = '<button class="btn btn-sm btn-download-ver" data-file="' + res.catalog_file + '">Download</button>';
         } else if (res.catalog_status === 'not_found' && res.versionId) {
-          actionBtn = '<button class="btn btn-sm btn-add-catalog" data-vid="' + res.versionId + '">+ Add</button>';
+          actionBtn = '<button class="btn btn-sm btn-add-catalog" style="margin-top:2px;" data-vid="' + res.versionId + '">+ Add</button>';
         }
 
         html += '<div class="resource-item">' +
@@ -1234,7 +1290,7 @@ async function loadImageGenData(imageId) {
         if (dep.catalog_status === 'missing' && dep.catalog_file) {
           actionBtn = '<button class="btn btn-sm btn-download-ver" data-file="' + dep.catalog_file + '">Download</button>';
         } else if (dep.catalog_status === 'not_found' && dep.civitai_version_id) {
-          actionBtn = '<button class="btn btn-sm btn-add-catalog" data-vid="' + dep.civitai_version_id + '">+ Add</button>';
+          actionBtn = '<button class="btn btn-sm btn-add-catalog" style="margin-top:2px;" data-vid="' + dep.civitai_version_id + '">+ Add</button>';
         }
 
         html += '<div class="resource-item">' +
