@@ -10,7 +10,9 @@
 <style>
   .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
-  .group-badge { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 3px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; }
+  .group-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; }
+  .group-count-boing { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 12px; background: var(--accent); color: var(--bg); font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 0 6px; vertical-align: middle; }
+  .group-count-boing.sm { min-width: 18px; height: 18px; border-radius: 9px; font-size: 10px; padding: 0 4px; }
   .lora-group-card { border-color: rgba(232,255,71,0.2); }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
@@ -944,15 +946,22 @@
         }
         linksHtml += '</div>';
 
+        var countBoing = '<span class="group-count-boing">' + g.cards.length + '</span>';
+        var countBoingSm = '<span class="group-count-boing sm">' + g.cards.length + '</span>';
+
         groupCard.innerHTML =
           thumbHtml +
           '<div class="card-top">' +
             '<div class="card-info">' +
-              '<div class="card-name"><span class="group-badge">GROUP</span> ' + escHtml(g.name) + ' <span style="color:var(--muted);font-weight:normal;">(' + g.cards.length + ')</span></div>' +
+              '<div class="card-name"><span class="group-badge">GROUP</span> ' + escHtml(g.name) + ' ' + countBoing + '</div>' +
               '<div class="card-meta">' +
-                '<span>' + sizeStr + '</span>' +
+                '<span>' + sizeStr + '</span> ' + countBoingSm +
+                ' <span class="source-badge civitai">civitai</span>' +
                 bmHtml +
-                linksHtml +
+              '</div>' +
+              '<div class="model-links">' +
+                '<a class="model-link" href="https://civitai.com/models/' + mid + '" target="_blank">model</a>' +
+                '<a class="model-link" href="https://civitai.com/api/v1/models/' + mid + '" target="_blank">api:model</a>' +
               '</div>' +
             '</div>' +
           '</div>' +
