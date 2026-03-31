@@ -29,6 +29,14 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 .header h1 { font-size: 15px; font-weight: 600; font-family: var(--sans); white-space: nowrap; }
+.detach-btn {
+  cursor: pointer; font-size: 16px; color: var(--muted);
+  padding: 2px 4px; border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+  user-select: none; line-height: 1;
+}
+.detach-btn:hover { color: var(--accent); background: rgba(232,255,71,0.1); }
+.detach-btn.is-panel { display: none; }
 .header-tabs { display: flex; gap: 2px; flex: 1; justify-content: center; }
 .header-tab {
   background: none; border: none; color: var(--muted); cursor: pointer;

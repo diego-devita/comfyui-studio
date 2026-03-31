@@ -1,5 +1,12 @@
 # Chrome Extension Changelog
 
+## v2.0.0 — 2026-03-31 11:13
+- **Side Panel mode**: click ⧉ icon to detach popup into a persistent side panel that stays open when switching tabs/windows
+- **New permissions**: `sidePanel` (side panel API), `activeTab` (detect current tab URL in side panel)
+- Side panel auto-refreshes CivitAI detection when navigating or switching tabs
+- CivitAI tab: retry studio connection check if not ready on first load
+- Settings save now properly awaits init before refreshing CivitAI tab
+
 ## v1.3.0 — 2026-03-31 10:53
 - Status banner moved to fixed bottom bar (no more layout shift)
 - Progress bar on status banner with 6s countdown

@@ -87,6 +87,29 @@ async function detectCivitaiPage() {
 
 function $(id) { return document.getElementById(id); }
 
+// ── Detach to side panel ──
+var _isPanel = window.location.search.includes('panel=1') || (typeof chrome !== 'undefined' && chrome.sidePanel);
+
+document.addEventListener('DOMContentLoaded', () => {
+  var detachBtn = document.getElementById('detachBtn');
+  if (!detachBtn) return;
+
+  // Hide detach button if already in side panel
+  if (_isPanel && document.documentElement.clientWidth > 700) {
+    detachBtn.classList.add('is-panel');
+  }
+
+  detachBtn.addEventListener('click', async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.sidePanel.open({ tabId: tab.id });
+      window.close();
+    } catch (e) {
+      console.error('Side panel error:', e);
+    }
+  });
+});
+
 var _statusTimer = null;
 function showStatus(msg, type) {
   const el = $('statusBanner');
@@ -875,8 +898,7 @@ $('saveSettingsBtn').addEventListener('click', async () => {
     studioKey: $('studioKey').value.trim(),
   });
   showStatus('Settings saved', 'success');
-  init();
-  initStudio();
+  init().then(initStudio);
 });
 
 // Populate settings on load
@@ -889,6 +911,7 @@ getSettings().then(s => {
 // ── Studio status dot ──
 
 var _studioConnected = false;
+var _studioCheckDone = null; // promise that resolves when check completes
 
 async function checkStudio() {
   const dot = $('studioDot');
@@ -979,9 +1002,13 @@ async function initStudio() {
   }
 
   if (!_studioConnected) {
-    noConnect.style.display = '';
-    content.style.display = 'none';
-    return;
+    // Retry once — side panel may load before check completes
+    await checkStudio();
+    if (!_studioConnected) {
+      noConnect.style.display = '';
+      content.style.display = 'none';
+      return;
+    }
   }
 
   noConnect.style.display = 'none';
@@ -1518,3 +1545,13 @@ async function loadImageGenData(imageId) {
 }
 
 init().then(initStudio);
+
+// Side panel: re-check CivitAI tab when user navigates or switches tabs
+if (chrome.tabs && chrome.tabs.onActivated) {
+  chrome.tabs.onActivated.addListener(() => { initStudio(); });
+}
+if (chrome.tabs && chrome.tabs.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.url) initStudio();
+  });
+}
