@@ -1977,7 +1977,16 @@
           '<img id="pipelineImgPreview" style="max-width:60px;max-height:60px;border-radius:4px;display:none;">' +
           '</div>';
       } else if (inp.type === 'text') {
-        html += '<textarea data-pipeline-input="' + inp.id + '" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;box-sizing:border-box;"></textarea>';
+        html += '<textarea data-pipeline-input="' + inp.id + '" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;resize:vertical;box-sizing:border-box;"></textarea>' +
+          '<button class="btn btn--sm" style="margin-top:4px;" onclick="window._openPromptBuilder(\'' + inp.id + '\')">Build with AI</button>' +
+          '<div id="promptBuilderChat_' + inp.id + '" style="display:none;margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">' +
+            '<div id="promptBuilderMsgs_' + inp.id + '" style="max-height:200px;overflow-y:auto;margin-bottom:8px;font-family:var(--mono);font-size:11px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;"></div>' +
+            '<div style="display:flex;gap:6px;">' +
+              '<input id="promptBuilderInput_' + inp.id + '" placeholder="Describe what you want..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 8px;box-sizing:border-box;">' +
+              '<button class="btn btn--sm" onclick="window._sendPromptBuilder(\'' + inp.id + '\')">Send</button>' +
+              '<button class="chat-clear-btn" onclick="window._closePromptBuilder(\'' + inp.id + '\')">Close</button>' +
+            '</div>' +
+          '</div>';
       } else if (inp.type === 'number') {
         html += '<input type="number" data-pipeline-input="' + inp.id + '" value="' + (inp.default || 4) + '" min="' + (inp.min || 1) + '" max="' + (inp.max || 20) + '" style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;">';
       }
@@ -1998,6 +2007,120 @@
       });
     }
   }
+
+  // ── Prompt Builder mini-chat ──
+  var _pbHistory = {};  // inputId → [{role, content}]
+  var _pbBusy = false;
+
+  window._openPromptBuilder = function(inputId) {
+    var chat = document.getElementById('promptBuilderChat_' + inputId);
+    if (!chat) return;
+    chat.style.display = '';
+    if (!_pbHistory[inputId]) _pbHistory[inputId] = [];
+    var msgs = document.getElementById('promptBuilderMsgs_' + inputId);
+    if (!_pbHistory[inputId].length) {
+      msgs.innerHTML = '<div style="color:var(--muted);padding:8px 0;">Tell me what you want in the video. I\'ll help you build the description.</div>';
+    }
+    document.getElementById('promptBuilderInput_' + inputId).focus();
+  };
+
+  window._closePromptBuilder = function(inputId) {
+    document.getElementById('promptBuilderChat_' + inputId).style.display = 'none';
+  };
+
+  window._sendPromptBuilder = async function(inputId) {
+    if (_pbBusy) return;
+    var input = document.getElementById('promptBuilderInput_' + inputId);
+    var text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+
+    if (!_pbHistory[inputId]) _pbHistory[inputId] = [];
+    _pbHistory[inputId].push({role: 'user', content: text});
+
+    var msgs = document.getElementById('promptBuilderMsgs_' + inputId);
+    msgs.innerHTML += '<div style="color:var(--text);margin:4px 0;"><b>You:</b> ' + escHtml(text) + '</div>';
+    msgs.innerHTML += '<div id="pbPending_' + inputId + '" style="color:var(--muted);margin:4px 0;"><span class="spinner sm"></span> Thinking...</div>';
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // Find the text_model instance from pipeline requirements
+    var reqs = _pipelineData.requirements_status || [];
+    var textReq = reqs.find(function(r) { return r.requirement.id === 'text_model' && r.satisfied; });
+    if (!textReq) {
+      msgs.innerHTML += '<div style="color:var(--error);">Text model not running.</div>';
+      var pending = document.getElementById('pbPending_' + inputId);
+      if (pending) pending.remove();
+      return;
+    }
+
+    _pbBusy = true;
+
+    try {
+      // Build messages for LLM
+      var llmMessages = _pbHistory[inputId].map(function(m) { return {role: m.role, content: m.content}; });
+
+      var port = textReq.instance.port;
+      // Call via proxy
+      var proxyBase = textReq.instance.proxy_base_path || ('/api/admin/llm/proxy/' + textReq.instance.instance_id + '/api/');
+
+      // Get preset system prompt
+      var presetResp = await apiFetch('/api/admin/llm/chat-presets');
+      var presets = presetResp.ok ? await presetResp.json() : [];
+      var pbPreset = presets.find(function(p) { return p.id === 'prompt-builder'; });
+
+      var apiMessages = [];
+      if (pbPreset && pbPreset.system_prompt) {
+        apiMessages.push({role: 'system', content: pbPreset.system_prompt});
+      }
+      apiMessages = apiMessages.concat(llmMessages);
+
+      var resp = await apiFetch(proxyBase + 'v1/chat/completions', {
+        method: 'POST',
+        body: { messages: apiMessages, temperature: 0.7, stream: false },
+      });
+
+      var pending = document.getElementById('pbPending_' + inputId);
+      if (pending) pending.remove();
+
+      if (!resp.ok) {
+        msgs.innerHTML += '<div style="color:var(--error);">Error: ' + resp.status + '</div>';
+        _pbBusy = false;
+        return;
+      }
+
+      var data = await resp.json();
+      var reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+
+      _pbHistory[inputId].push({role: 'assistant', content: reply});
+      msgs.innerHTML += '<div style="color:var(--accent);margin:4px 0;"><b>AI:</b> ' + escHtml(reply) + '</div>';
+      msgs.scrollTop = msgs.scrollHeight;
+
+      // Check if reply contains PROMPT:
+      var promptMatch = reply.match(/PROMPT:\s*([\s\S]+)/i);
+      if (promptMatch) {
+        var extracted = promptMatch[1].trim();
+        var textarea = document.querySelector('[data-pipeline-input="' + inputId + '"]');
+        if (textarea) textarea.value = extracted;
+        showToast('Prompt extracted!', 2000, 'success');
+        // Auto-close after a moment
+        setTimeout(function() { window._closePromptBuilder(inputId); }, 1500);
+      }
+    } catch (e) {
+      var pending = document.getElementById('pbPending_' + inputId);
+      if (pending) pending.remove();
+      msgs.innerHTML += '<div style="color:var(--error);">Error: ' + e.message + '</div>';
+    }
+    _pbBusy = false;
+  };
+
+  // Enter key handler for prompt builder inputs
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('promptBuilderInput_')) {
+      e.preventDefault();
+      var inputId = e.target.id.replace('promptBuilderInput_', '');
+      window._sendPromptBuilder(inputId);
+    }
+  });
 
   // ── Run pipeline ──
   document.getElementById('pipelineRunBtn').addEventListener('click', async function() {

@@ -9,7 +9,7 @@ PIPELINE = {
     "inputs": [
         {"id": "image", "type": "image", "label": "Reference Image"},
         {"id": "description", "type": "text", "label": "Video Description"},
-        {"id": "scenes", "type": "number", "label": "Scenes (5s each)", "default": 4, "min": 1, "max": 20},
+        {"id": "scenes", "type": "number", "label": "Scenes (5s each, 0 = auto)", "default": 0, "min": 0, "max": 10},
     ],
     "requires": [
         {
@@ -24,7 +24,7 @@ PIPELINE = {
             "model": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
             "label": "Text model (Scene Generator)",
             "preset": "3c37f623145d",
-            "min_ctx": 16384,
+            "min_ctx": 32768,
         },
     ],
 }
@@ -72,12 +72,11 @@ async def run(inputs: dict, ctx):
     # ── Log inputs ──
     ctx.log(f"Image: {image_id}")
     ctx.log(f"Description: {description}")
-    ctx.log(f"Scenes: {num_scenes}")
-    ctx.log(f"Full prompt will be: {{image_description}}\\n\\n{num_scenes} scenes: {description}")
+    ctx.log(f"Scenes: {num_scenes if num_scenes > 0 else 'auto'}")
     ctx.log("")
 
     # ── Step 1: Analyze image ──
-    ctx.set_step(f"Analyzing image with vision model")
+    ctx.set_step("Analyzing image with vision model")
     image_description = await ctx.llm_chat(
         preset_id="image-analyzer",
         message="Describe this image. Pay special attention to the subject's real age — examine neck skin, crow's feet, nasolabial folds, hand veins, jawline before estimating. Do not underestimate age. Include an AGE ASSESSMENT section with specific aging indicators found.",
@@ -89,8 +88,12 @@ async def run(inputs: dict, ctx):
         ctx.current_step["output"] = image_description
 
     # ── Step 2: Generate scene prompts ──
-    ctx.set_step(f"Generating {num_scenes} scene prompts")
-    scene_request = f"{image_description}\n\n{num_scenes} scenes: {description}"
+    if num_scenes > 0:
+        ctx.set_step(f"Generating {num_scenes} scene prompts")
+        scene_request = f"{image_description}\n\n{num_scenes} scenes: {description}"
+    else:
+        ctx.set_step("Generating scene prompts (auto count)")
+        scene_request = f"{image_description}\n\n{description}"
     ctx.log(f"Constructed prompt:\n{scene_request}\n")
     scenes_text = await ctx.llm_chat(
         preset_id="3c37f623145d",  # Prompt Multiscena
