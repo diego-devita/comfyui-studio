@@ -15,7 +15,7 @@
 }
 
 html, body {
-  width: 580px;
+  width: 680px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
@@ -47,9 +47,51 @@ html, body {
 
 /* Status bar */
 .status-bar {
-  padding: 4px 16px; text-align: right;
-  font-family: var(--sans); font-size: 9px; color: var(--muted);
+  position: relative;
+  height: 28px;
   border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+.status-bar #statusBarText {
+  position: absolute; right: 10px; top: 0; bottom: 0;
+  display: flex; align-items: center;
+  font-family: var(--sans); font-size: 9px; color: var(--muted);
+  z-index: 1; pointer-events: none;
+}
+.status-bar .status-banner {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  right: 60px;
+  display: flex; align-items: center;
+  padding: 0 10px;
+  font-size: 10px; font-family: var(--sans);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-sizing: border-box;
+  opacity: 0; transition: opacity 0.3s;
+  cursor: default;
+}
+.status-bar .status-banner.visible { opacity: 1; }
+.status-bar .status-banner.flash { animation: bannerFlash 0.4s ease-out; }
+@keyframes bannerFlash {
+  0% { background: white; color: white; }
+  30% { background: white; }
+  100% {}
+}
+.status-bar .status-banner.success { background: rgba(46,213,115,0.15); color: var(--success); }
+.status-bar .status-banner.error { background: rgba(255,71,87,0.15); color: var(--error); }
+.status-bar .status-banner::after {
+  content: '';
+  position: absolute; left: 0; bottom: 0; height: 3px;
+  width: 100%;
+  transform-origin: right;
+}
+.status-bar .status-banner.visible::after {
+  animation: bannerProgress 6s linear forwards;
+}
+.status-bar .status-banner.success::after { background: #1a9e3f; }
+.status-bar .status-banner.error::after { background: #c0392b; }
+@keyframes bannerProgress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }
 .dot-red { background: var(--error); }
 .dot-gray { background: var(--muted); }
@@ -101,14 +143,30 @@ html, body {
   padding: 10px 12px;
   margin-bottom: 8px;
 }
-.card-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
 .pod-id {
   font-size: 10px; font-weight: 400; color: var(--muted); opacity: 0.6;
   cursor: pointer; margin-left: 4px;
 }
 .pod-id:hover { opacity: 1; color: var(--accent); }
 .card-meta { font-size: 12px; color: var(--muted); }
-.card-row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+.vol-badge {
+  display: inline-block;
+  font-family: var(--sans); font-size: 10px; font-weight: 600;
+  color: #adb5bd; background: rgba(173,181,189,0.12);
+  padding: 2px 7px; border-radius: 3px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.gpu-badge {
+  display: inline-block;
+  font-family: var(--sans); font-size: 10px; font-weight: 600;
+  color: #a78bfa; background: rgba(167,139,250,0.12);
+  padding: 2px 8px; border-radius: 4px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.card-row { display: flex; align-items: center; gap: 1em; margin-top: 4px; flex-wrap: wrap; }
 .card-actions { display: flex; gap: 6px; margin-top: 8px; }
 .card-links {
   display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
@@ -152,16 +210,22 @@ html, body {
 /* Retry bar */
 .retry-box { margin-top: 8px; }
 .retry-info {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center; gap: 4px;
   font-size: 11px; color: var(--accent); margin-bottom: 4px;
 }
-.retry-stop { font-size: 10px !important; padding: 2px 6px !important; }
+.retry-info > span:first-child { flex: 1; }
+.retry-stop { font-size: 10px !important; padding: 3px 8px !important; height: 24px; line-height: 1; }
+.retry-interval-select {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); font-family: var(--sans); font-size: 10px;
+  padding: 3px 4px; height: 24px; cursor: pointer; outline: none;
+}
 .retry-bar-track {
   height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
 }
 .retry-bar-fill {
   height: 100%; width: 0%; background: var(--accent); border-radius: 2px;
-  transition: width 1s linear;
+  transition: width 100ms linear;
 }
 
 /* Buttons */
@@ -291,11 +355,5 @@ textarea.mapping-input { resize: vertical; }
 .gpu-card .gpu-name { font-size: 15px; font-weight: 600; }
 .gpu-card .gpu-info { font-size: 15px; color: var(--muted); margin-top: 2px; }
 
-/* Status message */
-.status-msg {
-  padding: 8px 12px; border-radius: 4px; font-size: 15px;
-  margin-bottom: 8px; display: none;
-}
-.status-msg.visible { display: block; }
-.status-msg.success { background: rgba(46,213,115,0.1); color: var(--success); }
-.status-msg.error { background: rgba(255,71,87,0.1); color: var(--error); }
+/* Status message (legacy, hidden — replaced by status-banner in status-bar) */
+.status-msg { display: none !important; }

@@ -87,11 +87,21 @@ async function detectCivitaiPage() {
 
 function $(id) { return document.getElementById(id); }
 
+var _statusTimer = null;
 function showStatus(msg, type) {
-  const el = $('statusMsg');
+  const el = $('statusBanner');
+  // Flash effect: briefly go white then settle
+  el.className = 'status-banner';
+  el.offsetHeight;
   el.textContent = msg;
-  el.className = 'status-msg visible ' + type;
-  setTimeout(() => { el.className = 'status-msg'; }, 4000);
+  el.title = msg;
+  el.className = 'status-banner visible flash ' + (type || '');
+  // Reset progress bar animation
+  el.style.animation = 'none';
+  el.offsetHeight;
+  el.style.animation = '';
+  if (_statusTimer) clearTimeout(_statusTimer);
+  _statusTimer = setTimeout(() => { el.className = 'status-banner'; }, 6000);
 }
 
 function formatBytes(bytes) {
@@ -182,6 +192,7 @@ async function loadPods() {
           runtime { uptimeInSeconds gpus { id gpuUtilPercent memoryUtilPercent } }
           machine { podHostId gpuDisplayName }
           costPerHr
+          networkVolume { id name size }
         }
       }
     }`);
@@ -229,6 +240,7 @@ async function loadPods() {
       const uptime = uptimeSec ? formatUptime(uptimeSec * 1000) : '-';
       const cost = pod.costPerHr ? '$' + pod.costPerHr.toFixed(2) + '/hr' : '';
       const spent = (pod.costPerHr && uptimeSec) ? '$' + (pod.costPerHr * uptimeSec / 3600).toFixed(2) + ' spent' : '';
+      const vol = pod.networkVolume ? pod.networkVolume.name + ' (' + pod.networkVolume.size + 'GB)' : '';
       const linksBox = running
         ? '<div class="card-links">' +
             `<a href="https://${pod.id}-8000.proxy.runpod.net" target="_blank">Studio :8000 ↗</a>` +
@@ -252,10 +264,11 @@ async function loadPods() {
             '<div class="card-row">' +
               '<span class="badge ' + badgeClass + '">' + statusLabel + '</span>' +
               timerHtml +
-              '<span class="card-meta">' + gpu + '</span>' +
+              '<span class="gpu-badge">' + gpu + '</span>' +
+              (vol ? '<span class="vol-badge">' + vol + '</span>' : '') +
             '</div>' +
             '<div class="card-row">' +
-              '<span class="card-meta">' + uptime + ' · ' + cost + (spent ? ' · ' + spent : '') + '</span>' +
+              '<span class="card-meta" style="padding:4px 6px;">' + uptime + ' · ' + cost + (spent ? ' · ' + spent : '') + '</span>' +
             '</div>' +
           '</div>' +
           linksBox +
@@ -331,8 +344,9 @@ function _isGpuUnavailable(msg) {
 
 // ── Resume retry ──
 
-var _retryState = {}; // podId → { timer, attempt, barTimer }
-var RETRY_INTERVAL = 5000; // 5s between retries
+var _retryState = {}; // podId → { tick, ticks, attempt, timer, cancelled, globalStart }
+var TICK_MS = 100; // clock resolution
+var RETRY_TICKS = 50; // 50 x 100ms = 5s between retries
 
 function _fmtRetryTime(ms) {
   var totalSec = Math.floor(ms / 1000);
@@ -342,65 +356,63 @@ function _fmtRetryTime(ms) {
 }
 
 function _startRetry(podId) {
-  if (_retryState[podId]) return; // already retrying
-  var state = { attempt: 0, timer: null, barTimer: null, cancelled: false, globalStart: Date.now() };
-  _retryState[podId] = state;
-  _scheduleNextRetry(podId);
-  loadPods(); // re-render to show retry bar
+  if (_retryState[podId]) return;
+  _retryState[podId] = { tick: 0, ticks: RETRY_TICKS, attempt: 0, timer: null, cancelled: false, globalStart: Date.now() };
+  _runRetryTick(podId);
+  loadPods();
 }
 
 function _stopRetry(podId) {
   var state = _retryState[podId];
   if (!state) return;
   state.cancelled = true;
-  if (state.timer) clearTimeout(state.timer);
-  if (state.barTimer) clearInterval(state.barTimer);
+  if (state.timer) clearInterval(state.timer);
   delete _retryState[podId];
   loadPods();
 }
 
-async function _scheduleNextRetry(podId) {
+function _runRetryTick(podId) {
   var state = _retryState[podId];
   if (!state || state.cancelled) return;
-  state.barStart = Date.now();
+  state.tick = 0;
 
-  // Animate bar + elapsed timer
-  state.barTimer = setInterval(() => {
-    var bar = document.querySelector('[data-retry-bar="' + podId + '"]');
-    if (bar) {
-      var elapsed = Date.now() - state.barStart;
-      var pct = Math.min(100, (elapsed / RETRY_INTERVAL) * 100);
-      bar.style.width = pct + '%';
-    }
-    var elSpan = document.querySelector('[data-retry-elapsed="' + podId + '"]');
-    if (elSpan) {
-      elSpan.textContent = _fmtRetryTime(Date.now() - state.globalStart);
-    }
-  }, 1000);
-
-  state.timer = setTimeout(async () => {
+  state.timer = setInterval(async () => {
     if (state.cancelled) return;
-    if (state.barTimer) clearInterval(state.barTimer);
-    state.attempt++;
-    try {
-      await runpodMutation(`mutation { podResume(input: {podId: "${podId}", gpuCount: 1}) { id } }`);
-      // Success!
-      _startPodTimer(podId);
-      delete _retryState[podId];
-      showStatus('Resume succeeded after ' + state.attempt + ' attempt' + (state.attempt > 1 ? 's' : ''), 'success');
-      setTimeout(loadPods, 2000);
-    } catch (e) {
-      if (_isGpuUnavailable(e.message)) {
-        showStatus('Retry #' + state.attempt + ' — no GPU available, retrying...', 'error');
-        _scheduleNextRetry(podId);
-        loadPods(); // re-render with updated attempt count
-      } else {
-        showStatus('Retry failed: ' + e.message, 'error');
+    state.tick++;
+
+    // Update bar
+    var bar = document.querySelector('[data-retry-bar="' + podId + '"]');
+    if (bar) bar.style.width = (state.tick / state.ticks * 100) + '%';
+
+    // Update elapsed
+    var elSpan = document.querySelector('[data-retry-elapsed="' + podId + '"]');
+    if (elSpan) elSpan.textContent = _fmtRetryTime(Date.now() - state.globalStart);
+
+    // When bar reaches 100%, fire the retry
+    if (state.tick >= state.ticks) {
+      clearInterval(state.timer);
+      state.attempt++;
+
+      try {
+        await runpodMutation(`mutation { podResume(input: {podId: "${podId}", gpuCount: 1}) { id } }`);
+        _startPodTimer(podId);
         delete _retryState[podId];
-        loadPods();
+        showStatus('Resume succeeded after ' + state.attempt + ' attempt' + (state.attempt > 1 ? 's' : ''), 'success');
+        setTimeout(loadPods, 2000);
+      } catch (e) {
+        if (_isGpuUnavailable(e.message)) {
+          showStatus('Retry #' + state.attempt + ' — no GPU, retrying...', 'error');
+          state.tick = 0;
+          loadPods();
+          _runRetryTick(podId);
+        } else {
+          showStatus('Retry failed: ' + e.message, 'error');
+          delete _retryState[podId];
+          loadPods();
+        }
       }
     }
-  }, RETRY_INTERVAL);
+  }, TICK_MS);
 }
 
 function _retryBarHtml(podId) {
@@ -417,21 +429,22 @@ function _retryBarHtml(podId) {
 
 // ── Launch retry ──
 
-var _launchRetry = null; // { timer, barTimer, attempt, globalStart, mutation, cancelled }
+var _launchRetry = null; // { tick, ticks, attempt, timer, cancelled, globalStart, mutation }
 
 function _startLaunchRetry(mutation) {
   if (_launchRetry) _stopLaunchRetry();
-  _launchRetry = { attempt: 0, timer: null, barTimer: null, cancelled: false, globalStart: Date.now(), mutation: mutation };
-  _scheduleLaunchRetry();
+  _launchRetry = { tick: 0, ticks: RETRY_TICKS, attempt: 0, timer: null, cancelled: false, globalStart: Date.now(), mutation: mutation };
+  $('launchBtn').disabled = true;
   _renderLaunchRetryBar();
+  _runLaunchRetryTick();
 }
 
 function _stopLaunchRetry() {
   if (!_launchRetry) return;
   _launchRetry.cancelled = true;
-  if (_launchRetry.timer) clearTimeout(_launchRetry.timer);
-  if (_launchRetry.barTimer) clearInterval(_launchRetry.barTimer);
+  if (_launchRetry.timer) clearInterval(_launchRetry.timer);
   _launchRetry = null;
+  $('launchBtn').disabled = false;
   var el = $('launchRetryBox');
   if (el) el.style.display = 'none';
 }
@@ -439,58 +452,69 @@ function _stopLaunchRetry() {
 function _renderLaunchRetryBar() {
   var el = $('launchRetryBox');
   if (!el) {
-    // Create the retry box after the launch button
     var container = $('launchBtn').parentElement;
     var div = document.createElement('div');
     div.id = 'launchRetryBox';
     div.className = 'retry-box';
     div.style.marginTop = '8px';
-    div.innerHTML = '<div class="retry-info"><span>Retrying launch... #<span id="launchRetryAttempt">1</span> · <span id="launchRetryElapsed">00:00</span></span><button class="btn btn-sm retry-stop" id="launchRetryStop">Stop</button></div><div class="retry-bar-track"><div class="retry-bar-fill" id="launchRetryBar"></div></div>';
+    div.innerHTML = '<div class="retry-info">' +
+      '<span>Retrying launch... #<span id="launchRetryAttempt">1</span> · <span id="launchRetryElapsed">00:00</span></span>' +
+      '<select id="launchRetryInterval" class="retry-interval-select">' +
+        '<option value="50">5s</option><option value="100">10s</option><option value="150">15s</option>' +
+        '<option value="200">20s</option><option value="250">25s</option><option value="300">30s</option>' +
+      '</select>' +
+      '<button class="btn btn-sm retry-stop" id="launchRetryStop">Stop</button>' +
+    '</div><div class="retry-bar-track"><div class="retry-bar-fill" id="launchRetryBar"></div></div>';
     container.appendChild(div);
     $('launchRetryStop').addEventListener('click', _stopLaunchRetry);
+    $('launchRetryInterval').addEventListener('change', function() {
+      if (_launchRetry) _launchRetry.ticks = parseInt(this.value);
+    });
   } else {
     el.style.display = '';
   }
 }
 
-function _scheduleLaunchRetry() {
+function _runLaunchRetryTick() {
   if (!_launchRetry || _launchRetry.cancelled) return;
-  _launchRetry.barStart = Date.now();
+  _launchRetry.tick = 0;
 
-  _launchRetry.barTimer = setInterval(() => {
+  _launchRetry.timer = setInterval(async () => {
+    if (!_launchRetry || _launchRetry.cancelled) return;
+    _launchRetry.tick++;
+
     var bar = $('launchRetryBar');
-    if (bar) {
-      var pct = Math.min(100, ((Date.now() - _launchRetry.barStart) / RETRY_INTERVAL) * 100);
-      bar.style.width = pct + '%';
-    }
+    if (bar) bar.style.width = (_launchRetry.tick / _launchRetry.ticks * 100) + '%';
+
     var el = $('launchRetryElapsed');
     if (el) el.textContent = _fmtRetryTime(Date.now() - _launchRetry.globalStart);
     var att = $('launchRetryAttempt');
     if (att) att.textContent = _launchRetry.attempt + 1;
-  }, 1000);
 
-  _launchRetry.timer = setTimeout(async () => {
-    if (!_launchRetry || _launchRetry.cancelled) return;
-    if (_launchRetry.barTimer) clearInterval(_launchRetry.barTimer);
-    _launchRetry.attempt++;
-    try {
-      var data = await runpodMutation(_launchRetry.mutation);
-      var pod = data.podFindAndDeployOnDemand;
-      _startPodTimer(pod.id);
-      var attempts = _launchRetry.attempt;
-      _stopLaunchRetry();
-      showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
-      setTimeout(loadPods, 3000);
-    } catch (e) {
-      if (_isGpuUnavailable(e.message)) {
-        showStatus('Launch retry #' + _launchRetry.attempt + ' — no GPU, retrying...', 'error');
-        _scheduleLaunchRetry();
-      } else {
-        showStatus('Launch retry failed: ' + e.message, 'error');
+    if (_launchRetry.tick >= _launchRetry.ticks) {
+      clearInterval(_launchRetry.timer);
+      _launchRetry.attempt++;
+
+      try {
+        var data = await runpodMutation(_launchRetry.mutation);
+        var pod = data.podFindAndDeployOnDemand;
+        _startPodTimer(pod.id);
+        var attempts = _launchRetry.attempt;
         _stopLaunchRetry();
+        showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
+        setTimeout(loadPods, 3000);
+      } catch (e) {
+        if (_isGpuUnavailable(e.message)) {
+          showStatus('Launch retry #' + _launchRetry.attempt + ' — no GPU, retrying...', 'error');
+          _launchRetry.tick = 0;
+          _runLaunchRetryTick();
+        } else {
+          showStatus('Launch retry failed: ' + e.message, 'error');
+          _stopLaunchRetry();
+        }
       }
     }
-  }, RETRY_INTERVAL);
+  }, TICK_MS);
 }
 
 // ── Storage panel ──
@@ -892,7 +916,7 @@ async function checkStudio() {
   }
   // Status bar
   const extVer = chrome.runtime.getManifest().version;
-  $('statusBar').textContent = 'ComfyUI Studio Extension v' + extVer;
+  $('statusBarText').textContent = 'v' + extVer;
 }
 
 // ── Toggle password visibility ──
