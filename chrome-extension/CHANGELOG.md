@@ -1,5 +1,11 @@
 # Chrome Extension Changelog
 
+## v3.4.0 — 2026-04-01 00:30
+- **Event log filters**: All, Health, Pods, CivitAI, Settings, Errors — with live counts
+- **Resource polling**: polls civitai-map every 5s, live download progress on version badges, status change events
+- **Event logging**: all actions logged (pod ops, downloads, adds, presets, settings, GPU checks)
+- **Status bar**: taller (34px), larger font (12px) for banner and version
+
 ## v3.3.0 — 2026-03-31 23:00
 - **Pod link status**: link icon on pod cards — green if linked to Settings URL, orange if not (click to set)
 - **Event log**: timestamped log panel below content area for health checks and events

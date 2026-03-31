@@ -195,8 +195,16 @@
   </div>
 </div>
 
-<div class="event-log-container">
-  <div class="event-log-header">Event Log</div>
+<div class="event-log-container" id="eventLogContainer">
+  <div class="event-log-header" id="eventLogHeader">Event Log <span class="event-log-toggle" id="eventLogToggle">&#9660;</span></div>
+  <div class="ev-filters" id="eventLogFilters">
+    <button class="ev-filter active" data-filter="all">All</button>
+    <button class="ev-filter" data-filter="health">Health</button>
+    <button class="ev-filter" data-filter="pods">Pods</button>
+    <button class="ev-filter" data-filter="civitai">CivitAI</button>
+    <button class="ev-filter" data-filter="settings">Settings</button>
+    <button class="ev-filter" data-filter="errors">Errors</button>
+  </div>
   <div id="eventLog" class="event-log"></div>
 </div>
 

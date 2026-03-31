@@ -283,6 +283,7 @@ async function loadPods() {
         var elapsed = Math.round((Date.now() - _podTimers[pod.id].start) / 1000);
         _podJustReady[pod.id] = { at: Date.now(), elapsed: elapsed };
         delete _podTimers[pod.id];
+        logEvent('ok', 'pod ready — ' + (pod.name || pod.id) + ' (' + elapsed + 's)');
         if (_notifyConfig.onPodReady) sendNotification('pod_ready', { podName: pod.name || pod.id, gpu: pod.machine?.gpuDisplayName || '?', message: 'Pod is ready (' + elapsed + 's)' });
       }
       var timerHtml = _tickerHtml(pod.id);
@@ -368,13 +369,16 @@ async function loadPods() {
             await runpodMutation(`mutation { podTerminate(input: {podId: "${id}"}) }`);
           }
           showStatus('Pod ' + action + ' OK', 'success');
+          logEvent('ok', 'pod ' + action + ' — ' + id);
           setTimeout(loadPods, 2000);
         } catch (e) {
           if (action === 'resume' && _isGpuUnavailable(e.message)) {
             showStatus(e.message + ' — auto-retrying', 'error');
+            logEvent('warn', 'pod resume — no GPU, retrying — ' + id);
             _startRetry(id);
           } else {
             showStatus('Error: ' + e.message, 'error');
+            logEvent('err', 'pod ' + action + ' failed — ' + e.message);
           }
           btn.disabled = false;
         }
@@ -395,6 +399,7 @@ async function loadPods() {
         $('studioUrl').value = newUrl;
         _currentStudioUrl = newUrl;
         showStatus('Settings > URL updated successfully', 'success');
+        logEvent('ok', 'link — URL set to ' + newUrl);
         checkStudio();
         loadPods();
       });
@@ -468,16 +473,19 @@ function _runRetryTick(podId) {
         _startPodTimer(podId);
         delete _retryState[podId];
         showStatus('Resume succeeded after ' + state.attempt + ' attempt' + (state.attempt > 1 ? 's' : ''), 'success');
+        logEvent('ok', 'resume retry — succeeded after ' + state.attempt + ' attempts');
         if (_notifyConfig.onRetrySuccess) sendNotification('resume_retry_success', { podName: podId, gpu: '', message: 'Resume succeeded after ' + state.attempt + ' attempts' });
         setTimeout(loadPods, 2000);
       } catch (e) {
         if (_isGpuUnavailable(e.message)) {
           showStatus('Retry #' + state.attempt + ' — no GPU, retrying...', 'error');
+          logEvent('warn', 'resume retry #' + state.attempt + ' — no GPU');
           state.tick = 0;
           loadPods();
           _runRetryTick(podId);
         } else {
           showStatus('Retry failed: ' + e.message, 'error');
+          logEvent('err', 'resume retry failed — ' + e.message);
           delete _retryState[podId];
           loadPods();
         }
@@ -573,15 +581,18 @@ function _runLaunchRetryTick() {
         var attempts = _launchRetry.attempt;
         _stopLaunchRetry();
         showStatus('Pod launched after ' + attempts + ' attempt' + (attempts > 1 ? 's' : '') + ': ' + (pod.name || pod.id), 'success');
+        logEvent('ok', 'launch retry — succeeded after ' + attempts + ' attempts: ' + (pod.name || pod.id));
         if (_notifyConfig.onRetrySuccess) sendNotification('launch_retry_success', { podName: pod.name || pod.id, gpu: '', message: 'Launch succeeded after ' + attempts + ' attempts' });
         setTimeout(loadPods, 3000);
       } catch (e) {
         if (_isGpuUnavailable(e.message)) {
           showStatus('Launch retry #' + _launchRetry.attempt + ' — no GPU, retrying...', 'error');
+          logEvent('warn', 'launch retry #' + _launchRetry.attempt + ' — no GPU');
           _launchRetry.tick = 0;
           _runLaunchRetryTick();
         } else {
           showStatus('Launch retry failed: ' + e.message, 'error');
+          logEvent('err', 'launch retry failed — ' + e.message);
           _stopLaunchRetry();
         }
       }
@@ -832,8 +843,10 @@ $('checkAvailBtn').addEventListener('click', async () => {
 
     if (available) {
       result.innerHTML = '<span style="color:var(--success);">\u2713 Available</span>' + (price ? ' — $' + price.toFixed(2) + '/hr' : '');
+      logEvent('ok', 'gpu check — ' + gpu.displayName + ' available' + (price ? ' $' + price.toFixed(2) + '/hr' : ''));
     } else {
       result.innerHTML = '<span style="color:var(--error);">\u2717 Not available</span>';
+      logEvent('warn', 'gpu check — ' + gpu.displayName + ' not available');
     }
   } catch (e) {
     result.textContent = 'Error: ' + e.message;
@@ -875,14 +888,17 @@ $('launchBtn').addEventListener('click', async () => {
     const pod = data.podFindAndDeployOnDemand;
     _startPodTimer(pod.id);
     showStatus('Pod launched: ' + (pod.name || pod.id), 'success');
+    logEvent('ok', 'launch — pod ' + (pod.name || pod.id) + ' on ' + $('gpuSelect').value);
     if (_notifyConfig.onLaunchSuccess) sendNotification('pod_launched', { podName: pod.name || pod.id, gpu: $('gpuSelect').value, message: 'Pod launched successfully' });
     setTimeout(loadPods, 3000);
   } catch (e) {
     if (_isGpuUnavailable(e.message)) {
       showStatus(e.message + ' — auto-retrying', 'error');
+      logEvent('warn', 'launch — no GPU, auto-retrying');
       _startLaunchRetry(launchMutation);
     } else {
       showStatus('Launch failed: ' + e.message, 'error');
+      logEvent('err', 'launch failed — ' + e.message);
     }
   } finally {
     btn.disabled = false;
@@ -911,6 +927,7 @@ $('findPodBtn').addEventListener('click', async () => {
 
     if (!running.length) {
       showStatus('No running pods found', 'error');
+      logEvent('warn', 'find pod — no running pods');
       picker.style.display = 'none';
       return;
     }
@@ -948,6 +965,7 @@ $('saveSettingsBtn').addEventListener('click', async () => {
     studioKey: $('studioKey').value.trim(),
   });
   showStatus('Settings saved', 'success');
+  logEvent('ok', 'settings saved');
   init().then(initStudio);
 });
 
@@ -992,6 +1010,7 @@ function saveNotifyConfig() {
     console.log('Saved notifyConfig:', _notifyConfig);
   });
   showStatus('Notification settings saved', 'success');
+  logEvent('ok', 'notification settings saved');
 }
 
 async function sendNotification(event, vars) {
@@ -1047,7 +1066,50 @@ var _studioCheckDone = null;
 
 // ── Event Log ──
 
-function logEvent(level, msg) {
+$('eventLogHeader').addEventListener('click', function() {
+  $('eventLogContainer').classList.toggle('collapsed');
+  chrome.storage.local.set({ eventLogCollapsed: $('eventLogContainer').classList.contains('collapsed') });
+});
+chrome.storage.local.get(['eventLogCollapsed'], function(r) {
+  if (r.eventLogCollapsed) $('eventLogContainer').classList.add('collapsed');
+});
+
+var _evFilter = 'all';
+
+document.querySelectorAll('.ev-filter').forEach(function(btn) {
+  btn.dataset.label = btn.textContent;
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.ev-filter').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    _evFilter = btn.dataset.filter;
+    // Show/hide existing entries
+    $('eventLog').querySelectorAll('.ev').forEach(function(el) {
+      el.style.display = _matchFilter(el.dataset.cat, el.dataset.level) ? '' : 'none';
+    });
+  });
+});
+
+function _matchFilter(cat, level) {
+  if (_evFilter === 'all') return true;
+  if (_evFilter === 'errors') return level === 'err' || level === 'warn';
+  return cat === _evFilter;
+}
+
+var _evCounts = { all: 0, health: 0, pods: 0, civitai: 0, settings: 0, errors: 0 };
+
+function _updateFilterCounts() {
+  document.querySelectorAll('.ev-filter').forEach(function(btn) {
+    var f = btn.dataset.filter;
+    btn.textContent = btn.dataset.label + (_evCounts[f] ? ' (' + _evCounts[f] + ')' : '');
+  });
+}
+
+function logEvent(level, msg, cat) {
+  cat = cat || _guessCategory(msg);
+  _evCounts.all++;
+  _evCounts[cat] = (_evCounts[cat] || 0) + 1;
+  if (level === 'err' || level === 'warn') _evCounts.errors++;
+  _updateFilterCounts();
   var log = $('eventLog');
   if (!log) return;
   var now = new Date();
@@ -1055,11 +1117,21 @@ function logEvent(level, msg) {
   var cls = level === 'ok' ? 'ev-ok' : level === 'err' ? 'ev-err' : level === 'warn' ? 'ev-warn' : 'ev-dim';
   var line = document.createElement('div');
   line.className = 'ev';
+  line.dataset.cat = cat;
+  line.dataset.level = level;
+  if (!_matchFilter(cat, level)) line.style.display = 'none';
   line.innerHTML = '<span class="ev-time">' + ts + '</span> <span class="' + cls + '">' + msg + '</span>';
   log.appendChild(line);
   log.scrollTop = log.scrollHeight;
-  // Keep max 100 lines
   while (log.children.length > 100) log.removeChild(log.firstChild);
+}
+
+function _guessCategory(msg) {
+  if (msg.startsWith('health')) return 'health';
+  if (msg.startsWith('pod ') || msg.startsWith('launch') || msg.startsWith('resume')) return 'pods';
+  if (msg.startsWith('civitai') || msg.startsWith('add') || msg.startsWith('download') || msg.startsWith('preset')) return 'civitai';
+  if (msg.startsWith('settings') || msg.startsWith('link') || msg.startsWith('poll') || msg.startsWith('notification')) return 'settings';
+  return 'health';
 }
 
 async function checkStudio() {
@@ -1182,12 +1254,14 @@ chrome.storage.local.get(['studioPollEnabled'], function(r) {
     startStudioPoll();
   } else {
     stopStudioPoll();
+    logEvent('info', 'poll — disabled');
   }
 });
 
 $('studioPollToggle').addEventListener('change', function() {
   _studioPollEnabled = this.checked;
   chrome.storage.local.set({ studioPollEnabled: _studioPollEnabled });
+  logEvent('info', 'poll — ' + (_studioPollEnabled ? 'enabled' : 'disabled'));
   if (_studioPollEnabled) {
     checkStudio();
     startStudioPoll();
@@ -1338,11 +1412,15 @@ async function initStudio() {
   $('civitaiImagePanel').style.display = 'none';
   $('civitaiNone').style.display = 'none';
 
+  startResourcePoll();
+
   if (page.type === 'model') {
+    logEvent('info', 'civitai — model #' + page.id + (page.versionId ? ' v' + page.versionId : ''));
     detect.innerHTML = '<span class="civitai-badge">Model #' + page.id + '</span>';
     $('civitaiModelPanel').style.display = '';
     loadModelVersions(page.id, page.versionId);
   } else if (page.type === 'image') {
+    logEvent('info', 'civitai — image #' + page.id);
     detect.innerHTML = '<span class="civitai-badge">Image #' + page.id + '</span>';
     $('civitaiImagePanel').style.display = '';
     loadImageGenData(page.id);
@@ -1352,10 +1430,73 @@ async function initStudio() {
   }
 }
 
-async function getCivitaiMap() {
-  if (_civitaiMapCache) return _civitaiMapCache;
+async function getCivitaiMap(force) {
+  if (!force && _civitaiMapCache) return _civitaiMapCache;
   _civitaiMapCache = await studioGet('/api/admin/models/civitai-map');
+  // Init status tracking on first load
+  if (!Object.keys(_lastResStatus).length) {
+    var bv = _civitaiMapCache.by_version || {};
+    for (var vid in bv) _lastResStatus[vid] = bv[vid].status;
+  }
   return _civitaiMapCache;
+}
+
+// ── Resource status polling ──
+
+var _resPollInterval = null;
+var _lastResStatus = {}; // vid → status
+
+function startResourcePoll() {
+  if (_resPollInterval) return;
+  _resPollInterval = setInterval(_pollResources, 5000);
+}
+
+function stopResourcePoll() {
+  if (_resPollInterval) { clearInterval(_resPollInterval); _resPollInterval = null; }
+}
+
+async function _pollResources() {
+  if (!_studioConnected) return;
+  // Spin the refresh icon
+  var refresh = $('studioRefresh');
+  if (refresh) { refresh.classList.add('spinning'); setTimeout(function() { refresh.classList.remove('spinning'); }, 600); }
+  try {
+    var map = await getCivitaiMap(true);
+    var byVer = map.by_version || {};
+    for (var vid in byVer) {
+      var cur = byVer[vid];
+      var prev = _lastResStatus[vid];
+      if (prev && prev !== cur.status) {
+        var name = cur.name || cur.file;
+        if (cur.status === 'present' && prev === 'downloading') {
+          logEvent('ok', 'download complete — ' + name, 'civitai');
+        } else if (cur.status === 'downloading' && prev === 'missing') {
+          logEvent('info', 'download started — ' + name, 'civitai');
+        } else if (cur.status === 'downloading') {
+          var pct = cur.dl_total ? Math.round(cur.dl_bytes / cur.dl_total * 100) : 0;
+          logEvent('info', 'downloading — ' + name + ' ' + pct + '%', 'civitai');
+        } else {
+          logEvent('info', name + ' — ' + prev + ' → ' + cur.status, 'civitai');
+        }
+      }
+      _lastResStatus[vid] = cur.status;
+    }
+    // Update version badges in current view
+    document.querySelectorAll('.ver-badge[data-vid]').forEach(function(badge) {
+      var info = byVer[badge.dataset.vid];
+      if (!info) return;
+      if (info.status === 'downloading') {
+        var pct = info.dl_total ? Math.round(info.dl_bytes / info.dl_total * 100) : 0;
+        badge.textContent = 'Downloading ' + pct + '%';
+        badge.className = 'ver-badge ver-other';
+      } else if (info.status === 'present') {
+        badge.textContent = 'Downloaded';
+        badge.className = 'ver-badge ver-downloaded';
+      }
+    });
+  } catch (e) {
+    // silent — polling failure is not critical
+  }
 }
 
 async function loadModelVersions(modelId, currentVersionId) {
@@ -1395,10 +1536,15 @@ async function loadModelVersions(modelId, currentVersionId) {
       var entry = byVersion[vid];
       var statusBadge, actionHtml = '';
 
-      if (entry && entry.status === 'present') {
-        statusBadge = '<span class="ver-badge ver-downloaded">Downloaded</span>';
+      if (entry && entry.status === 'downloading') {
+        var pct = entry.dl_total ? Math.round(entry.dl_bytes / entry.dl_total * 100) : 0;
+        statusBadge = '<span class="ver-badge ver-other" data-vid="' + vid + '">Downloading ' + pct + '%</span>';
+      } else if (entry && entry.status === 'queued') {
+        statusBadge = '<span class="ver-badge ver-other" data-vid="' + vid + '">Queued</span>';
+      } else if (entry && entry.status === 'present') {
+        statusBadge = '<span class="ver-badge ver-downloaded" data-vid="' + vid + '">Downloaded</span>';
       } else if (entry) {
-        statusBadge = '<span class="ver-badge ver-in-catalog">In Catalog</span>';
+        statusBadge = '<span class="ver-badge ver-in-catalog" data-vid="' + vid + '">In Catalog</span>';
         actionHtml = '<button class="btn btn-sm btn-download-ver" data-file="' + entry.file + '">Download</button>';
       } else if (otherVersions.length > 0) {
         statusBadge = '<span class="ver-badge ver-other">Other version</span>';
@@ -1434,8 +1580,10 @@ async function loadModelVersions(modelId, currentVersionId) {
           await studioPost('/api/admin/models/download/' + encodeURIComponent(btn.dataset.file), {});
           btn.textContent = 'Downloading...';
           showStatus('Download started — check Models page for progress', 'success');
+          logEvent('ok', 'download queued — ' + btn.dataset.file);
         } catch (e) {
           showStatus('Download failed: ' + e.message, 'error');
+          logEvent('err', 'download failed — ' + e.message);
           btn.disabled = false;
           btn.textContent = 'Download';
         }
@@ -1446,22 +1594,27 @@ async function loadModelVersions(modelId, currentVersionId) {
       btn.addEventListener('click', async function() {
         btn.disabled = true;
         btn.textContent = 'Adding...';
+        logEvent('info', 'add to catalog → v' + btn.dataset.vid);
         try {
           var result = await studioPost('/api/admin/civitai/add/' + btn.dataset.vid, {});
           if (result.status === 'restricted') {
             btn.textContent = '';
             btn.outerHTML = '<span class="ver-badge ver-restricted">Generation only</span>';
             showStatus(result.reason, 'error');
+            logEvent('warn', 'add — restricted: ' + result.reason);
             return;
           } else if (result.status === 'already_exists') {
             showStatus('Already in catalog', 'success');
+            logEvent('info', 'add — already exists');
           } else {
             showStatus('Added: ' + result.name, 'success');
+            logEvent('ok', 'add — ' + result.name);
           }
           _civitaiMapCache = null;
           loadModelVersions(modelId, currentVersionId);
         } catch (e) {
           showStatus('Add failed: ' + e.message, 'error');
+          logEvent('err', 'add failed — ' + e.message);
           btn.disabled = false;
           btn.textContent = '+ Add';
         }
@@ -1602,8 +1755,10 @@ async function loadImageGenData(imageId) {
           await studioPost('/api/admin/models/download/' + encodeURIComponent(btn.dataset.file), {});
           btn.textContent = 'Downloading...';
           showStatus('Download started — check Models page for progress', 'success');
+          logEvent('ok', 'download queued — ' + btn.dataset.file);
         } catch (e) {
           showStatus('Download failed: ' + e.message, 'error');
+          logEvent('err', 'download failed — ' + e.message);
           btn.disabled = false;
           btn.textContent = 'Download';
         }
@@ -1615,16 +1770,20 @@ async function loadImageGenData(imageId) {
       btn.addEventListener('click', async function() {
         btn.disabled = true;
         btn.textContent = 'Adding...';
+        logEvent('info', 'add to catalog → v' + btn.dataset.vid);
         try {
           var result = await studioPost('/api/admin/civitai/add/' + btn.dataset.vid, {});
           if (result.status === 'restricted') {
             btn.outerHTML = '<span class="ver-badge ver-restricted">Generation only</span>';
             showStatus(result.reason, 'error');
+            logEvent('warn', 'add — restricted: ' + result.reason);
           } else if (result.status === 'already_exists') {
             showStatus('Already in catalog', 'success');
+            logEvent('info', 'add — already exists');
             btn.outerHTML = '<span class="ver-badge ver-in-catalog">In Catalog</span>';
           } else {
             showStatus('Added: ' + result.name, 'success');
+            logEvent('ok', 'add — ' + result.name);
             var dlBtn = document.createElement('button');
             dlBtn.className = 'btn btn-sm btn-download-ver';
             dlBtn.textContent = 'Download';
@@ -1635,8 +1794,10 @@ async function loadImageGenData(imageId) {
                 await studioPost('/api/admin/models/download/' + encodeURIComponent(result.file), {});
                 dlBtn.textContent = 'Downloading...';
                 showStatus('Download started — check Models page for progress', 'success');
+                logEvent('ok', 'download queued — ' + result.file);
               } catch (e) {
                 showStatus('Download failed: ' + e.message, 'error');
+                logEvent('err', 'download failed — ' + e.message);
                 dlBtn.disabled = false;
                 dlBtn.textContent = 'Download';
               }
@@ -1645,6 +1806,7 @@ async function loadImageGenData(imageId) {
           }
         } catch (e) {
           showStatus('Add failed: ' + e.message, 'error');
+          logEvent('err', 'add failed — ' + e.message);
           btn.disabled = false;
           btn.textContent = '+ Add';
         }
@@ -1657,6 +1819,7 @@ async function loadImageGenData(imageId) {
       presetBtn.addEventListener('click', async function() {
         presetBtn.disabled = true;
         presetBtn.textContent = 'Loading workflow...';
+        logEvent('info', 'preset — loading workflow for image #' + imageId);
         try {
           // Pick best workflow based on detected type
           var typeToWorkflow = {
@@ -1844,15 +2007,18 @@ async function loadImageGenData(imageId) {
               };
               await studioPost('/api/admin/presets', preset);
               showStatus('Preset created: ' + presetId, 'success');
+              logEvent('ok', 'preset created — ' + presetId + ' (wf: ' + bestWfId + ')');
               confirmBtn.textContent = 'Created!';
             } catch (e) {
               showStatus('Error: ' + e.message, 'error');
+              logEvent('err', 'preset create failed — ' + e.message);
               confirmBtn.disabled = false;
               confirmBtn.textContent = 'Confirm & Create Preset';
             }
           });
         } catch (e) {
           showStatus('Error loading workflow: ' + e.message, 'error');
+          logEvent('err', 'preset workflow load failed — ' + e.message);
           presetBtn.disabled = false;
           presetBtn.textContent = 'Create Preset';
         }
