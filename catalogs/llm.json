@@ -14,7 +14,12 @@
           "size_gb": 4.7,
           "hf_repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
           "hf_file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-          "tags": ["chat", "instruct", "7b", "multilingual"],
+          "tags": [
+            "chat",
+            "instruct",
+            "7b",
+            "multilingual"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
@@ -27,7 +32,12 @@
           "size_gb": 8.9,
           "hf_repo": "bartowski/Qwen2.5-14B-Instruct-GGUF",
           "hf_file": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
-          "tags": ["chat", "instruct", "14b", "multilingual"],
+          "tags": [
+            "chat",
+            "instruct",
+            "14b",
+            "multilingual"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
@@ -40,7 +50,11 @@
           "size_gb": 4.9,
           "hf_repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
           "hf_file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
-          "tags": ["chat", "instruct", "8b"],
+          "tags": [
+            "chat",
+            "instruct",
+            "8b"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M"
@@ -59,7 +73,14 @@
           "size_gb": 16.6,
           "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q4_K_M.gguf",
-          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering"],
+          "tags": [
+            "chat",
+            "uncensored",
+            "abliterated",
+            "27b",
+            "prompt-engineering",
+            "nsfw"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M",
@@ -73,7 +94,14 @@
           "size_gb": 19.5,
           "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q5_K_M.gguf",
-          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering"],
+          "tags": [
+            "chat",
+            "uncensored",
+            "abliterated",
+            "27b",
+            "prompt-engineering",
+            "nsfw"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q5_K_M",
@@ -87,7 +115,15 @@
           "size_gb": 28.7,
           "hf_repo": "mradermacher/Huihui-Qwen3.5-27B-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
-          "tags": ["chat", "uncensored", "abliterated", "27b", "prompt-engineering", "high-quality"],
+          "tags": [
+            "chat",
+            "uncensored",
+            "abliterated",
+            "27b",
+            "prompt-engineering",
+            "high-quality",
+            "nsfw"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q8_0",
@@ -101,7 +137,15 @@
           "size_gb": 21.3,
           "hf_repo": "mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q4_K_M.gguf",
-          "tags": ["chat", "uncensored", "abliterated", "35b", "moe", "prompt-engineering"],
+          "tags": [
+            "chat",
+            "uncensored",
+            "abliterated",
+            "35b",
+            "moe",
+            "prompt-engineering",
+            "nsfw"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q4_K_M",
@@ -115,7 +159,16 @@
           "size_gb": 37.0,
           "hf_repo": "mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3.5-35B-A3B-abliterated.Q8_0.gguf",
-          "tags": ["chat", "uncensored", "abliterated", "35b", "moe", "prompt-engineering", "high-quality"],
+          "tags": [
+            "chat",
+            "uncensored",
+            "abliterated",
+            "35b",
+            "moe",
+            "prompt-engineering",
+            "high-quality",
+            "nsfw"
+          ],
           "context_default": 8192,
           "context_max": 131072,
           "quant": "Q8_0",
@@ -135,7 +188,15 @@
           "size_gb": 19.0,
           "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q4_K_M.gguf",
-          "tags": ["vision", "uncensored", "abliterated", "32b", "image-to-prompt", "thinking"],
+          "tags": [
+            "vision",
+            "uncensored",
+            "abliterated",
+            "32b",
+            "image-to-prompt",
+            "thinking",
+            "nsfw"
+          ],
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q4_K_M",
@@ -159,7 +220,16 @@
           "size_gb": 34.8,
           "hf_repo": "mradermacher/Huihui-Qwen3-VL-32B-Thinking-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3-VL-32B-Thinking-abliterated.Q8_0.gguf",
-          "tags": ["vision", "uncensored", "abliterated", "32b", "image-to-prompt", "thinking", "high-quality"],
+          "tags": [
+            "vision",
+            "uncensored",
+            "abliterated",
+            "32b",
+            "image-to-prompt",
+            "thinking",
+            "high-quality",
+            "nsfw"
+          ],
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q8_0",
@@ -183,7 +253,15 @@
           "size_gb": 5.1,
           "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q4_K_M.gguf",
-          "tags": ["vision", "uncensored", "abliterated", "8b", "image-to-prompt", "thinking"],
+          "tags": [
+            "vision",
+            "uncensored",
+            "abliterated",
+            "8b",
+            "image-to-prompt",
+            "thinking",
+            "nsfw"
+          ],
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q4_K_M",
@@ -207,7 +285,16 @@
           "size_gb": 8.8,
           "hf_repo": "mradermacher/Huihui-Qwen3-VL-8B-Thinking-abliterated-GGUF",
           "hf_file": "Huihui-Qwen3-VL-8B-Thinking-abliterated.Q8_0.gguf",
-          "tags": ["vision", "uncensored", "abliterated", "8b", "image-to-prompt", "thinking", "high-quality"],
+          "tags": [
+            "vision",
+            "uncensored",
+            "abliterated",
+            "8b",
+            "image-to-prompt",
+            "thinking",
+            "high-quality",
+            "nsfw"
+          ],
           "context_default": 4096,
           "context_max": 32768,
           "quant": "Q8_0",
@@ -226,6 +313,121 @@
       ]
     },
     {
+      "id": "nsfw-roleplay",
+      "name": "NSFW Roleplay / Creative",
+      "models": [
+        {
+          "name": "Midnight Miqu 70B v1.5 (Q4_K_M)",
+          "file": "Midnight-Miqu-70B-v1.5.Q4_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 40.0,
+          "hf_repo": "backyardai/Midnight-Miqu-70B-v1.5-GGUF",
+          "hf_file": "Midnight-Miqu-70B-v1.5.Q4_K_M.gguf",
+          "tags": [
+            "nsfw",
+            "roleplay",
+            "creative",
+            "uncensored",
+            "70b",
+            "mistral"
+          ],
+          "context_default": 8192,
+          "context_max": 32768,
+          "quant": "Q4_K_M",
+          "params": "70B"
+        },
+        {
+          "name": "Midnight Miqu 70B v1.5 (Q5_K_M)",
+          "file": "Midnight-Miqu-70B-v1.5.Q5_K_M.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 48.0,
+          "hf_repo": "backyardai/Midnight-Miqu-70B-v1.5-GGUF",
+          "hf_file": "Midnight-Miqu-70B-v1.5.Q5_K_M.gguf",
+          "tags": [
+            "nsfw",
+            "roleplay",
+            "creative",
+            "uncensored",
+            "70b",
+            "mistral",
+            "high-quality"
+          ],
+          "context_default": 8192,
+          "context_max": 32768,
+          "quant": "Q5_K_M",
+          "params": "70B"
+        },
+        {
+          "name": "Darkest Universe 29B v1.1 (Q8_0)",
+          "file": "MN-V1.1-DARKEST-UNIVERSE-29B-D_AU-Q8_0.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 31.0,
+          "hf_repo": "DavidAU/MN-DARKEST-UNIVERSE-29B-GGUF",
+          "hf_file": "MN-V1.1-DARKEST-UNIVERSE-29B-D_AU-Q8_0.gguf",
+          "tags": [
+            "nsfw",
+            "roleplay",
+            "creative",
+            "uncensored",
+            "29b",
+            "mistral-nemo",
+            "131k-context"
+          ],
+          "context_default": 8192,
+          "context_max": 131072,
+          "quant": "Q8_0",
+          "params": "29B"
+        },
+        {
+          "name": "Stheno v3.2 8B (Q8_0)",
+          "file": "L3-8B-Stheno-v3.2-Q8_0-imat.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 8.5,
+          "hf_repo": "Lewdiculous/L3-8B-Stheno-v3.2-GGUF-IQ-Imatrix",
+          "hf_file": "L3-8B-Stheno-v3.2-Q8_0-imat.gguf",
+          "tags": [
+            "nsfw",
+            "roleplay",
+            "creative",
+            "uncensored",
+            "8b",
+            "llama3",
+            "small"
+          ],
+          "context_default": 8192,
+          "context_max": 8192,
+          "quant": "Q8_0",
+          "params": "8B"
+        },
+        {
+          "name": "Stheno v3.2 8B (Q5_K_M)",
+          "file": "L3-8B-Stheno-v3.2-Q5_K_M-imat.gguf",
+          "dest": "",
+          "source": "huggingface",
+          "size_gb": 5.7,
+          "hf_repo": "Lewdiculous/L3-8B-Stheno-v3.2-GGUF-IQ-Imatrix",
+          "hf_file": "L3-8B-Stheno-v3.2-Q5_K_M-imat.gguf",
+          "tags": [
+            "nsfw",
+            "roleplay",
+            "creative",
+            "uncensored",
+            "8b",
+            "llama3",
+            "small"
+          ],
+          "context_default": 8192,
+          "context_max": 8192,
+          "quant": "Q5_K_M",
+          "params": "8B"
+        }
+      ]
+    },
+    {
       "id": "prompt-tools",
       "name": "Prompt Tools (DanTagGen)",
       "models": [
@@ -237,7 +439,11 @@
           "size_gb": 0.4,
           "hf_repo": "KBlueLeaf/DanTagGen-beta",
           "hf_file": "ggml-model-Q8_0.gguf",
-          "tags": ["tag-generator", "danbooru", "small"],
+          "tags": [
+            "tag-generator",
+            "danbooru",
+            "small"
+          ],
           "context_default": 2048,
           "context_max": 2048,
           "quant": "Q8_0",
@@ -251,7 +457,11 @@
           "size_gb": 0.4,
           "hf_repo": "KBlueLeaf/DanTagGen-gamma",
           "hf_file": "ggml-model-Q8_0.gguf",
-          "tags": ["tag-generator", "danbooru", "small"],
+          "tags": [
+            "tag-generator",
+            "danbooru",
+            "small"
+          ],
           "context_default": 2048,
           "context_max": 2048,
           "quant": "Q8_0",
@@ -265,7 +475,12 @@
           "size_gb": 0.4,
           "hf_repo": "KBlueLeaf/DanTagGen-delta",
           "hf_file": "ggml-model-Q8_0.gguf",
-          "tags": ["tag-generator", "danbooru", "small", "7.2M-dataset"],
+          "tags": [
+            "tag-generator",
+            "danbooru",
+            "small",
+            "7.2M-dataset"
+          ],
           "context_default": 2048,
           "context_max": 2048,
           "quant": "Q8_0",
@@ -279,7 +494,13 @@
           "size_gb": 0.4,
           "hf_repo": "KBlueLeaf/DanTagGen-delta-rev2",
           "hf_file": "ggml-model-Q8_0.gguf",
-          "tags": ["tag-generator", "danbooru", "small", "7.2M-dataset", "latest"],
+          "tags": [
+            "tag-generator",
+            "danbooru",
+            "small",
+            "7.2M-dataset",
+            "latest"
+          ],
           "context_default": 2048,
           "context_max": 2048,
           "quant": "Q8_0",

@@ -608,7 +608,15 @@
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="qwen3.5" checked><span>Qwen 3.5</span></label>
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="llama" checked><span>Llama</span></label>
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="qwen3-vl" checked><span>Qwen3-VL</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="midnight" checked><span>Midnight Miqu</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="stheno" checked><span>Stheno</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="darkest" checked><span>Darkest Universe</span></label>
         <label class="catalog-filter-tag"><input type="checkbox" data-filter-family="dantaggen" checked><span>DanTagGen</span></label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;min-width:50px;">Tags</span>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-tag="nsfw" checked><span>NSFW</span></label>
+        <label class="catalog-filter-tag"><input type="checkbox" data-filter-tag="non-nsfw" checked><span>Non-NSFW</span></label>
       </div>
     </div>
     <div class="model-list" id="modelList">
@@ -885,7 +893,7 @@
   });
 
   // ── Catalog filters ──
-  document.querySelectorAll('[data-filter-status],[data-filter-family]').forEach(function(cb) {
+  document.querySelectorAll('[data-filter-status],[data-filter-family],[data-filter-tag]').forEach(function(cb) {
     cb.addEventListener('change', function() { renderModels(); });
   });
 
@@ -896,6 +904,9 @@
     if (name.includes('qwen3.5') || name.includes('qwen 3.5')) return 'qwen3.5';
     if (name.includes('qwen2.5') || name.includes('qwen 2.5')) return 'qwen2.5';
     if (name.includes('llama')) return 'llama';
+    if (name.includes('midnight')) return 'midnight';
+    if (name.includes('stheno')) return 'stheno';
+    if (name.includes('darkest') || name.includes('dark')) return 'darkest';
     return 'other';
   }
 
@@ -904,7 +915,9 @@
     document.querySelectorAll('[data-filter-status]:checked').forEach(function(cb) { statuses.push(cb.dataset.filterStatus); });
     var families = [];
     document.querySelectorAll('[data-filter-family]:checked').forEach(function(cb) { families.push(cb.dataset.filterFamily); });
-    return { statuses: statuses, families: families };
+    var tags = [];
+    document.querySelectorAll('[data-filter-tag]:checked').forEach(function(cb) { tags.push(cb.dataset.filterTag); });
+    return { statuses: statuses, families: families, tags: tags };
   }
 
   // ── Load Models ──
@@ -943,7 +956,10 @@
                         (status !== 'present' && status !== 'downloading' && filters.statuses.indexOf('missing') >= 0);
       var family = _getModelFamily(m);
       var familyMatch = filters.families.indexOf(family) >= 0;
-      return statusMatch && familyMatch;
+      var modelTags = m.tags || [];
+      var isNsfw = modelTags.indexOf('nsfw') >= 0;
+      var tagMatch = (isNsfw && filters.tags.indexOf('nsfw') >= 0) || (!isNsfw && filters.tags.indexOf('non-nsfw') >= 0);
+      return statusMatch && familyMatch && tagMatch;
     });
     if (!filtered.length) {
       $modelList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:24px 0;">No models match filters</div>';
@@ -1964,23 +1980,71 @@
       var ok = r.satisfied;
       if (!ok) allMet = false;
       var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:' + (ok ? 'var(--success)' : 'var(--error)') + ';"></span>';
-      var label = r.requirement.label + ' — ' + r.requirement.model.replace(/\.gguf$/i, '');
-      var launchBtn = '';
-      if (!ok) {
+      var modelsStatus = r.models_status || [];
+      var isMulti = modelsStatus.length > 1;
+
+      if (ok) {
+        // Satisfied — show which model is active
+        var activeModel = (r.active_model || '').replace(/\.gguf$/i, '');
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;">' +
+          dot + escHtml(r.requirement.label) + ' — ' + escHtml(activeModel) + '</div>';
+      } else if (isMulti) {
+        // Multi-model: show dropdown + launch
         var minCtx = r.requirement.min_ctx || 8192;
-        var modelFile = escHtml(r.requirement.model).replace(/'/g, '&#39;');
-        if (r.model_present) {
-          launchBtn = ' <button class="btn btn--sm" style="margin-left:8px;" onclick="window._pipelineLaunchModel(\'' + modelFile + '\',' + minCtx + ')">Launch</button>';
-        } else {
-          launchBtn = ' <button class="btn btn--sm" style="margin-left:8px;" disabled title="Model not downloaded">Launch</button>';
-        }
-        label += ' (not running, min ctx: ' + minCtx + ')';
+        var selectId = 'reqSelect_' + r.requirement.id;
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+          dot + escHtml(r.requirement.label) +
+          '<select id="' + selectId + '" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;">';
+        modelsStatus.forEach(function(ms) {
+          var name = ms.model.replace(/\.gguf$/i, '');
+          var tag = ms.present ? '' : ' (not downloaded)';
+          html += '<option value="' + escHtml(ms.model) + '" data-present="' + ms.present + '">' + escHtml(name) + tag + '</option>';
+        });
+        html += '</select>' +
+          '<button class="btn btn--sm" id="reqLaunch_' + r.requirement.id + '" onclick="window._pipelineLaunchSelected(\'' + r.requirement.id + '\',' + minCtx + ')">Launch</button>' +
+          '</div>';
+      } else {
+        // Single model not running
+        var modelFile = modelsStatus.length ? modelsStatus[0].model : '';
+        var modelPresent = modelsStatus.length ? modelsStatus[0].present : false;
+        var minCtx = r.requirement.min_ctx || 8192;
+        var mfEsc = escHtml(modelFile).replace(/'/g, '&#39;');
+        var launchBtn = modelPresent
+          ? ' <button class="btn btn--sm" style="margin-left:8px;" onclick="window._pipelineLaunchModel(\'' + mfEsc + '\',' + minCtx + ')">Launch</button>'
+          : ' <button class="btn btn--sm" style="margin-left:8px;" disabled title="Model not downloaded">Launch</button>';
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;">' +
+          dot + escHtml(r.requirement.label) + ' — ' + escHtml(modelFile.replace(/\.gguf$/i, '')) + ' (not running)' + launchBtn + '</div>';
       }
-      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;">' + dot + escHtml(label) + launchBtn + '</div>';
     });
     document.getElementById('pipelineReqs').innerHTML = html;
     document.getElementById('pipelineRunBtn').disabled = !allMet;
+
+    // Wire up dropdown change to enable/disable launch button
+    reqs.forEach(function(r) {
+      var modelsStatus = r.models_status || [];
+      if (modelsStatus.length > 1) {
+        var sel = document.getElementById('reqSelect_' + r.requirement.id);
+        var btn = document.getElementById('reqLaunch_' + r.requirement.id);
+        if (sel && btn) {
+          var updateBtn = function() {
+            var opt = sel.options[sel.selectedIndex];
+            btn.disabled = opt && opt.dataset.present === 'false';
+            btn.title = btn.disabled ? 'Model not downloaded' : '';
+          };
+          sel.addEventListener('change', updateBtn);
+          updateBtn();
+        }
+      }
+    });
   }
+
+  window._pipelineLaunchSelected = async function(reqId, minCtx) {
+    var sel = document.getElementById('reqSelect_' + reqId);
+    if (!sel) return;
+    var modelFile = sel.value;
+    if (!modelFile) return;
+    window._pipelineLaunchModel(modelFile, minCtx);
+  };
 
   window._pipelineLaunchModel = async function(modelFile, minCtx) {
     try {

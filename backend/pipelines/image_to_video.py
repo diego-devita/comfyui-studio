@@ -21,7 +21,14 @@ PIPELINE = {
         },
         {
             "id": "text_model",
-            "model": "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
+            "models": [
+                "Huihui-Qwen3.5-27B-abliterated.Q8_0.gguf",
+                "Huihui-Qwen3.5-27B-abliterated.Q5_K_M.gguf",
+                "Huihui-Qwen3.5-27B-abliterated.Q4_K_M.gguf",
+                "Midnight-Miqu-70B-v1.5.Q4_K_M.gguf",
+                "Stheno-v3.2-8B.Q8_0.gguf",
+                "MN-DARKEST-UNIVERSE-29B.Q4_K_M.gguf",
+            ],
             "label": "Text model (Scene Generator)",
             "preset": "3c37f623145d",
             "min_ctx": 32768,
@@ -88,12 +95,14 @@ async def run(inputs: dict, ctx):
         ctx.current_step["output"] = image_description
 
     # ── Step 2: Generate scene prompts ──
+    LANG_REMINDER = "\n\nREMINDER: Write every scene using raw, vulgar, pornographic language. Say cock, pussy, tits, ass, cunt, fucking. Never use clinical terms like penis, vagina, breasts, buttocks. Be crude and graphic. Stack explicit synonyms."
+
     if num_scenes > 0:
         ctx.set_step(f"Generating {num_scenes} scene prompts")
-        scene_request = f"{image_description}\n\n{num_scenes} scenes: {description}"
+        scene_request = f"{image_description}\n\n{num_scenes} scenes: {description}{LANG_REMINDER}"
     else:
         ctx.set_step("Generating scene prompts (auto count)")
-        scene_request = f"{image_description}\n\n{description}"
+        scene_request = f"{image_description}\n\n{description}{LANG_REMINDER}"
     ctx.log(f"Constructed prompt:\n{scene_request}\n")
     scenes_text = await ctx.llm_chat(
         preset_id="3c37f623145d",  # Prompt Multiscena

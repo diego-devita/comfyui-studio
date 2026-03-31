@@ -218,18 +218,32 @@ def check_requirements(pipeline_mod) -> list[dict]:
     instances = _get_running_instances()
     results = []
     for req in pipeline_mod.PIPELINE.get("requires", []):
+        # Support both single "model" and multi "models" requirements
+        model_list = req.get("models", [req["model"]] if req.get("model") else [])
         found = None
-        for inst in instances:
-            if inst["model"] == req["model"] and inst.get("alive"):
-                ctx = inst.get("config", {}).get("ctx_size", 0)
-                if ctx >= req.get("min_ctx", 0):
-                    found = inst
-                    break
-        model_present = (LLM_MODELS_DIR / req["model"]).exists()
+        found_model = None
+        for model_file in model_list:
+            for inst in instances:
+                if inst["model"] == model_file and inst.get("alive"):
+                    ctx = inst.get("config", {}).get("ctx_size", 0)
+                    if ctx >= req.get("min_ctx", 0):
+                        found = inst
+                        found_model = model_file
+                        break
+            if found:
+                break
+        # Check which models are present on disk
+        models_status = []
+        for model_file in model_list:
+            models_status.append({
+                "model": model_file,
+                "present": (LLM_MODELS_DIR / model_file).exists(),
+            })
         results.append({
             "requirement": req,
             "satisfied": found is not None,
-            "model_present": model_present,
+            "active_model": found_model,
+            "models_status": models_status,
             "instance": found,
         })
     return results
