@@ -1495,6 +1495,12 @@ async function _pollResources() {
       } else if (info.status === 'present') {
         badge.textContent = 'Downloaded';
         badge.className = 'ver-badge ver-downloaded';
+        // Hide download button if present
+        var item = badge.closest('.version-item, .resource-item');
+        if (item) {
+          var dlBtn = item.querySelector('.btn-download-ver');
+          if (dlBtn) dlBtn.style.display = 'none';
+        }
       } else if (info.status === 'missing') {
         badge.textContent = 'In Catalog';
         badge.className = 'ver-badge ver-in-catalog';
@@ -1508,6 +1514,7 @@ async function _pollResources() {
 async function loadModelVersions(modelId, currentVersionId) {
   var el = $('modelVersionsList');
   el.innerHTML = '<div class="loading-spinner"><span class="spinner-lg"></span><div style="margin-top:8px;font-size:11px;color:var(--muted);">Loading versions...</div></div>';
+  logEvent('info', 'loading model versions — #' + modelId, 'civitai');
 
   try {
     const [modelData, civitaiMap] = await Promise.all([
@@ -1628,15 +1635,18 @@ async function loadModelVersions(modelId, currentVersionId) {
     });
   } catch (e) {
     el.innerHTML = '<div class="empty" style="font-size:12px;color:var(--error);">' + e.message + '</div>';
+    logEvent('err', 'model versions failed — ' + e.message, 'civitai');
   }
 }
 
 async function loadImageGenData(imageId) {
   var el = $('imageGenData');
   el.innerHTML = '<div class="loading-spinner"><span class="spinner-lg"></span><div style="margin-top:8px;font-size:11px;color:var(--muted);">Loading generation data...</div></div>';
+  logEvent('info', 'loading gen data — image #' + imageId, 'civitai');
 
   try {
     const data = await studioGet('/api/admin/civitai/image/' + imageId);
+    logEvent('ok', 'gen data loaded — ' + (data.detected_type || 'unknown') + ', ' + (data.resources || []).length + ' resources', 'civitai');
     var html = '';
 
     // Detected type badge
@@ -2036,6 +2046,7 @@ async function loadImageGenData(imageId) {
     }
   } catch (e) {
     el.innerHTML = '<div class="empty" style="font-size:12px;color:var(--error);">' + e.message + '</div>';
+    logEvent('err', 'gen data failed — ' + e.message, 'civitai');
   }
 }
 
