@@ -1079,6 +1079,7 @@ $('eventLogClear').addEventListener('click', function(e) {
   $('eventLog').innerHTML = '';
   _evCounts = { all: 0, health: 0, pods: 0, civitai: 0, settings: 0, errors: 0 };
   _updateFilterCounts();
+  _updateEvMem();
 });
 
 $('eventLogHeader').addEventListener('click', function(e) {
@@ -1143,7 +1144,31 @@ function logEvent(level, msg, cat, http) {
   }
   log.appendChild(line);
   log.scrollTop = log.scrollHeight;
-  while (log.children.length > 1000) log.removeChild(log.firstChild);
+  while (log.children.length > 200) {
+    var old = log.firstChild;
+    if (old) {
+      var oldCat = old.dataset.cat;
+      var oldLevel = old.dataset.level;
+      _evCounts.all = Math.max(0, _evCounts.all - 1);
+      if (oldCat) _evCounts[oldCat] = Math.max(0, (_evCounts[oldCat] || 0) - 1);
+      if (oldLevel === 'err' || oldLevel === 'warn') _evCounts.errors = Math.max(0, _evCounts.errors - 1);
+      log.removeChild(old);
+    }
+  }
+  _updateFilterCounts();
+  _updateEvMem();
+}
+
+function _updateEvMem() {
+  var log = $('eventLog');
+  var mem = $('eventLogMem');
+  if (!log || !mem) return;
+  var bytes = log.innerHTML.length * 2; // JS strings are UTF-16
+  var label;
+  if (bytes < 1024) label = bytes + ' B';
+  else if (bytes < 1024 * 1024) label = (bytes / 1024).toFixed(1) + ' KB';
+  else label = (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  mem.textContent = label;
 }
 
 function _showHttpDetail(http) {

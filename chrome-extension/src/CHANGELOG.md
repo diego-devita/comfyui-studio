@@ -1,5 +1,12 @@
 # Chrome Extension Changelog
 
+## v3.5.0 — 2026-03-31 23:17
+- **Event log memory indicator**: shows estimated DOM size (KB/MB) in header, updates on every add/clear
+- **Ring buffer reduced**: 1000 → 200 entries, counters properly decremented when oldest entries are trimmed
+- **Clear button redesign**: bordered, red accent, hover background — more visible and intentional
+- **Event log header**: flexbox layout for consistent alignment
+- **Status bar repositioned**: moved above event log in DOM order
+
 ## v3.4.0 — 2026-04-01 00:30
 - **Event log filters**: All, Health, Pods, CivitAI, Settings, Errors — with live counts
 - **Resource polling**: polls civitai-map every 5s, live download progress on version badges, status change events

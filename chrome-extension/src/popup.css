@@ -578,13 +578,14 @@ textarea.mapping-input { resize: vertical; }
 }
 .ev-filter {
   background: none; border: 1px solid transparent; color: var(--muted);
-  font-family: var(--sans); font-size: 9px; font-weight: 600;
+  font-family: var(--sans); font-size: 10px; font-weight: 600;
   padding: 1px 6px; border-radius: 3px; cursor: pointer;
   transition: all 0.15s;
 }
 .ev-filter:hover { color: var(--text); border-color: var(--border); }
 .ev-filter.active { color: var(--accent); border-color: var(--accent); background: rgba(232,255,71,0.08); }
 .event-log-header {
+  display: flex; align-items: center; gap: 4px;
   font-family: var(--sans); font-size: 10px; font-weight: 600;
   color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
   padding: 6px 12px 2px; cursor: pointer; user-select: none;
@@ -595,11 +596,17 @@ textarea.mapping-input { resize: vertical; }
   transition: transform 0.15s;
 }
 .ev-clear {
-  float: right; background: none; border: none; color: var(--muted);
-  font-family: var(--sans); font-size: 9px; cursor: pointer;
-  opacity: 0.5; transition: opacity 0.15s;
+  margin-left: auto; border: 1px solid var(--border); border-radius: 3px;
+  background: none; color: var(--error);
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  padding: 1px 8px; cursor: pointer;
+  opacity: 0.8; transition: all 0.15s;
 }
-.ev-clear:hover { opacity: 1; color: var(--error); }
+.ev-clear:hover { opacity: 1; border-color: var(--error); background: rgba(255,71,87,0.12); }
+.ev-mem {
+  font-size: 10px; font-weight: 600;
+  color: var(--accent); opacity: 0.7; margin-right: 4px;
+}
 .event-log {
   flex: 1; overflow-y: auto; padding: 2px 12px 6px;
   font-family: var(--mono); font-size: 10px; line-height: 1.6;

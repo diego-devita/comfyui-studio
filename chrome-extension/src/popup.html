@@ -208,8 +208,10 @@
   </div>
 </div>
 
+<div id="statusBar" class="status-bar"><div id="statusBanner" class="status-banner"></div><span id="statusBarWidth"></span><span id="statusBarText"></span></div>
+
 <div class="event-log-container" id="eventLogContainer">
-  <div class="event-log-header" id="eventLogHeader">Event Log <span class="event-log-toggle" id="eventLogToggle">&#9660;</span> <button class="ev-clear" id="eventLogClear" title="Clear log">clear</button></div>
+  <div class="event-log-header" id="eventLogHeader">Event Log <span class="event-log-toggle" id="eventLogToggle">&#9660;</span> <span class="ev-mem" id="eventLogMem"></span> <button class="ev-clear" id="eventLogClear" title="Clear log">clear</button></div>
   <div class="ev-filters" id="eventLogFilters">
     <button class="ev-filter active" data-filter="all">All</button>
     <button class="ev-filter" data-filter="health">Health</button>
@@ -253,8 +255,6 @@
   <div class="too-narrow-msg">Please widen this panel to at least 680px for the extension to work properly.</div>
   <div class="too-narrow-width" id="overlayWidth"></div>
 </div>
-
-<div id="statusBar" class="status-bar"><div id="statusBanner" class="status-banner"></div><span id="statusBarWidth"></span><span id="statusBarText"></span></div>
 </div><!-- /appShell -->
 
 <script src="popup.js"></script>
