@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE, IMAGES_DIR, _now_rome
 
 def _civitai_key():
-    return os.environ.get("_civitai_key()", "")
+    return os.environ.get("CIVITAI_API_KEY", "")
 import catalogs
 from download import _enqueue_download
 from events import _events
@@ -209,7 +209,7 @@ def _download_image(url: str, dest: Path, timeout: int = 30) -> bool:
 async def lookup_civitai(body: LookupRequest):
     """Lookup a CivitAI model by URL and return structured data."""
     if not _civitai_key():
-        raise HTTPException(403, "_civitai_key() not configured")
+        raise HTTPException(400, "CIVITAI_API_KEY not configured — set it in Settings")
     try:
         model_id, version_id = _parse_civitai_url(body.url)
     except ValueError as e:
@@ -405,7 +405,7 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
     if not body.action.startswith("start"):
         raise HTTPException(400, "action must be 'start' or 'stop'")
     if not _civitai_key():
-        raise HTTPException(403, "_civitai_key() not configured")
+        raise HTTPException(400, "CIVITAI_API_KEY not configured — set it in Settings")
 
     st = _gallery_state.get(model_id)
     if st and st.get("status") == "downloading":
@@ -1066,7 +1066,7 @@ async def sync_civitai_tags():
     Safe to call repeatedly.
     """
     if not _civitai_key():
-        raise HTTPException(403, "_civitai_key() not configured")
+        raise HTTPException(400, "CIVITAI_API_KEY not configured — set it in Settings")
 
     # Collect all unique tagIds from gallery images' raw metadata
     all_tag_ids = set()
