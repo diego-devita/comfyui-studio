@@ -412,12 +412,16 @@ async def gallery_action(model_id: int, body: GalleryActionRequest):
         return JSONResponse({"status": "downloading", "message": "Already running"})
 
     max_images = 200
-    if body.action.startswith("start:"):
+    cards_only = body.action == "start:cards"
+    if not cards_only and body.action.startswith("start:"):
         try:
             max_images = int(body.action.split(":")[1])
         except (ValueError, IndexError):
             pass
-    max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
+    if cards_only:
+        max_images = 0
+    else:
+        max_images = max(1, min(max_images, _GALLERY_MAX_IMAGES))
 
     stop = threading.Event()
     api_params = {

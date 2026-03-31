@@ -382,6 +382,7 @@
           <option value="1">1w</option><option value="2">2w</option><option value="4">4w</option>
           <option value="6" selected>6w</option><option value="8">8w</option><option value="12">12w</option><option value="16">16w</option><option value="20">20w</option>
         </select>
+        <button class="btn btn--sm" id="galleryDlCardsBtn" title="Download card images only (all versions)">Cards</button>
         <button class="btn btn--sm" id="galleryDlBtn">Download</button>
       </div>
     </div>
@@ -1908,6 +1909,42 @@
     galleryPlayingVideo = null;
   }
 
+  async function downloadCardsOnly() {
+    if (!galleryModelId || galleryDownloading) return;
+    var btn = document.getElementById('galleryDlCardsBtn');
+    var dlBtn = document.getElementById('galleryDlBtn');
+    var delBtn = document.getElementById('galleryDeleteBtn');
+    btn.disabled = true; btn.textContent = 'Downloading...';
+    dlBtn.disabled = true; delBtn.disabled = true;
+    galleryDownloading = true;
+    var progress = document.getElementById('galleryProgress');
+    var progressFill = document.getElementById('galleryProgressFill');
+    progress.style.display = '';
+    progressFill.classList.add('indeterminate');
+    document.getElementById('galleryProgressText').textContent = 'Downloading card images...';
+    galleryDlStartTime = Date.now();
+    galleryLastDone = 0;
+    try {
+      var resp = await apiFetch('/api/admin/loras/' + galleryModelId + '/gallery', {
+        method: 'POST', body: { action: 'start:cards', version_id: galleryVersionId }
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Error: ' + (err.detail || 'Failed'), 5000, 'error');
+        btn.disabled = false; btn.textContent = 'Cards';
+        dlBtn.disabled = false; delBtn.disabled = false; galleryDownloading = false;
+        progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
+        return;
+      }
+      if (!galleryPollTimer) galleryPollTimer = setInterval(pollGallery, 2000);
+    } catch(e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
+      btn.disabled = false; btn.textContent = 'Cards';
+      dlBtn.disabled = false; delBtn.disabled = false; galleryDownloading = false;
+      progress.style.display = 'none'; progressFill.classList.remove('indeterminate');
+    }
+  }
+
   async function toggleGalleryDl() {
     if (!galleryModelId) return;
     var btn = document.getElementById('galleryDlBtn');
@@ -1998,6 +2035,8 @@
         btn.textContent = 'Stopping...'; btn.disabled = true;
       } else {
         btn.textContent = 'Download'; btn.disabled = false; delBtn.disabled = false;
+        var cardsBtn = document.getElementById('galleryDlCardsBtn');
+        if (cardsBtn) { cardsBtn.disabled = false; cardsBtn.textContent = 'Cards'; }
         galleryDownloading = false; progressFill.classList.remove('indeterminate');
         if (status === 'done' || status === 'stopped') {
           var elapsed = Math.round((Date.now() - galleryDlStartTime) / 1000);
@@ -2216,6 +2255,7 @@
   document.getElementById('galleryClose').addEventListener('click', closeGallery);
   document.getElementById('galleryOverlay').addEventListener('click', function(e) { if (e.target === this) closeGallery(); });
   document.getElementById('galleryDlBtn').addEventListener('click', toggleGalleryDl);
+  document.getElementById('galleryDlCardsBtn').addEventListener('click', downloadCardsOnly);
   document.getElementById('galleryDeleteBtn').addEventListener('click', async function() {
     if (!galleryModelId) return;
     if (!await studioConfirm('Delete all gallery images?', {danger: true, yes: 'Delete All'})) return;
