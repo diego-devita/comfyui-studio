@@ -17,6 +17,16 @@
   .group-badge .gboing { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; border-radius: 8px; background: var(--accent); color: var(--bg); font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 0 4px; }
   .version-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(100,149,237,0.15); color: #6495ed; vertical-align: middle; margin-right: 4px; line-height: 1; }
   .lora-group-card { border-color: rgba(232,255,71,0.2); }
+  .group-gallery-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .group-gallery-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-width: 80vw; max-height: 80vh; overflow-y: auto; position: relative; }
+  .group-gallery-dialog h3 { margin: 0 0 12px; font-size: 14px; }
+  .group-gallery-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .group-gallery-item { position: relative; width: 150px; height: 150px; border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--bg); }
+  .group-gallery-item img, .group-gallery-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .group-gallery-item .gg-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .group-gallery-item .gg-play svg { width: 32px; height: 32px; fill: rgba(255,255,255,0.85); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+  .group-gallery-expand { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1100; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+  .group-gallery-expand img, .group-gallery-expand video { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 4px; }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
     font-size: 16px;
@@ -997,13 +1007,15 @@
         g.cards.forEach(function(c) { stash.appendChild(c); });
         groupCard.appendChild(stash);
 
-        // Gallery button opens group gallery
+        // Gallery button opens lightweight model-images viewer
         var galBtn = groupCard.querySelector('.group-gallery-btn');
         if (galBtn) {
-          galBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            openGallery(mid, null, g.name, baseModel);
-          });
+          (function(modelId, name) {
+            galBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              openGroupGallery(modelId, name);
+            });
+          })(mid, g.name);
         }
 
         grid.appendChild(groupCard);
@@ -2690,6 +2702,65 @@
       if (e.key === 'ArrowRight') navDetail(1);
     }
   });
+
+  // ── Group gallery (lightweight) ──
+  async function openGroupGallery(modelId, name) {
+    var overlay = document.createElement('div');
+    overlay.className = 'group-gallery-overlay';
+    var dialog = document.createElement('div');
+    dialog.className = 'group-gallery-dialog';
+    dialog.innerHTML = '<h3>' + escHtml(name) + '</h3><div class="group-gallery-grid" id="ggGrid"><div style="color:var(--muted);font-size:12px;">Loading...</div></div>';
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) { overlay.remove(); } });
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
+    });
+
+    try {
+      var resp = await apiFetch('/api/admin/loras/' + modelId + '/gallery');
+      if (!resp.ok) { dialog.querySelector('#ggGrid').textContent = 'Failed to load'; return; }
+      var data = await resp.json();
+      var items = (data.gallery_card || []);
+      var grid = dialog.querySelector('#ggGrid');
+      grid.innerHTML = '';
+      if (items.length === 0) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px;">No model images</div>'; return; }
+
+      items.forEach(function(img) {
+        var ext = img.ext || '.jpeg';
+        var isVideo = ext === '.mp4';
+        var thumbUrl = img.has_thumb ? '/api/admin/loras/gallery/thumb/' + img.id : '/api/admin/loras/gallery/media/' + img.id + ext;
+        var fullUrl = '/api/admin/loras/gallery/media/' + img.id + ext;
+
+        var item = document.createElement('div');
+        item.className = 'group-gallery-item';
+
+        if (isVideo) {
+          item.innerHTML = '<img src="' + thumbUrl + '"><div class="gg-play">' + PLAY_SVG + '</div>';
+          item.addEventListener('click', function() {
+            var expand = document.createElement('div');
+            expand.className = 'group-gallery-expand';
+            expand.innerHTML = '<video src="' + fullUrl + '" controls autoplay muted style="max-width:95vw;max-height:95vh;border-radius:4px"></video>';
+            expand.addEventListener('click', function(e) { if (e.target === expand) expand.remove(); });
+            document.body.appendChild(expand);
+          });
+        } else {
+          item.innerHTML = '<img src="' + thumbUrl + '">';
+          item.addEventListener('click', function() {
+            var expand = document.createElement('div');
+            expand.className = 'group-gallery-expand';
+            expand.innerHTML = '<img src="' + fullUrl + '">';
+            expand.addEventListener('click', function() { expand.remove(); });
+            document.body.appendChild(expand);
+          });
+        }
+        grid.appendChild(item);
+      });
+    } catch(e) {
+      if (e.message !== 'auth') dialog.querySelector('#ggGrid').textContent = 'Error: ' + e.message;
+    }
+  }
 
   // ── Thumbnail backfill SSE ──
   document.getElementById('backfillThumbsBtn').addEventListener('click', function() {
