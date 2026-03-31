@@ -193,6 +193,7 @@ def _build_catalog_response(catalog_data: dict, base_dir: str | Path, download_s
                 "hf_repo": m.get("hf_repo", ""),
                 "hf_file": m.get("hf_file", ""),
                 "civitai_model_id": m.get("civitai_model_id"),
+                "civitai_model_name": m.get("civitai_model_name", ""),
                 "civitai_version_id": m.get("civitai_version_id"),
                 "civitai_file_id": m.get("civitai_file_id"),
                 "civitai_base_model": m.get("civitai_base_model", ""),

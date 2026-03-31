@@ -389,6 +389,8 @@ def _civitai_to_catalog_entry(ver_data: dict) -> dict:
         "source": "civitai",
         "civitai_version_id": ver_data.get("id"),
         "civitai_model_id": ver_data.get("modelId"),
+        "civitai_model_name": model_name,
+        "civitai_version": ver_name,
         "civitai_file_id": primary.get("id"),
         "size_gb": round(size_kb / 1_000_000, 3),
         "base_model": base_model,
@@ -581,6 +583,45 @@ async def reclassify_loras():
     _save_loras_json()
     summary = {c["id"]: len(c["models"]) for c in ld["categories"]}
     return JSONResponse({"status": "reclassified", "categories": summary})
+
+
+@router.post("/api/admin/loras/backfill-names")
+async def backfill_model_names():
+    """Fetch civitai_model_name for LoRAs that don't have it yet."""
+    _catalogs._reload_models()
+    civitai_key = os.environ.get("CIVITAI_API_KEY", "")
+    if not civitai_key:
+        raise HTTPException(400, "CIVITAI_API_KEY not configured")
+    headers = {"Authorization": f"Bearer {civitai_key}"}
+
+    # Collect unique model_ids that need backfilling (from both catalogs)
+    entries_by_mid: dict[int, list[dict]] = {}
+    for catalog in [_catalogs._models_data, _catalogs._loras_data]:
+        for cat in catalog.get("categories", []):
+            for m in cat.get("models", []):
+                mid = m.get("civitai_model_id")
+                if mid and not m.get("civitai_model_name"):
+                    entries_by_mid.setdefault(mid, []).append(m)
+
+    filled = 0
+    async with httpx.AsyncClient(timeout=15) as client:
+        for mid, entries in entries_by_mid.items():
+            try:
+                r = await client.get(f"https://civitai.com/api/v1/models/{mid}", headers=headers)
+                if r.status_code == 200:
+                    name = r.json().get("name", "")
+                    if name:
+                        for e in entries:
+                            e["civitai_model_name"] = name
+                        filled += len(entries)
+            except Exception:
+                pass
+
+    if filled:
+        _save_models_json()
+        _save_loras_json()
+
+    return JSONResponse({"status": "ok", "filled": filled, "model_ids_checked": len(entries_by_mid)})
 
 
 
