@@ -36,6 +36,15 @@ PIPELINE = {
     ],
 }
 
+# LoRA name → {high: filename, low: filename, default_strength: float}
+LORA_MAP = {
+    "zoom-reveal": {
+        "high": "wan22-zoom-reveal-400epoc-high-k3nk.safetensors",
+        "low": "wan22-zoom-reveal-295epoc-low-k3nk.safetensors",
+        "strength": 1.0,
+    },
+}
+
 DEFAULT_NEGATIVE = (
     "Overexposure, static, blurred details, subtitles, paintings, pictures, still, "
     "overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, "
@@ -43,6 +52,26 @@ DEFAULT_NEGATIVE = (
     "deformed limbs, fused fingers, cluttered background, three legs, "
     "a lot of people in the background, upside down"
 )
+
+
+def _parse_loras(text: str) -> tuple[list[dict], list[dict]]:
+    """Parse LORAS: line from LLM output. Returns (loras_high, loras_low)."""
+    loras_high = []
+    loras_low = []
+    match = re.search(r'LORAS:\s*(.+)', text, re.IGNORECASE)
+    if not match:
+        return loras_high, loras_low
+    line = match.group(1).strip()
+    if line.lower() == 'none':
+        return loras_high, loras_low
+    for item in line.split(','):
+        name = item.strip().lower()
+        if name in LORA_MAP:
+            entry = LORA_MAP[name]
+            strength = entry.get("strength", 1.0)
+            loras_high.append({"file": entry["high"], "strength": strength})
+            loras_low.append({"file": entry["low"], "strength": strength})
+    return loras_high, loras_low
 
 
 def _parse_scenes(text: str) -> list[str]:
@@ -126,13 +155,21 @@ async def run(inputs: dict, ctx):
     for i, s in enumerate(scenes):
         ctx.log(f"  Scene {i+1}: {s[:80]}...")
 
+    # ── Step 3b: Parse LoRAs ──
+    loras_high, loras_low = _parse_loras(scenes_text)
+    if loras_high:
+        ctx.log(f"LoRAs HIGH: {[l['file'] for l in loras_high]}")
+        ctx.log(f"LoRAs LOW: {[l['file'] for l in loras_low]}")
+    else:
+        ctx.log("No additional LoRAs requested.")
+
     # ── Step 4: Submit WAN job ──
     ctx.set_step("Submitting WAN 2.2 multi-scene job")
     job_params = {
         "scenes": [{"prompt": s, "duration": 5, "seed": -1} for s in scenes],
         "negative_prompt": DEFAULT_NEGATIVE,
-        "loras_high": [],
-        "loras_low": [],
+        "loras_high": loras_high,
+        "loras_low": loras_low,
     }
     job_id = await ctx.submit_job("wan22-svi-dynamic", job_params, image_id=image_id)
     ctx.log(f"Job submitted: {job_id}")
