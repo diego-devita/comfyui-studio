@@ -35,6 +35,9 @@ _MIME_MAP = {
 # 24h cache — these files don't change once written
 _CACHE_HEADER = "public, max-age=86400, immutable"
 
+# Cache resolved studio path (doesn't change at runtime)
+_STUDIO_PREFIX = str(STUDIO_DIR.resolve()) + "/"
+
 
 def serve_media(abs_path: Path) -> FileResponse:
     """Serve a media file from an absolute path.
@@ -45,10 +48,9 @@ def serve_media(abs_path: Path) -> FileResponse:
     """
     # Resolve to catch symlink tricks
     resolved = abs_path.resolve()
-    studio_resolved = STUDIO_DIR.resolve()
 
     # Must be under STUDIO_DIR
-    if not str(resolved).startswith(str(studio_resolved) + "/"):
+    if not str(resolved).startswith(_STUDIO_PREFIX):
         raise HTTPException(403, "Access denied")
 
     if not resolved.is_file():
