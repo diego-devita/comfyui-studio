@@ -620,6 +620,7 @@ async def backfill_model_names():
     if filled:
         _save_models_json()
         _save_loras_json()
+        _catalogs._reload_models()  # reload in memory so API serves updated data immediately
 
     return JSONResponse({"status": "ok", "filled": filled, "model_ids_checked": len(entries_by_mid)})
 

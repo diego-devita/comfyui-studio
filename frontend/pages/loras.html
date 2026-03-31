@@ -282,11 +282,15 @@
       <button class="sort-btn" data-sort="size">Size</button>
       <button class="sort-btn" data-sort="status">Status</button>
     </div>
-    <span class="filter-label" style="margin-left:auto">View</span>
+  </div>
+  <div class="filter-row">
+    <span class="filter-label">View</span>
     <div class="view-group" id="viewGroup">
       <button class="view-btn active" data-view="extended">Extended</button>
       <button class="view-btn" data-view="compact">Compact</button>
     </div>
+  </div>
+  <div class="filter-row">
     <span class="filter-label">Group</span>
     <div class="view-group" id="groupToggle">
       <button class="view-btn active" data-group="grouped">Grouped</button>
@@ -294,8 +298,10 @@
     </div>
   </div>
   <div class="filter-row">
+    <button class="btn btn--sm" id="backfillThumbsBtn" style="font-size:11px;" title="Generate missing thumbnails for all gallery images">Generate Thumbs</button>
+  </div>
+  <div class="filter-row">
     <input type="text" id="searchInput" class="search-input" placeholder="Search LoRAs...">
-    <button class="btn btn--sm" id="backfillThumbsBtn" style="margin-left:auto;font-size:11px;" title="Generate missing thumbnails for all gallery images">Generate Thumbs</button>
   </div>
 </div>
 
