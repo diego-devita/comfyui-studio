@@ -512,17 +512,31 @@ async def promote_to_style_lora(version_id: int):
 
     # Determine loras.json category by base_model
     base = found_entry.get("base_model", "")
-    lora_cat_id = "other_loras"
-    lora_cat_name = "Other LoRAs"
-    base_lower = base.lower()
-    if "wan" in base_lower:
-        lora_cat_id, lora_cat_name = "wan_loras", "WAN LoRAs"
-    elif "flux" in base_lower:
-        lora_cat_id, lora_cat_name = "flux_loras", "Flux LoRAs"
-    elif "sdxl" in base_lower or "pony" in base_lower or "illustrious" in base_lower:
-        lora_cat_id, lora_cat_name = "sdxl_loras", "SDXL / Pony / Illustrious LoRAs"
-    elif "sd 1" in base_lower or "sd1" in base_lower:
-        lora_cat_id, lora_cat_name = "sd15_loras", "SD 1.5 LoRAs"
+    lora_cat_id, lora_cat_name = _classify_lora_category(base)
+
+
+def _classify_lora_category(base_model: str) -> tuple[str, str]:
+    """Determine loras.json category from base_model string."""
+    b = base_model.lower()
+    if "wan" in b:
+        return "wan_loras", "WAN LoRAs"
+    if "flux" in b:
+        return "flux_loras", "Flux LoRAs"
+    if "illustrious" in b or "noobai" in b:
+        return "illustrious_loras", "Illustrious LoRAs"
+    if "pony" in b:
+        return "pony_loras", "Pony LoRAs"
+    if "sdxl" in b:
+        return "sdxl_loras", "SDXL LoRAs"
+    if "sd 1" in b or "sd1" in b:
+        return "sd15_loras", "SD 1.5 LoRAs"
+    if "ltx" in b:
+        return "ltx_loras", "LTX LoRAs"
+    if "hunyuan" in b:
+        return "hunyuan_loras", "HunyuanVideo LoRAs"
+    if "cogvideo" in b:
+        return "cogvideo_loras", "CogVideoX LoRAs"
+    return "other_loras", "Other LoRAs"
 
     # Add to loras.json
     lora_cat_map = {c["id"]: c for c in _catalogs._loras_data.get("categories", [])}
@@ -541,5 +555,32 @@ async def promote_to_style_lora(version_id: int):
 
     return JSONResponse({"status": "promoted", "file": found_entry.get("file", ""),
                          "category": lora_cat_id})
+
+
+@router.post("/api/admin/loras/reclassify")
+async def reclassify_loras():
+    """Re-sort all LoRAs in loras.json into correct categories based on base_model."""
+    _catalogs._reload_models()
+    ld = _catalogs._loras_data
+
+    # Collect all entries
+    all_entries = []
+    for cat in ld.get("categories", []):
+        all_entries.extend(cat.get("models", []))
+
+    # Rebuild categories
+    new_cats: dict[str, list] = {}
+    for entry in all_entries:
+        base = entry.get("base_model", "") or entry.get("civitai_base_model", "")
+        cat_id, cat_name = _classify_lora_category(base)
+        if cat_id not in new_cats:
+            new_cats[cat_id] = {"id": cat_id, "name": cat_name, "models": []}
+        new_cats[cat_id]["models"].append(entry)
+
+    ld["categories"] = list(new_cats.values())
+    _save_loras_json()
+    summary = {c["id"]: len(c["models"]) for c in ld["categories"]}
+    return JSONResponse({"status": "reclassified", "categories": summary})
+
 
 
