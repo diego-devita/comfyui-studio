@@ -10,15 +10,22 @@
 <style>
   .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; position: relative; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
-  .gallery-stat { position: absolute; font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; pointer-events: none; color: #fff; }
+  .gallery-stat { position: absolute; font-family: var(--mono); font-size: 9px; padding: 4px 6px 2px; border-radius: 3px; white-space: nowrap; pointer-events: none; color: #fff; }
+  .gallery-stat::before { content: attr(data-label); display: block; font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 1px; opacity: 0.9; }
   .gallery-stat-orig { top: 4px; left: 4px; background: rgba(74,158,255,0.75); }
+  .gallery-stat-orig::before { color: #000; }
   .gallery-stat-comm { bottom: 4px; right: 4px; background: rgba(232,100,71,0.75); }
+  .gallery-stat-comm::before { color: #000; }
   .group-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; line-height: 1; }
   .group-badge .gboing { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; border-radius: 8px; background: var(--accent); color: var(--bg); font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 0 4px; }
   .version-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(100,149,237,0.15); color: #6495ed; vertical-align: middle; margin-right: 4px; line-height: 1; }
   .lora-group-card { border-color: rgba(232,255,71,0.2); }
   .group-gallery-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-  .group-gallery-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-width: 80vw; max-height: 80vh; overflow-y: auto; position: relative; }
+  .group-gallery-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-width: 80vw; max-height: 80vh; overflow-y: auto; position: relative; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
+  .group-gallery-dialog::-webkit-scrollbar { width: 6px; }
+  .group-gallery-dialog::-webkit-scrollbar-track { background: transparent; }
+  .group-gallery-dialog::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  .group-gallery-dialog::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
   .group-gallery-dialog h3 { margin: 0 0 12px; font-size: 14px; }
   .group-gallery-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
   .group-gallery-item { position: relative; width: 150px; height: 150px; border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--bg); }
@@ -476,8 +483,8 @@
   }
   function _galleryBanner(oc, ob, cc, cb) {
     var html = '';
-    if (oc) html += '<div class="gallery-stat gallery-stat-orig">' + oc + ' (' + _fmtB(ob) + ')</div>';
-    if (cc) html += '<div class="gallery-stat gallery-stat-comm">' + cc + ' (' + _fmtB(cb) + ')</div>';
+    if (oc) html += '<div class="gallery-stat gallery-stat-orig" data-label="model" title="Model gallery: ' + oc + ' images, ' + _fmtB(ob) + '">' + oc + ' (' + _fmtB(ob) + ')</div>';
+    if (cc) html += '<div class="gallery-stat gallery-stat-comm" data-label="community" title="Community gallery: ' + cc + ' images, ' + _fmtB(cb) + '">' + cc + ' (' + _fmtB(cb) + ')</div>';
     return html;
   }
 
