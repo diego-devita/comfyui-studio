@@ -1,0 +1,57 @@
+{
+  "nodes": {
+    "rife": {
+      "inputs": {
+        "ckpt_name": "rife49.pth",
+        "clear_cache_after_n_frames": 16,
+        "multiplier": 2,
+        "fast_mode": false,
+        "ensemble": true,
+        "scale_factor": 1,
+        "dtype": "float32",
+        "torch_compile": false,
+        "batch_size": 1,
+        "frames": "{{images}}"
+      },
+      "class_type": "RIFE VFI",
+      "_meta": {"title": "RIFE 2x (16fps to 32fps)"}
+    },
+    "upscale_model": {
+      "inputs": {
+        "model_name": "RealESRGAN_x2plus.pth"
+      },
+      "class_type": "UpscaleModelLoader",
+      "_meta": {"title": "Load RealESRGAN 2x"}
+    },
+    "upscale": {
+      "inputs": {
+        "upscale_model": ["upscale_model", 0],
+        "image": ["rife", 0]
+      },
+      "class_type": "ImageUpscaleWithModel",
+      "_meta": {"title": "Upscale 2x with RealESRGAN"}
+    },
+    "video_out": {
+      "inputs": {
+        "frame_rate": 32,
+        "loop_count": 0,
+        "filename_prefix": "comfyui-studio/svi-dynamic-hd",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "images": ["upscale", 0]
+      },
+      "class_type": "VHS_VideoCombine",
+      "_meta": {"title": "Export 32fps MP4 HD"}
+    }
+  },
+  "imports": ["images"],
+  "exports": {
+    "video": {"node": "video_out", "output": 0}
+  },
+  "variables": []
+}

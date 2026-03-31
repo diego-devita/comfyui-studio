@@ -1,0 +1,177 @@
+id: wan22-svi-dynamic-hd
+category: i2v
+name: "WAN 2.2 SVI Pro Multi-Scene HD"
+version: 1
+date: "2026-03-31 05:30"
+type: dynamic
+description: "Multi-scene I2V with SVI Pro + RealESRGAN 2x upscale. Same as standard version but output upscaled from ~480p to ~960p. Adds processing time for upscaling."
+author: ""
+group: "original"
+
+base_model: "wan-i2v-14b"
+
+blocks_dir: "blocks"
+
+pipeline:
+  - block: setup
+    file: "setup.json"
+    lora_injection: "paired"
+    lora_nodes: ["lora_high", "lora_low"]
+    lora_start_slot: 3
+  - block: scene_first
+    file: "scene_first.json"
+    scene_index: 0
+  - block: scene_extend
+    file: "scene_extend.json"
+    repeat: "extra_scenes"
+    chain: true
+    chain_imports:
+      prev_samples: "samples"
+      prev_images: "images"
+  - block: output
+    file: "output.json"
+    in_repeat: false
+
+defaults:
+  negative_prompt: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+  steps: 6
+  split_step: 3
+  lora_accelerator: "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+  lora_accelerator_strength_high: 3
+  lora_accelerator_strength_low: 1.5
+  svi_pro_high: "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+  svi_pro_low: "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
+
+inputs:
+  - id: input_image
+    name: "Input Image"
+    type: image
+    required: true
+    tooltip: "The first frame that starts your multi-scene video. Each subsequent scene continues from the last frame of the previous one, so this image sets the visual foundation for the entire sequence."
+
+  - id: scenes
+    name: "Scenes"
+    type: scene_list
+    tooltip: "Build your video scene by scene. Each scene generates a clip that continues from where the previous one ended — the last frame becomes the next scene's input. Add scenes to create longer, multi-part narratives with different actions or camera angles."
+    per_scene:
+      - id: prompt
+        name: "Prompt"
+        type: text
+        required: true
+        tooltip: "Describe the motion for this specific scene. Each scene gets its own prompt, so you can change the action between scenes (e.g. scene 1: 'she walks forward', scene 2: 'she turns and smiles'). Focus on what changes, not what stays the same."
+      - id: duration
+        name: "Duration (seconds)"
+        type: select
+        options:
+          - {label: "3 seconds", value: 3}
+          - {label: "5 seconds", value: 5}
+          - {label: "6 seconds", value: 6}
+          - {label: "8 seconds", value: 8}
+          - {label: "10 seconds", value: 10}
+        default: 5
+        tooltip: "Length of this individual scene clip. SVI Pro blends scenes with overlap frames for smooth transitions. Shorter scenes (3-5s) keep the motion coherent; longer scenes (8-10s) allow more complex actions."
+      - id: seed
+        name: "Seed"
+        type: seed
+        default: -1
+        tooltip: "Seed for this specific scene. Use -1 for random. Setting different seeds per scene varies the motion style; using the same seed across scenes creates more consistent movement patterns."
+
+  - id: negative_prompt
+    name: "Negative Prompt"
+    type: text
+    required: false
+    default: "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+    tooltip: "Applies to all scenes. Describes what to avoid in the generated video."
+
+  - id: loras_high
+    name: "LoRAs (High Noise)"
+    type: lora_picker_dynamic
+    max_loras: 3
+    tooltip: "LoRAs for the high noise pass (first sampling stage). The LightX2V accelerator and SVI Pro High are always included."
+
+  - id: loras_low
+    name: "LoRAs (Low Noise)"
+    type: lora_picker_dynamic
+    max_loras: 3
+    tooltip: "LoRAs for the low noise pass (second sampling stage). The LightX2V accelerator and SVI Pro Low are always included."
+
+technical_notes:
+  pipeline: "LoadImage → ImageScale (0.7MP) → VAEEncode → setup (CLIP umt5_xxl FP8, VAE WAN 2.1 BF16, 2x UNET GGUF Q8 high+low noise, BlockSwap, Power LoRA Loader with LightX2V + SVI Pro + user LoRAs, ModelSamplingSD3 shift=8, BasicScheduler, SplitSigmas) → per-scene: CLIPTextEncode prompt → WanImageToVideoSVIPro (anchor_samples from previous scene) → ScheduledCFGGuidance (high+low) → SamplerCustomAdvanced dual-pass → VAEDecode → ImageBatchExtendWithOverlap (5-frame linear blend between scenes) → RIFE 2x (16fps→32fps) → VHS_VideoCombine h264 MP4"
+  model_loading:
+    unet: "2x GGUF Q8 (wan2.2_i2v_high/low_noise_14B_Q8_0.gguf) via UnetLoaderGGUF + wanBlockSwap"
+    clip: "umt5_xxl FP8 scaled"
+    vae: "WAN 2.1 BF16 (wanvideo/Wan2_1_VAE_bf16.safetensors)"
+    lora: "3 fixed LoRAs per pass: LightX2V accelerator + SVI Pro (high/low variants) + user-selected LoRAs via Power Lora Loader"
+    strategy: "BlockSwap on both UNETs for VRAM management. Models loaded once in setup, reused across all scenes."
+  sampling:
+    method: "SVI Pro dual-pass per scene — high noise model with ScheduledCFGGuidance (cfg_start=3, cfg_end=1) then low noise model (cfg_start=1, cfg_end=1). SamplerCustomAdvanced with RandomNoise (high) and DisableNoise (low)."
+    sampler: "euler_ancestral (via KSamplerSelect)"
+    scheduler: "simple (via BasicScheduler)"
+    total_steps: 6
+    split_at: 3
+    shift: 8
+    cfg: "Scheduled — high pass: 3→1 over steps, low pass: flat 1"
+    acceleration: "LightX2V LoRA (strength 3 high, 1.5 low) + SVI Pro LoRA enables 6-step generation"
+  post_processing:
+    upscale_method: "None"
+    upscale_factor: "N/A"
+    frame_interpolation: "RIFE 2x (rife49, ensemble mode, float32, 16fps→32fps)"
+    scene_blending: "ImageBatchExtendWithOverlap — 5-frame linear blend between consecutive scenes"
+    frame_rate_in: 16
+    frame_rate_out: 32
+  output:
+    format: "h264 MP4"
+    crf: 19
+    resolution: "~480p (0.7MP input scaling)"
+    framerate: "32fps"
+  resources:
+    vram_peak: "~20-24GB"
+    vram_notes: "GGUF Q8 models with BlockSwap. VRAM scales with scene duration, not scene count. Each scene reuses the same models."
+    speed_notes: "~30-60s per 3s scene. Multi-scene videos scale linearly with scene count."
+  notes:
+    - "SVI Pro technique: specialized LoRAs + WanImageToVideoSVIPro node for scene-to-scene continuity via anchor_samples"
+    - "Scene chaining: each scene's output latent+images feed into the next scene as prev_samples/prev_images"
+    - "ImageBatchExtendWithOverlap: 5-frame overlap with linear blending for smooth scene transitions"
+    - "GGUF Q8 quantization: ~7GB per model vs ~14GB FP8 vs ~28GB FP16. Good quality/memory trade-off."
+    - "BlockSwap on both UNETs: further reduces VRAM peak by offloading transformer blocks to CPU"
+    - "Power Lora Loader: supports up to 8 LoRA slots. Slots 1-2 are fixed (accelerator + SVI Pro), 3+ are user-selected"
+    - "ScheduledCFGGuidance: CFG starts at 3 for high noise (strong guidance on structure) and decays to 1 (low guidance for natural detail)"
+    - "0.7MP input scaling: input image resized to ~0.7 megapixels to match WAN training resolution"
+
+outputs:
+  - id: video
+    name: "Output Video"
+    type: video
+
+required_models:
+  - "wan2.2_i2v_high_noise_14B_Q8_0.gguf"
+  - "wan2.2_i2v_low_noise_14B_Q8_0.gguf"
+  - "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - "wanvideo/Wan2_1_VAE_bf16.safetensors"
+  - "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+  - "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+  - "SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
+
+required_nodes:
+  - "CLIPLoader"
+  - "VAELoader"
+  - "VAEEncode"
+  - "VAEDecode"
+  - "LoadImage"
+  - "CLIPTextEncode"
+  - "UnetLoaderGGUF"
+  - "wanBlockSwap"
+  - "Power Lora Loader (rgthree)"
+  - "ModelSamplingSD3"
+  - "BasicScheduler"
+  - "KSamplerSelect"
+  - "SplitSigmas"
+  - "SamplerCustomAdvanced"
+  - "ScheduledCFGGuidance"
+  - "DisableNoise"
+  - "RandomNoise"
+  - "WanImageToVideoSVIPro"
+  - "ImageBatchExtendWithOverlap"
+  - "ImageScaleToTotalPixels"
+  - "RIFE VFI"
+  - "VHS_VideoCombine"

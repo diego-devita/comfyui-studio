@@ -1,0 +1,103 @@
+{
+  "nodes": {
+    "clip": {
+      "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default"},
+      "class_type": "CLIPLoader",
+      "_meta": {"title": "Load CLIP"}
+    },
+    "vae": {
+      "inputs": {"vae_name": "wanvideo/Wan2_1_VAE_bf16.safetensors"},
+      "class_type": "VAELoader",
+      "_meta": {"title": "Load VAE"}
+    },
+    "unet_high": {
+      "inputs": {"unet_name": "wan2.2_i2v_high_noise_14B_Q8_0.gguf"},
+      "class_type": "UnetLoaderGGUF",
+      "_meta": {"title": "UNET High Noise (GGUF)"}
+    },
+    "unet_low": {
+      "inputs": {"unet_name": "wan2.2_i2v_low_noise_14B_Q8_0.gguf"},
+      "class_type": "UnetLoaderGGUF",
+      "_meta": {"title": "UNET Low Noise (GGUF)"}
+    },
+    "blockswap_high": {
+      "inputs": {"model": ["unet_high", 0]},
+      "class_type": "wanBlockSwap",
+      "_meta": {"title": "BlockSwap High"}
+    },
+    "blockswap_low": {
+      "inputs": {"model": ["unet_low", 0]},
+      "class_type": "wanBlockSwap",
+      "_meta": {"title": "BlockSwap Low"}
+    },
+    "lora_high": {
+      "inputs": {
+        "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+        "lora_1": {"on": true, "lora": "{{lora_accelerator}}", "strength": "{{lora_accelerator_strength_high}}"},
+        "lora_2": {"on": true, "lora": "{{svi_pro_high}}", "strength": 1},
+        "\u27a5 Add Lora": "",
+        "model": ["blockswap_high", 0],
+        "clip": ["clip", 0]
+      },
+      "class_type": "Power Lora Loader (rgthree)",
+      "_meta": {"title": "LoRAs High Pass"}
+    },
+    "lora_low": {
+      "inputs": {
+        "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+        "lora_1": {"on": true, "lora": "{{lora_accelerator}}", "strength": "{{lora_accelerator_strength_low}}"},
+        "lora_2": {"on": true, "lora": "{{svi_pro_low}}", "strength": 1},
+        "\u27a5 Add Lora": "",
+        "model": ["blockswap_low", 0],
+        "clip": ["clip", 0]
+      },
+      "class_type": "Power Lora Loader (rgthree)",
+      "_meta": {"title": "LoRAs Low Pass"}
+    },
+    "shift": {
+      "inputs": {"shift": 8, "model": ["lora_high", 0]},
+      "class_type": "ModelSamplingSD3",
+      "_meta": {"title": "ModelSamplingSD3"}
+    },
+    "scheduler": {
+      "inputs": {"scheduler": "simple", "steps": "{{steps}}", "denoise": 1, "model": ["shift", 0]},
+      "class_type": "BasicScheduler",
+      "_meta": {"title": "BasicScheduler"}
+    },
+    "sampler_select": {
+      "inputs": {"sampler_name": "euler_ancestral"},
+      "class_type": "KSamplerSelect",
+      "_meta": {"title": "KSamplerSelect"}
+    },
+    "split_sigmas": {
+      "inputs": {"step": "{{split_step}}", "sigmas": ["scheduler", 0]},
+      "class_type": "SplitSigmas",
+      "_meta": {"title": "SplitSigmas"}
+    },
+    "load_image": {
+      "inputs": {"image": "{{input_image}}"},
+      "class_type": "LoadImage",
+      "_meta": {"title": "Load Image"}
+    },
+    "scale_image": {
+      "inputs": {"upscale_method": "lanczos", "megapixels": 0.7, "resolution_steps": 1, "image": ["load_image", 0]},
+      "class_type": "ImageScaleToTotalPixels",
+      "_meta": {"title": "Scale Image"}
+    },
+    "vae_encode": {
+      "inputs": {"pixels": ["scale_image", 0], "vae": ["vae", 0]},
+      "class_type": "VAEEncode",
+      "_meta": {"title": "VAE Encode"}
+    }
+  },
+  "exports": {
+    "model_high": {"node": "lora_high", "output": 0},
+    "model_low": {"node": "lora_low", "output": 0},
+    "clip": {"node": "clip", "output": 0},
+    "vae": {"node": "vae", "output": 0},
+    "sampler": {"node": "sampler_select", "output": 0},
+    "sigmas_high": {"node": "split_sigmas", "output": 0},
+    "sigmas_low": {"node": "split_sigmas", "output": 1},
+    "anchor_samples": {"node": "vae_encode", "output": 0}
+  }
+}
