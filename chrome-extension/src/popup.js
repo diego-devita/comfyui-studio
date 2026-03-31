@@ -1489,13 +1489,19 @@ async function _pollResources() {
         var pct = info.dl_total ? Math.round(info.dl_bytes / info.dl_total * 100) : 0;
         badge.textContent = 'Downloading ' + pct + '%';
         badge.className = 'ver-badge ver-other';
+      } else if (info.status === 'queued') {
+        badge.textContent = 'Queued';
+        badge.className = 'ver-badge ver-other';
       } else if (info.status === 'present') {
         badge.textContent = 'Downloaded';
         badge.className = 'ver-badge ver-downloaded';
+      } else if (info.status === 'missing') {
+        badge.textContent = 'In Catalog';
+        badge.className = 'ver-badge ver-in-catalog';
       }
     });
   } catch (e) {
-    // silent — polling failure is not critical
+    logEvent('err', 'resource poll failed — ' + e.message, 'civitai');
   }
 }
 
@@ -1648,13 +1654,15 @@ async function loadImageGenData(imageId) {
 
       html += '<div class="gendata-section">Resources</div>';
       sorted.forEach(function(res) {
+        var resVid = res.versionId ? String(res.versionId) : '';
+        var vidAttr = resVid ? ' data-vid="' + resVid + '"' : '';
         var statusBadge;
         if (res.catalog_status === 'present') {
-          statusBadge = '<span class="ver-badge ver-downloaded">Downloaded</span>';
+          statusBadge = '<span class="ver-badge ver-downloaded"' + vidAttr + '>Downloaded</span>';
         } else if (res.catalog_status === 'missing') {
-          statusBadge = '<span class="ver-badge ver-in-catalog">In Catalog</span>';
+          statusBadge = '<span class="ver-badge ver-in-catalog"' + vidAttr + '>In Catalog</span>';
         } else {
-          statusBadge = '<span class="ver-badge ver-missing">Not found</span>';
+          statusBadge = '<span class="ver-badge ver-missing"' + vidAttr + '>Not found</span>';
         }
         var strength = (res.strength != null) ? ' · w:' + res.strength : '';
         var typeLabel = res.modelType === 'Checkpoint' ? 'CKP' : res.modelType === 'LORA' ? 'LoRA' : res.modelType;
@@ -1685,13 +1693,15 @@ async function loadImageGenData(imageId) {
     if (detectedDeps.length) {
       html += '<div class="gendata-section">Detected in Prompt</div>';
       detectedDeps.forEach(function(dep) {
+        var depVid = dep.civitai_version_id ? String(dep.civitai_version_id) : '';
+        var vidAttr = depVid ? ' data-vid="' + depVid + '"' : '';
         var statusBadge;
         if (dep.catalog_status === 'present') {
-          statusBadge = '<span class="ver-badge ver-downloaded">Downloaded</span>';
+          statusBadge = '<span class="ver-badge ver-downloaded"' + vidAttr + '>Downloaded</span>';
         } else if (dep.catalog_status === 'missing') {
-          statusBadge = '<span class="ver-badge ver-in-catalog">In Catalog</span>';
+          statusBadge = '<span class="ver-badge ver-in-catalog"' + vidAttr + '>In Catalog</span>';
         } else if (dep.catalog_status === 'not_found' && dep.civitai_version_id) {
-          statusBadge = '<span class="ver-badge ver-missing">Not in catalog</span>';
+          statusBadge = '<span class="ver-badge ver-missing"' + vidAttr + '>Not in catalog</span>';
         } else if (dep.catalog_status === 'unknown') {
           statusBadge = '<a class="ver-badge ver-missing" href="https://www.google.com/search?q=site%3Acivitai.com+' + encodeURIComponent(dep.name) + '" target="_blank" title="Search on Google" style="text-decoration:none;cursor:pointer;">Unresolved ↗</a>';
         } else {
