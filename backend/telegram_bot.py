@@ -34,6 +34,8 @@ from telegram.ext import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("studio-bot")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 # ── Config ──
 
