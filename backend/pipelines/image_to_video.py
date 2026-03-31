@@ -41,7 +41,7 @@ LORA_MAP = {
     "zoom-reveal": {
         "high": "wan22-zoom-reveal-400epoc-high-k3nk.safetensors",
         "low": "wan22-zoom-reveal-295epoc-low-k3nk.safetensors",
-        "strength": 1.0,
+        "strength": 0.8,
     },
 }
 
