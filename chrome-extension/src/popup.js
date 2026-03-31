@@ -227,8 +227,12 @@ function _tickerHtml(podId) {
   return '';
 }
 
+var _currentStudioUrl = '';
+
 async function loadPods() {
   const el = $('podsList');
+  var s = await getSettings();
+  _currentStudioUrl = (s.studioUrl || '').replace(/\/$/, '');
   try {
     const data = await runpodQuery(`query {
       myself {
@@ -300,6 +304,10 @@ async function loadPods() {
         ? '<span class="spinner"></span> ' + pod.desiredStatus
         : pod.desiredStatus;
 
+      var podUrl = 'https://' + pod.id + '-8000.proxy.runpod.net';
+      var isLinked = _currentStudioUrl && _currentStudioUrl.replace(/\/$/, '') === podUrl;
+      var linkBtn = '<button class="link-status ' + (isLinked ? 'linked' : 'unlinked') + '" data-pod-id="' + pod.id + '" data-pod-url="' + podUrl + '" title="' + (isLinked ? 'Linked instance' : 'Not linked') + '"><span class="icon icon-link"></span></button>';
+
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML =
@@ -325,6 +333,7 @@ async function loadPods() {
             ? '<button class="btn btn-sm btn-danger" data-action="stop" data-id="' + pod.id + '">Stop</button>'
             : '<button class="btn btn-sm" data-action="resume" data-id="' + pod.id + '">Resume</button>') +
           '<button class="btn btn-sm btn-danger" data-action="terminate" data-id="' + pod.id + '">Terminate</button>' +
+          linkBtn +
         '</div>' +
         _retryBarHtml(pod.id);
       el.appendChild(card);
@@ -375,6 +384,20 @@ async function loadPods() {
     // Wire retry stop buttons
     el.querySelectorAll('[data-retry-stop]').forEach(btn => {
       btn.addEventListener('click', () => _stopRetry(btn.dataset.retryStop));
+    });
+
+    // Wire link-status buttons
+    el.querySelectorAll('.link-status.unlinked').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to use this pod\'s URL in Settings?\nMake sure the registered API key is correct.')) return;
+        var newUrl = btn.dataset.podUrl;
+        await saveSettings({ studioUrl: newUrl });
+        $('studioUrl').value = newUrl;
+        _currentStudioUrl = newUrl;
+        showStatus('Settings > URL updated successfully', 'success');
+        checkStudio();
+        loadPods();
+      });
     });
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
@@ -1022,50 +1045,85 @@ loadNotifyConfig();
 var _studioConnected = false;
 var _studioCheckDone = null;
 
+// ── Event Log ──
+
+function logEvent(level, msg) {
+  var log = $('eventLog');
+  if (!log) return;
+  var now = new Date();
+  var ts = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
+  var cls = level === 'ok' ? 'ev-ok' : level === 'err' ? 'ev-err' : level === 'warn' ? 'ev-warn' : 'ev-dim';
+  var line = document.createElement('div');
+  line.className = 'ev';
+  line.innerHTML = '<span class="ev-time">' + ts + '</span> <span class="' + cls + '">' + msg + '</span>';
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+  // Keep max 100 lines
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+}
+
 async function checkStudio() {
   const container = $('studioStatus');
   const link = $('studioLink');
   const settings = await getSettings();
   const studioUrl = settings.studioUrl ? settings.studioUrl.replace(/\/$/, '') : '';
 
-  var connected = false;
+  var status = 'offline'; // offline | no_url | no_key | unreachable | auth_fail | online
   var tooltip = '';
+  var label = 'Offline';
+  var studioData = null;
 
   if (!studioUrl) {
+    status = 'no_url';
     tooltip = 'Studio URL not configured — go to Settings';
+    logEvent('warn', 'health — no URL configured');
   } else if (!settings.studioKey) {
+    status = 'no_key';
     tooltip = 'API Key not configured — go to Settings';
+    logEvent('warn', 'health — no API key configured');
   } else {
+    var keyHint = settings.studioKey.length > 4 ? '***' + settings.studioKey.slice(-4) : '***';
+    logEvent('info', 'health → ' + studioUrl + '/api/health  key=' + keyHint);
     try {
       var r = await fetch(studioUrl + '/api/health', { headers: { 'X-API-Key': settings.studioKey } });
       if (r.ok) {
         var data = await r.json();
-        if (data.authenticated === true) {
-          connected = true;
-          tooltip = 'Connected to ' + studioUrl + ' — click to open';
+        studioData = data;
+        if (data.authenticated) {
+          status = 'online';
+          label = data.app_version ? 'v' + data.app_version : 'Online';
+          tooltip = studioUrl;
+          if (data.pod_id) tooltip += ' (pod: ' + data.pod_id + ')';
+          logEvent('ok', 'health ← 200 OK  authenticated  v' + (data.app_version || '?') + (data.pod_id ? '  pod=' + data.pod_id : ''));
         } else {
-          tooltip = 'Connected to ' + studioUrl + ' but API key is invalid';
+          status = 'auth_fail';
+          tooltip = 'Server reachable but API key is wrong';
+          logEvent('err', 'health ← 200 OK  authenticated=false — wrong key');
         }
       } else {
-        tooltip = 'Server responded with error ' + r.status;
+        status = 'unreachable';
+        tooltip = 'Server responded with HTTP ' + r.status;
+        logEvent('err', 'health ← HTTP ' + r.status);
       }
-    } catch {
-      tooltip = 'Cannot reach ' + studioUrl + ' — server may be offline';
+    } catch (e) {
+      status = 'unreachable';
+      tooltip = 'Cannot reach ' + studioUrl;
+      logEvent('err', 'health ← FAILED: ' + e.message);
     }
   }
 
-  _studioConnected = connected;
+  _studioConnected = status === 'online';
   container.title = tooltip;
 
-  if (connected) {
+  if (_studioConnected) {
     container.className = 'studio-status online';
     link.href = studioUrl;
-    link.textContent = 'Online';
+    link.textContent = label;
     chrome.action.setBadgeText({ text: '' });
     chrome.action.setIcon({ path: { '16': 'icons/icon16_connected.png', '48': 'icons/icon48_connected.png', '128': 'icons/icon128_connected.png' } });
   } else {
     container.className = 'studio-status offline';
-    link.textContent = 'Offline';
+    link.textContent = status === 'auth_fail' ? 'Auth fail' : 'Offline';
     link.href = '#';
     chrome.action.setIcon({ path: { '16': 'icons/icon16_disconnected.png', '48': 'icons/icon48_disconnected.png', '128': 'icons/icon128_disconnected.png' } });
   }
@@ -1120,6 +1178,7 @@ chrome.storage.local.get(['studioPollEnabled'], function(r) {
   _studioPollEnabled = r.studioPollEnabled !== false;
   $('studioPollToggle').checked = _studioPollEnabled;
   if (_studioPollEnabled) {
+    checkStudio();
     startStudioPoll();
   } else {
     stopStudioPoll();
