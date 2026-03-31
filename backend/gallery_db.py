@@ -171,6 +171,12 @@ def init_gallery_db():
             type          TEXT DEFAULT '',
             synced_at     TEXT
         );
+
+        -- User-chosen preview image per model (overrides default first-original).
+        CREATE TABLE IF NOT EXISTS gallery_previews (
+            model_id      INTEGER PRIMARY KEY,
+            civitai_id    TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -480,23 +486,45 @@ def count_and_size(model_id: int | None = None,
 
 
 def community_counts_by_model() -> dict[int, dict]:
-    """Return {model_id: {count, first_id}} for all models with community images.
+    """Return {model_id: {count, first_id, custom_id}} for all models with community images.
 
-    first_id is the civitai_id of the first original image (card image) if any,
-    otherwise the first community image. Used as card thumbnail.
+    first_id: civitai_id of first original image (default thumbnail).
+    custom_id: user-chosen preview (from gallery_previews table), or None.
     """
     conn = _get_conn()
     rows = conn.execute("""
-        SELECT model_id, COUNT(*) as cnt,
+        SELECT g.model_id, COUNT(*) as cnt,
                (SELECT civitai_id FROM gallery_images g2
                 WHERE g2.model_id = g.model_id
                 ORDER BY CASE g2.source WHEN 'original' THEN 0 ELSE 1 END,
-                         g2.rowid ASC LIMIT 1) as first_id
+                         g2.rowid ASC LIMIT 1) as first_id,
+               p.civitai_id as custom_id
         FROM gallery_images g
-        WHERE source = 'community'
-        GROUP BY model_id
+        LEFT JOIN gallery_previews p ON g.model_id = p.model_id
+        WHERE g.source = 'community'
+        GROUP BY g.model_id
     """).fetchall()
-    return {row[0]: {"count": row[1], "first_id": row[2]} for row in rows}
+    return {row[0]: {"count": row[1], "first_id": row[2], "custom_id": row[3]} for row in rows}
+
+
+def set_preview(model_id: int, civitai_id: str):
+    """Set user-chosen preview image for a model."""
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO gallery_previews (model_id, civitai_id) VALUES (?, ?) "
+        "ON CONFLICT(model_id) DO UPDATE SET civitai_id = excluded.civitai_id",
+        (model_id, civitai_id)
+    )
+    conn.commit()
+
+
+def get_preview(model_id: int) -> str | None:
+    """Get user-chosen preview image for a model, or None."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT civitai_id FROM gallery_previews WHERE model_id = ?", (model_id,)
+    ).fetchone()
+    return row[0] if row else None
 
 
 def delete_by_model(model_id: int) -> tuple[int, list[str]]:

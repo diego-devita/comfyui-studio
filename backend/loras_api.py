@@ -909,6 +909,10 @@ async def gallery_status(model_id: int, version_id: int | None = None,
     # Get aggregate sizes from DB
     stats = _gdb.count_and_size(model_id=model_id, version_id=version_id)
 
+    # Preview info: default (first original) + user custom choice
+    default_preview = formatted_card[0]["id"] if formatted_card else (formatted_comm[0]["id"] if formatted_comm else None)
+    custom_preview = _gdb.get_preview(model_id)
+
     return JSONResponse({
         "status": state.get("status", "idle"),
         "downloaded": state.get("downloaded", 0),
@@ -920,6 +924,8 @@ async def gallery_status(model_id: int, version_id: int | None = None,
         "gallery_card_bytes": stats.get("original_bytes", 0),
         "gallery_community": formatted_comm,
         "gallery_community_bytes": stats.get("community_bytes", 0),
+        "default_preview": default_preview,
+        "custom_preview": custom_preview,
     })
 
 
@@ -987,6 +993,17 @@ async def gallery_delete(model_id: int, version_id: int | None = None):
         del _gallery_state[model_id]
     return JSONResponse({"deleted": count + len(originals)})
 
+
+
+@router.post("/api/admin/loras/gallery/{item_id}/set-preview")
+async def set_gallery_preview(item_id: str):
+    """Set a gallery image as the custom preview for its model."""
+    img = _gdb.get_image(item_id)
+    if not img:
+        raise HTTPException(404, "Image not found")
+    model_id = img["model_id"]
+    _gdb.set_preview(model_id, item_id)
+    return JSONResponse({"status": "ok", "model_id": model_id, "civitai_id": item_id})
 
 
 @router.post("/api/admin/loras/gallery/{item_id}/star")

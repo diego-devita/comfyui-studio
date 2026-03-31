@@ -332,7 +332,9 @@ async def loras_list():
                 mid = m.get("civitai_model_id")
                 info = gcounts.get(mid) if mid else None
                 m["gallery_count"] = info["count"] if info else 0
-                m["gallery_thumb"] = info["first_id"] if info else None
+                m["gallery_thumb"] = info["custom_id"] or info["first_id"] if info else None
+                m["gallery_thumb_default"] = info["first_id"] if info else None
+                m["gallery_thumb_custom"] = info["custom_id"] if info else None
     except Exception:
         pass
 
