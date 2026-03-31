@@ -938,31 +938,76 @@ async function checkStudio() {
   const link = $('studioLink');
   const settings = await getSettings();
   const studioUrl = settings.studioUrl ? settings.studioUrl.replace(/\/$/, '') : '';
-  try {
-    const status = await studioGet('/api/admin/system/status');
-    _studioConnected = true;
+
+  var connected = false;
+  var tooltip = '';
+
+  if (!studioUrl) {
+    tooltip = 'Studio URL not configured — go to Settings';
+  } else if (!settings.studioKey) {
+    tooltip = 'API Key not configured — go to Settings';
+  } else {
+    try {
+      var r = await fetch(studioUrl + '/api/health', { headers: { 'X-API-Key': settings.studioKey } });
+      if (r.ok) {
+        var data = await r.json();
+        if (data.authenticated === true) {
+          connected = true;
+          tooltip = 'Connected to ' + studioUrl + ' — click to open';
+        } else {
+          tooltip = 'Connected to ' + studioUrl + ' but API key is invalid';
+        }
+      } else {
+        tooltip = 'Server responded with error ' + r.status;
+      }
+    } catch {
+      tooltip = 'Cannot reach ' + studioUrl + ' — server may be offline';
+    }
+  }
+
+  _studioConnected = connected;
+  container.title = tooltip;
+
+  if (connected) {
     container.className = 'studio-status online';
-    container.title = 'Clicca per visitare la pagina ComfyUI Studio collegata';
-    link.href = studioUrl || '#';
+    link.href = studioUrl;
     link.textContent = 'Online';
     chrome.action.setBadgeText({ text: '' });
     chrome.action.setIcon({ path: { '16': 'icons/icon16_connected.png', '48': 'icons/icon48_connected.png', '128': 'icons/icon128_connected.png' } });
-  } catch {
-    _studioConnected = false;
+  } else {
     container.className = 'studio-status offline';
-    container.title = 'Istanza ComfyUI Studio non collegata';
     link.textContent = 'Offline';
     link.href = '#';
     chrome.action.setIcon({ path: { '16': 'icons/icon16_disconnected.png', '48': 'icons/icon48_disconnected.png', '128': 'icons/icon128_disconnected.png' } });
   }
-  // Status bar
+
+  // Flash the badge on each check
+  container.classList.remove('flash-check');
+  container.offsetHeight;
+  container.classList.add('flash-check');
+  setTimeout(() => container.classList.remove('flash-check'), 500);
+}
+
+// Setup version text (once)
+(function() {
   const extVer = chrome.runtime.getManifest().version;
   var verSpan = $('statusBarText');
   verSpan.textContent = 'v' + extVer;
   verSpan.style.cursor = 'pointer';
   verSpan.title = 'View changelog';
   verSpan.addEventListener('click', showChangelog);
-}
+})();
+
+// Refresh button
+$('studioRefresh').addEventListener('click', function(e) {
+  e.stopPropagation();
+  this.classList.add('spinning');
+  var self = this;
+  checkStudio().then(() => setTimeout(() => self.classList.remove('spinning'), 600));
+});
+
+// Poll studio status every 10s
+setInterval(checkStudio, 10000);
 
 // ── Toggle password visibility ──
 

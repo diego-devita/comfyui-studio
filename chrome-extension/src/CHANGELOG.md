@@ -1,5 +1,12 @@
 # Chrome Extension Changelog
 
+## v3.1.0 — 2026-03-31 13:42
+- Studio connection polling every 10s with flash on each check
+- Refresh button (↻) on Online/Offline badge to force connection check
+- Contextual tooltips on badge: URL not configured, key not configured, key invalid, server unreachable, connected
+- Health endpoint now validates API key (`authenticated: true/false`) without breaking unauthenticated calls
+- Fixed false Online status (was using studioGet which threw on missing key, now uses fetch directly)
+
 ## v3.0.0 — 2026-03-31 12:25
 - **BREAKING: Side panel only** — popup removed, extension icon opens/closes side panel directly
 - Background service worker with `openPanelOnActionClick: true`
