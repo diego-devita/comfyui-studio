@@ -295,6 +295,7 @@
   </div>
   <div class="filter-row">
     <input type="text" id="searchInput" class="search-input" placeholder="Search LoRAs...">
+    <button class="btn btn--sm" id="backfillThumbsBtn" style="margin-left:auto;font-size:11px;" title="Generate missing thumbnails for all gallery images">Generate Thumbs</button>
   </div>
 </div>
 
@@ -2574,6 +2575,92 @@
       if (e.key === 'ArrowLeft') navDetail(-1);
       if (e.key === 'ArrowRight') navDetail(1);
     }
+  });
+
+  // ── Thumbnail backfill SSE ──
+  document.getElementById('backfillThumbsBtn').addEventListener('click', function() {
+    var btn = this;
+    btn.disabled = true;
+    var dialog = document.createElement('dialog');
+    dialog.style.cssText = 'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:400px;max-width:500px;font-family:var(--mono);';
+    dialog.innerHTML =
+      '<h3 style="margin:0 0 12px;font-size:14px;">Generating Thumbnails</h3>' +
+      '<div id="thumbLog" style="font-size:11px;color:var(--muted);margin-bottom:8px;max-height:100px;overflow-y:auto;"></div>' +
+      '<div style="background:var(--bg);border-radius:4px;height:20px;overflow:hidden;margin-bottom:8px;">' +
+        '<div id="thumbFill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;"></div>' +
+      '</div>' +
+      '<div id="thumbStats" style="font-size:11px;color:var(--muted);margin-bottom:12px;"></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button class="btn btn--sm btn--danger" id="thumbCancelBtn">Cancel</button>' +
+        '<button class="btn btn--sm" id="thumbCloseBtn" style="display:none;">Close</button>' +
+      '</div>';
+    document.body.appendChild(dialog);
+    dialog.showModal();
+
+    var log = dialog.querySelector('#thumbLog');
+    var fill = dialog.querySelector('#thumbFill');
+    var stats = dialog.querySelector('#thumbStats');
+    var cancelBtn = dialog.querySelector('#thumbCancelBtn');
+    var closeBtn = dialog.querySelector('#thumbCloseBtn');
+    var done = false;
+
+    var es = new EventSource('/api/admin/loras/gallery/backfill-thumbs');
+
+    es.addEventListener('log', function(e) {
+      var msg = JSON.parse(e.data);
+      var line = document.createElement('div');
+      line.textContent = msg;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    });
+
+    es.addEventListener('progress', function(e) {
+      var d = JSON.parse(e.data);
+      var pct = d.total > 0 ? ((d.current / d.total) * 100).toFixed(1) : 0;
+      fill.style.width = pct + '%';
+      var rateStr = d.rate ? d.rate.toFixed(1) + '/s' : '...';
+      var etaStr = d.eta_seconds != null ? (d.eta_seconds >= 60 ? Math.floor(d.eta_seconds / 60) + 'm ' + (d.eta_seconds % 60) + 's' : d.eta_seconds + 's') : '';
+      stats.textContent = d.current + '/' + d.total + ' \u00b7 ' + d.generated + ' generated \u00b7 ' + d.failed + ' failed \u00b7 ' + rateStr + (etaStr ? ' \u00b7 ~' + etaStr + ' left' : '');
+    });
+
+    es.addEventListener('done', function(e) {
+      done = true;
+      es.close();
+      var d = JSON.parse(e.data);
+      fill.style.width = '100%';
+      stats.textContent = 'Complete: ' + d.generated + ' generated, ' + d.failed + ' failed' + (d.cancelled ? ' (cancelled)' : '');
+      cancelBtn.style.display = 'none';
+      closeBtn.style.display = '';
+      btn.disabled = false;
+      pollModels(); // Refresh cards to pick up new thumbs
+    });
+
+    es.onerror = function() {
+      if (!done) {
+        es.close();
+        stats.textContent = 'Connection lost';
+        cancelBtn.style.display = 'none';
+        closeBtn.style.display = '';
+        btn.disabled = false;
+      }
+    };
+
+    cancelBtn.addEventListener('click', function() {
+      apiFetch('/api/admin/loras/gallery/backfill-thumbs/cancel', { method: 'POST' });
+      cancelBtn.disabled = true;
+      cancelBtn.textContent = 'Cancelling...';
+    });
+
+    closeBtn.addEventListener('click', function() {
+      dialog.close();
+      dialog.remove();
+    });
+
+    dialog.addEventListener('close', function() {
+      es.close();
+      dialog.remove();
+      btn.disabled = false;
+    });
   });
 
   // ── Boot ──

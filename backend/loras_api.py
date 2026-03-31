@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from config import CATALOGS_DIR, LORAS_JSON, MODELS_BASE, IMAGES_DIR, _now_rome
@@ -198,6 +198,25 @@ def _extract_thumbnail(video_path: Path) -> bool:
             ["ffmpeg", "-y", "-i", str(video_path), "-vframes", "1",
              "-vf", "scale=300:-1", "-q:v", "5", "-f", "image2", str(thumb)],
             capture_output=True, timeout=15)
+        return thumb.exists() and thumb.stat().st_size > 0
+    except Exception:
+        return False
+
+
+def _generate_image_thumb(image_path: Path, max_width: int = 300) -> bool:
+    """Generate a thumbnail for an image using Pillow. Returns True on success."""
+    thumb = image_path.with_suffix(".thumb.jpg")
+    if thumb.exists() and thumb.stat().st_size > 0:
+        return True
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_size = (max_width, int(img.height * ratio))
+                img = img.resize(new_size, Image.LANCZOS)
+            img = img.convert("RGB")
+            img.save(thumb, "JPEG", quality=70)
         return thumb.exists() and thumb.stat().st_size > 0
     except Exception:
         return False
@@ -489,7 +508,7 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
     # 'community' → media/NNN/NNN/{id}.ext (sharded flat store)
     source = meta.get("_source", "community")
     rel_file = _gdb.file_path_for(source, model_id, iid, ext)
-    rel_thumb = _gdb.thumb_path_for(source, model_id, iid) if ext == ".mp4" else None
+    rel_thumb = _gdb.thumb_path_for(source, model_id, iid)
     rel_meta = _gdb.meta_path_for(source, model_id, iid)
     dest = _gdb.abs_path(rel_file)
 
@@ -539,13 +558,13 @@ def _gallery_download_one(iid: str, url: str, meta: dict,
     else:
         return "failed"
 
-    # Extract thumbnail from first video frame for gallery display.
-    # Videos in the gallery are shown as static <img> thumbnails to avoid
-    # loading heavy <video> elements in the DOM.
+    # Generate thumbnail: ffmpeg for videos, Pillow resize for images.
     has_thumb = False
     if ext == ".mp4":
         _extract_thumbnail(dest)
-        has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
+    else:
+        _generate_image_thumb(dest)
+    has_thumb = _gdb.abs_path(rel_thumb).exists() if rel_thumb else False
 
     # Fetch generation data (resources, tools, techniques) from CivitAI tRPC.
     # This gives us the list of LoRAs/checkpoints used, which the REST API
@@ -1201,10 +1220,10 @@ async def serve_gallery_media(item_id: str):
 
 @router.get("/api/admin/loras/gallery/thumb/{item_id}")
 async def serve_gallery_thumb(item_id: str):
-    """Serve a thumbnail for a gallery item.
+    """Serve the thumbnail (.thumb.jpg) for a gallery item.
 
-    For videos: returns the .thumb.jpg extracted by ffmpeg during download.
-    For images: returns the original image file (serves as its own thumbnail).
+    Both images and videos have thumbnails (300px wide).
+    Falls back to original file if thumb not yet generated.
     """
     clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
     if ".." in clean_id or "/" in clean_id:
@@ -1222,6 +1241,94 @@ async def serve_gallery_thumb(item_id: str):
 
 
 _CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
+
+
+# ── Thumbnail backfill ──────────────────────────────────────────────────────
+
+_thumb_cancel = threading.Event()
+
+
+def _backfill_thumbs_stream():
+    """SSE generator: generate missing thumbnails for all gallery images."""
+    import json as _json, time as _time
+
+    _thumb_cancel.clear()
+
+    conn = _gdb._get_conn()
+    rows = conn.execute(
+        "SELECT civitai_id, file_path, type, thumb_path FROM gallery_images WHERE thumb_path IS NULL"
+    ).fetchall()
+
+    total = len(rows)
+    if total == 0:
+        yield f"event: log\ndata: {_json.dumps('All images already have thumbnails')}\n\n"
+        yield f"event: done\ndata: {_json.dumps({'total': 0, 'generated': 0, 'failed': 0, 'skipped': 0})}\n\n"
+        return
+
+    yield f"event: log\ndata: {_json.dumps(f'Found {total} images without thumbnails')}\n\n"
+    yield f"event: progress\ndata: {_json.dumps({'current': 0, 'total': total, 'generated': 0, 'failed': 0})}\n\n"
+
+    generated = 0
+    failed = 0
+    start = _time.time()
+
+    for i, row in enumerate(rows):
+        if _thumb_cancel.is_set():
+            yield f"event: log\ndata: {_json.dumps('Cancelled by user')}\n\n"
+            break
+
+        cid = row["civitai_id"]
+        fpath = row["file_path"]
+        ftype = row["type"]
+        abs_file = _gdb.abs_path(fpath)
+
+        if not abs_file.exists():
+            failed += 1
+            yield f"event: progress\ndata: {_json.dumps({'current': i + 1, 'total': total, 'generated': generated, 'failed': failed})}\n\n"
+            continue
+
+        # Derive thumb path from file path
+        thumb_rel = str(Path(fpath).with_suffix(".thumb.jpg"))
+        thumb_abs = _gdb.abs_path(thumb_rel)
+
+        ok = False
+        if ftype == "video":
+            ok = _extract_thumbnail(abs_file)
+        else:
+            ok = _generate_image_thumb(abs_file)
+
+        if ok and thumb_abs.exists():
+            conn.execute("UPDATE gallery_images SET thumb_path = ? WHERE civitai_id = ?", (thumb_rel, cid))
+            if (generated + 1) % 20 == 0:
+                conn.commit()
+            generated += 1
+        else:
+            failed += 1
+
+        elapsed = _time.time() - start
+        rate = (i + 1) / elapsed if elapsed > 0 else 0
+        eta = int((total - i - 1) / rate) if rate > 0 else 0
+
+        yield f"event: progress\ndata: {_json.dumps({'current': i + 1, 'total': total, 'generated': generated, 'failed': failed, 'rate': round(rate, 1), 'eta_seconds': eta})}\n\n"
+
+    conn.commit()
+
+    summary = {'total': total, 'generated': generated, 'failed': failed, 'cancelled': _thumb_cancel.is_set()}
+    yield f"event: log\ndata: {_json.dumps(f'Done: {generated} generated, {failed} failed out of {total}')}\n\n"
+    yield f"event: done\ndata: {_json.dumps(summary)}\n\n"
+
+
+@router.get("/api/admin/loras/gallery/backfill-thumbs")
+async def backfill_thumbs_sse():
+    """SSE stream: generate thumbnails for all gallery images that don't have one."""
+    return StreamingResponse(_backfill_thumbs_stream(), media_type="text/event-stream")
+
+
+@router.post("/api/admin/loras/gallery/backfill-thumbs/cancel")
+async def backfill_thumbs_cancel():
+    """Cancel an in-progress thumbnail backfill."""
+    _thumb_cancel.set()
+    return JSONResponse({"status": "cancelling"})
 
 
 @router.post("/api/admin/loras/gallery/to-input/{image_id}")
