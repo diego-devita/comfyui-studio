@@ -194,6 +194,8 @@
         Upload
         <input type="file" id="uploadInputFile" accept="image/*" multiple style="display:none;">
       </label>
+      <button class="btn btn--sm" id="syncInputsBtn" style="display:none;" title="Sync untracked files to database">Sync DB</button>
+      <span id="inputDbStats" style="display:none;font-family:var(--mono);font-size:10px;color:var(--muted);"></span>
       <button class="btn btn--sm" id="downloadAllBtn" style="display:none;">Download ZIP</button>
     </div>
     <div id="assetsToolbar" class="select-toolbar" style="display:none;">
@@ -261,6 +263,9 @@
       lastClickedIndex = null;
       $downloadAllBtn.style.display = currentTab === 'outputs' ? '' : 'none';
       document.getElementById('uploadInputBtn').style.display = currentTab === 'inputs' ? '' : 'none';
+      document.getElementById('syncInputsBtn').style.display = currentTab === 'inputs' ? '' : 'none';
+      document.getElementById('inputDbStats').style.display = currentTab === 'inputs' ? '' : 'none';
+      if (currentTab === 'inputs') loadInputStats();
       loadAssets();
     });
   });
@@ -664,8 +669,39 @@
 
   setInterval(function() { loadAssets(true); startLiveBar(); }, POLL_MS);
 
+  // ── Input DB stats + sync ──
+  async function loadInputStats() {
+    try {
+      var resp = await apiFetch('/api/admin/assets/input-stats');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      document.getElementById('inputDbStats').textContent = data.files_on_disk + ' files / ' + data.records_in_db + ' tracked';
+    } catch (_) {}
+  }
+
+  document.getElementById('syncInputsBtn').addEventListener('click', async function() {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Syncing...';
+    try {
+      var resp = await apiFetch('/api/admin/assets/sync-inputs', {method: 'POST'});
+      if (resp.ok) {
+        var data = await resp.json();
+        showToast('Synced: ' + data.added + ' new file(s) tracked', 3000);
+        loadInputStats();
+      }
+    } catch (e) {
+      showToast('Sync failed: ' + e.message, 3000, 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Sync DB';
+  });
+
   // Initial state
   document.getElementById('uploadInputBtn').style.display = currentTab === 'inputs' ? '' : 'none';
+  document.getElementById('syncInputsBtn').style.display = currentTab === 'inputs' ? '' : 'none';
+  document.getElementById('inputDbStats').style.display = currentTab === 'inputs' ? '' : 'none';
+  if (currentTab === 'inputs') loadInputStats();
   loadAssets();
   startLiveBar();
 

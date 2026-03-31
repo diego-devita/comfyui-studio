@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "date": "2026-03-24 21:30",
   "categories": [
     {
@@ -1537,6 +1537,14 @@
           ],
           "hf_repo": "ai-forever/Real-ESRGAN",
           "hf_file": "RealESRGAN_x4.pth"
+        },
+        {
+          "name": "RealESRGAN x2plus",
+          "file": "RealESRGAN_x2plus.pth",
+          "dest": "upscale_models",
+          "source": "direct",
+          "size_gb": 0.064,
+          "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth"
         },
         {
           "name": "RealESRGAN x4 Anime",

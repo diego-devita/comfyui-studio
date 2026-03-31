@@ -191,6 +191,10 @@ async def _start_event_consumer():
     import llm_db as _llmdb
     _llmdb.init_llm_db()
 
+    # Initialize input assets tracking
+    import input_assets as _ia
+    _ia.init_input_assets()
+
     # Background sync CivitAI tags — non-blocking, runs after startup completes.
     # Resolves tag IDs from downloaded gallery metadata into human-readable names.
     import threading as _threading

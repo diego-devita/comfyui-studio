@@ -39,18 +39,11 @@ async def get_runner_manifest(workflow_id: str):
 @router.post("/api/run/upload-image")
 async def upload_input_image(file: UploadFile = File(...)):
     """Upload an image to ComfyUI input directory. Returns the filename for later use."""
+    from input_assets import register_input_async
     image_bytes = await file.read()
-    unique_name = _make_input_filename(file.filename)
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                f"{COMFY_URL}/upload/image",
-                files={"image": (unique_name, image_bytes, file.content_type or "image/png")},
-                data={"overwrite": "true"},
-            )
-            r.raise_for_status()
-            uploaded_name = r.json()["name"]
-        return {"filename": uploaded_name}
+        filename = await register_input_async(image_bytes, file.filename, source="runner", mime_type=file.content_type)
+        return {"filename": filename}
     except Exception as e:
         raise HTTPException(500, f"Upload failed: {str(e)}")
 

@@ -156,20 +156,16 @@ class PipelineContext:
             self.log(f"[DEV] Job stub: {fake_id}")
             return fake_id
 
-        # Build multipart form like the runner frontend does
-        import aiofiles
-        from config import LLM_IMAGES_DIR, ASSETS_INPUT_DIR
+        # Register input image via centralized asset manager
+        from config import LLM_IMAGES_DIR
+        from input_assets import register_input_async
 
-        # If we have an image_id, copy it to ComfyUI input dir
         input_image_name = None
         if image_id:
             src = LLM_IMAGES_DIR / image_id
             if src.exists():
-                input_image_name = image_id
-                dst = ASSETS_INPUT_DIR / image_id
-                if not dst.exists():
-                    import shutil
-                    shutil.copy2(src, dst)
+                file_bytes = src.read_bytes()
+                input_image_name = await register_input_async(file_bytes, image_id, source="pipeline")
 
         if input_image_name:
             params["_existing_input_image"] = input_image_name

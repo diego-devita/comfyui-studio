@@ -254,25 +254,36 @@ async def download_job_package(prompt_id: str):
 @router.post("/api/admin/assets/upload-inputs")
 async def upload_input_assets(files: list[UploadFile] = File(...)):
     """Upload one or more images to ComfyUI input directory."""
+    from input_assets import register_input_async
     uploaded = []
     errors = []
     for f in files:
         try:
             image_bytes = await f.read()
-            unique_name = _make_input_filename(f.filename)
-            async with httpx.AsyncClient(timeout=30) as client:
-                r = await client.post(
-                    f"{COMFY_URL}/upload/image",
-                    files={"image": (unique_name, image_bytes, f.content_type or "image/png")},
-                    data={"overwrite": "true"},
-                )
-                r.raise_for_status()
-                uploaded.append(r.json()["name"])
+            filename = await register_input_async(image_bytes, f.filename, source="assets", mime_type=f.content_type)
+            uploaded.append(filename)
         except Exception as e:
             errors.append(f"{f.filename}: {str(e)}")
     if uploaded:
         _events.emit("assets.uploaded", f"Uploaded {len(uploaded)} file(s)", data={"files": uploaded})
     return {"uploaded": uploaded, "errors": errors}
+
+
+@router.get("/api/admin/assets/input-stats")
+async def input_asset_stats():
+    """Get file count on disk vs DB records."""
+    from input_assets import get_stats
+    return get_stats()
+
+
+@router.post("/api/admin/assets/sync-inputs")
+async def sync_inputs():
+    """Scan assets/input/ and register untracked files in DB."""
+    from input_assets import sync_input_assets
+    result = sync_input_assets()
+    if result["added"] > 0:
+        _events.emit("assets.synced", f"Synced {result['added']} input file(s) to database")
+    return result
 
 
 @router.get("/api/admin/assets/{asset_type}")

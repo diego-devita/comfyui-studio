@@ -149,8 +149,13 @@ def _get_db_counts() -> dict:
 
 
 @router.get("/api/health")
-async def health():
-    return {"status": "ok"}
+async def health(request: Request):
+    api_key = request.headers.get("X-API-Key", "")
+    result = {"status": "ok"}
+    if api_key:
+        expected = os.environ.get("API_KEY", "")
+        result["authenticated"] = (api_key == expected) if expected else False
+    return result
 
 
 @router.get("/api/admin/system/flush-status")
