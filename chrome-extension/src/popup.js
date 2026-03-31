@@ -38,13 +38,17 @@ async function runpodMutation(query, variables = {}) {
 
 // ── Studio API ──
 
+var _lastHttpDetail = null;
+
 async function studioGet(path) {
   const settings = await getSettings();
   if (!settings.studioUrl || !settings.studioKey) throw new Error('Studio not configured');
   const url = settings.studioUrl.replace(/\/$/, '') + path;
   const r = await fetch(url, { headers: { 'X-API-Key': settings.studioKey } });
-  if (!r.ok) throw new Error(`Studio ${r.status}`);
-  return r.json();
+  var data = r.ok ? await r.json() : null;
+  _lastHttpDetail = { method: 'GET', url: url, reqHeaders: { 'X-API-Key': '***' }, status: r.status, resBody: data };
+  if (!r.ok) throw new Error('Studio ' + r.status);
+  return data;
 }
 
 async function studioPost(path, body) {
@@ -56,9 +60,13 @@ async function studioPost(path, body) {
     headers: { 'Content-Type': 'application/json', 'X-API-Key': settings.studioKey },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`Studio ${r.status}`);
-  return r.json();
+  var data = r.ok ? await r.json() : null;
+  _lastHttpDetail = { method: 'POST', url: url, reqHeaders: { 'Content-Type': 'application/json', 'X-API-Key': '***' }, reqBody: body, status: r.status, resBody: data };
+  if (!r.ok) throw new Error('Studio ' + r.status);
+  return data;
 }
+
+function _getLastHttp() { var h = _lastHttpDetail; _lastHttpDetail = null; return h; }
 
 // ── CivitAI page detection ──
 
@@ -1066,7 +1074,15 @@ var _studioCheckDone = null;
 
 // ── Event Log ──
 
-$('eventLogHeader').addEventListener('click', function() {
+$('eventLogClear').addEventListener('click', function(e) {
+  e.stopPropagation();
+  $('eventLog').innerHTML = '';
+  _evCounts = { all: 0, health: 0, pods: 0, civitai: 0, settings: 0, errors: 0 };
+  _updateFilterCounts();
+});
+
+$('eventLogHeader').addEventListener('click', function(e) {
+  if (e.target.id === 'eventLogClear') return;
   $('eventLogContainer').classList.toggle('collapsed');
   chrome.storage.local.set({ eventLogCollapsed: $('eventLogContainer').classList.contains('collapsed') });
 });
@@ -1104,7 +1120,7 @@ function _updateFilterCounts() {
   });
 }
 
-function logEvent(level, msg, cat) {
+function logEvent(level, msg, cat, http) {
   cat = cat || _guessCategory(msg);
   _evCounts.all++;
   _evCounts[cat] = (_evCounts[cat] || 0) + 1;
@@ -1116,15 +1132,38 @@ function logEvent(level, msg, cat) {
   var ts = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
   var cls = level === 'ok' ? 'ev-ok' : level === 'err' ? 'ev-err' : level === 'warn' ? 'ev-warn' : 'ev-dim';
   var line = document.createElement('div');
-  line.className = 'ev';
+  line.className = 'ev' + (http ? ' ev-http' : '');
   line.dataset.cat = cat;
   line.dataset.level = level;
+  if (http) line._httpDetails = http;
   if (!_matchFilter(cat, level)) line.style.display = 'none';
-  line.innerHTML = '<span class="ev-time">' + ts + '</span> <span class="' + cls + '">' + msg + '</span>';
+  line.innerHTML = '<span class="ev-time">' + ts + '</span> <span class="' + cls + '">' + msg + '</span>' + (http ? ' <span class="ev-inspect">inspect</span>' : '');
+  if (http) {
+    line.addEventListener('click', function() { _showHttpDetail(this._httpDetails); });
+  }
   log.appendChild(line);
   log.scrollTop = log.scrollHeight;
-  while (log.children.length > 100) log.removeChild(log.firstChild);
+  while (log.children.length > 1000) log.removeChild(log.firstChild);
 }
+
+function _showHttpDetail(http) {
+  var overlay = $('changelogOverlay');
+  var body = $('changelogBody');
+  var parts = [];
+  if (http.method) parts.push('<b>' + http.method + '</b> ' + (http.url || ''));
+  if (http.reqHeaders) parts.push('<div style="margin-top:6px;"><b>Request Headers</b><pre style="white-space:pre-wrap;font-size:10px;background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;margin-top:2px;">' + _esc(JSON.stringify(http.reqHeaders, null, 2)) + '</pre></div>');
+  if (http.reqBody) parts.push('<div style="margin-top:6px;"><b>Request Body</b><pre style="white-space:pre-wrap;font-size:10px;background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;margin-top:2px;">' + _esc(typeof http.reqBody === 'string' ? http.reqBody : JSON.stringify(http.reqBody, null, 2)) + '</pre></div>');
+  if (http.status != null) parts.push('<div style="margin-top:6px;"><b>Response</b> ' + http.status + '</div>');
+  if (http.resBody != null) {
+    var bodyStr = typeof http.resBody === 'string' ? http.resBody : JSON.stringify(http.resBody, null, 2);
+    if (bodyStr.length > 2000) bodyStr = bodyStr.substring(0, 2000) + '\n... (truncated)';
+    parts.push('<pre style="white-space:pre-wrap;font-size:10px;background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;margin-top:2px;">' + _esc(bodyStr) + '</pre>');
+  }
+  body.innerHTML = parts.join('');
+  overlay.style.display = 'flex';
+}
+
+function _esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 function _guessCategory(msg) {
   if (msg.startsWith('health')) return 'health';
@@ -1155,32 +1194,35 @@ async function checkStudio() {
     logEvent('warn', 'health — no API key configured');
   } else {
     var keyHint = settings.studioKey.length > 4 ? '***' + settings.studioKey.slice(-4) : '***';
-    logEvent('info', 'health → ' + studioUrl + '/api/health  key=' + keyHint);
+    var healthUrl = studioUrl + '/api/health';
+    var healthHeaders = { 'X-API-Key': settings.studioKey };
+    logEvent('info', 'health → GET ' + healthUrl + '  key=' + keyHint, 'health', { method: 'GET', url: healthUrl, reqHeaders: { 'X-API-Key': keyHint } });
     try {
-      var r = await fetch(studioUrl + '/api/health', { headers: { 'X-API-Key': settings.studioKey } });
+      var r = await fetch(healthUrl, { headers: healthHeaders });
       if (r.ok) {
         var data = await r.json();
         studioData = data;
+        var httpInfo = { method: 'GET', url: healthUrl, reqHeaders: { 'X-API-Key': keyHint }, status: r.status, resBody: data };
         if (data.authenticated) {
           status = 'online';
           label = data.app_version ? 'v' + data.app_version : 'Online';
           tooltip = studioUrl;
           if (data.pod_id) tooltip += ' (pod: ' + data.pod_id + ')';
-          logEvent('ok', 'health ← 200 OK  authenticated  v' + (data.app_version || '?') + (data.pod_id ? '  pod=' + data.pod_id : ''));
+          logEvent('ok', 'health ← 200  v' + (data.app_version || '?') + (data.pod_id ? '  pod=' + data.pod_id : ''), 'health', httpInfo);
         } else {
           status = 'auth_fail';
           tooltip = 'Server reachable but API key is wrong';
-          logEvent('err', 'health ← 200 OK  authenticated=false — wrong key');
+          logEvent('err', 'health ← 200  authenticated=false', 'health', httpInfo);
         }
       } else {
         status = 'unreachable';
         tooltip = 'Server responded with HTTP ' + r.status;
-        logEvent('err', 'health ← HTTP ' + r.status);
+        logEvent('err', 'health ← HTTP ' + r.status, 'health', { method: 'GET', url: healthUrl, reqHeaders: { 'X-API-Key': keyHint }, status: r.status });
       }
     } catch (e) {
       status = 'unreachable';
       tooltip = 'Cannot reach ' + studioUrl;
-      logEvent('err', 'health ← FAILED: ' + e.message);
+      logEvent('err', 'health ← ' + e.message, 'health', { method: 'GET', url: healthUrl, reqHeaders: { 'X-API-Key': keyHint }, status: 0, resBody: e.message });
     }
   }
 
@@ -1646,7 +1688,7 @@ async function loadImageGenData(imageId) {
 
   try {
     const data = await studioGet('/api/admin/civitai/image/' + imageId);
-    logEvent('ok', 'gen data loaded — ' + (data.detected_type || 'unknown') + ', ' + (data.resources || []).length + ' resources', 'civitai');
+    logEvent('ok', 'gen data loaded — ' + (data.detected_type || 'unknown') + ', ' + (data.resources || []).length + ' resources', 'civitai', _getLastHttp());
     var html = '';
 
     // Detected type badge
