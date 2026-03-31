@@ -1158,10 +1158,8 @@ async def serve_gallery_media(item_id: str):
     if not row:
         raise HTTPException(404, "Image not found")
     path = _gdb.abs_path(row["file_path"])
-    if not path.exists():
-        raise HTTPException(404, "File missing from disk")
-    media = "video/mp4" if row["ext"] == ".mp4" else "image/jpeg"
-    return FileResponse(path, media_type=media)
+    from media import serve_media
+    return serve_media(path)
 
 
 @router.get("/api/admin/loras/gallery/thumb/{item_id}")
@@ -1178,9 +1176,8 @@ async def serve_gallery_thumb(item_id: str):
     if not row or not row.get("thumb_path"):
         raise HTTPException(404, "Thumbnail not found")
     path = _gdb.abs_path(row["thumb_path"])
-    if not path.exists():
-        raise HTTPException(404, "Thumbnail file missing")
-    return FileResponse(path, media_type="image/jpeg")
+    from media import serve_media
+    return serve_media(path)
 
 
 _CDN = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
@@ -1320,7 +1317,5 @@ async def serve_preview(model_id: str, filename: str):
     path = IMAGES_DIR / "lookup" / model_id / "previews" / filename
     if not path.exists():
         path = IMAGES_DIR / model_id / "previews" / filename
-    if not path.exists():
-        raise HTTPException(404, "Preview not found")
-    media = "video/mp4" if filename.endswith(".mp4") else "image/jpeg"
-    return FileResponse(path, media_type=media)
+    from media import serve_media
+    return serve_media(path)

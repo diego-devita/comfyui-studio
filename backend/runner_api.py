@@ -294,7 +294,24 @@ async def run_status(prompt_id: str):
 
 @router.get("/api/comfyui/view")
 async def comfyui_view(filename: str, type: str = "input", subfolder: str = ""):
-    """Proxy to ComfyUI /view endpoint for serving images."""
+    """Serve media files, preferring direct disk access over ComfyUI proxy."""
+    from media import serve_media
+    from pathlib import Path
+
+    # Try serving from our own directories first (no proxy needed)
+    if type == "input":
+        path = ASSETS_INPUT_DIR / filename
+        if path.exists():
+            return serve_media(path)
+    elif type == "output":
+        if subfolder:
+            path = ASSETS_OUTPUT_DIR / subfolder / filename
+        else:
+            path = ASSETS_OUTPUT_DIR / filename
+        if path.exists():
+            return serve_media(path)
+
+    # Fallback: proxy to ComfyUI (for files only in ComfyUI dirs)
     params = {"filename": filename, "type": type}
     if subfolder:
         params["subfolder"] = subfolder
@@ -302,7 +319,7 @@ async def comfyui_view(filename: str, type: str = "input", subfolder: str = ""):
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(f"{COMFY_URL}/view", params=params)
             if r.status_code != 200:
-                raise HTTPException(r.status_code, "Image not found")
+                raise HTTPException(r.status_code, "File not found")
             ct = r.headers.get("content-type", "image/png")
             return Response(content=r.content, media_type=ct)
     except HTTPException:

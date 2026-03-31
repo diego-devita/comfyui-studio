@@ -172,9 +172,8 @@ async def chat_image_upload(file: UploadFile = File(...)):
 async def chat_image_serve(image_id: str):
     """Serve a chat image."""
     path = LLM_IMAGES_DIR / image_id
-    if not path.exists():
-        raise HTTPException(404, "Image not found")
-    return FileResponse(path, media_type="image/jpeg")
+    from media import serve_media
+    return serve_media(path)
 
 
 # ── Conversation endpoints ───────────────────────────────────────────────────

@@ -26,6 +26,7 @@ from loras_api import router as loras_router
 from presets_api import router as presets_router
 from civitai_api import router as civitai_router
 from pipeline_api import router as pipeline_router
+from media import router as media_router
 
 app.include_router(models_router)
 app.include_router(llm_router)
@@ -38,3 +39,4 @@ app.include_router(loras_router)
 app.include_router(presets_router)
 app.include_router(civitai_router)
 app.include_router(pipeline_router)
+app.include_router(media_router)
