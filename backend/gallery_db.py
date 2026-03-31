@@ -485,9 +485,10 @@ def count_and_size(model_id: int | None = None,
     return result
 
 
-def community_counts_by_model() -> dict[int, dict]:
-    """Return {model_id: {count, first_id, custom_id}} for all models with community images.
+def gallery_stats_by_model() -> dict[int, dict]:
+    """Return {model_id: {count, first_id, custom_id}} for all models with gallery images.
 
+    count: total images (original + community).
     first_id: civitai_id of first original image (default thumbnail).
     custom_id: user-chosen preview (from gallery_previews table), or None.
     """
@@ -501,7 +502,6 @@ def community_counts_by_model() -> dict[int, dict]:
                p.civitai_id as custom_id
         FROM gallery_images g
         LEFT JOIN gallery_previews p ON g.model_id = p.model_id
-        WHERE g.source = 'community'
         GROUP BY g.model_id
     """).fetchall()
     return {row[0]: {"count": row[1], "first_id": row[2], "custom_id": row[3]} for row in rows}

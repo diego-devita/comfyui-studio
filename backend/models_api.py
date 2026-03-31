@@ -326,7 +326,7 @@ async def loras_list():
     # Inject gallery_count + gallery_thumb (community images only) from gallery DB
     try:
         import gallery_db as _gdb
-        gcounts = _gdb.community_counts_by_model()
+        gcounts = _gdb.gallery_stats_by_model()
         for cat in result_categories:
             for m in cat["models"]:
                 mid = m.get("civitai_model_id")

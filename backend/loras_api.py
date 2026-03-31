@@ -1185,18 +1185,22 @@ async def serve_gallery_media(item_id: str):
 
 @router.get("/api/admin/loras/gallery/thumb/{item_id}")
 async def serve_gallery_thumb(item_id: str):
-    """Serve a video thumbnail from the flat store.
+    """Serve a thumbnail for a gallery item.
 
-    Returns the .thumb.jpg extracted by ffmpeg during download.
-    If no thumbnail exists, returns 404 (frontend shows a grey placeholder).
+    For videos: returns the .thumb.jpg extracted by ffmpeg during download.
+    For images: returns the original image file (serves as its own thumbnail).
     """
     clean_id = item_id.rsplit(".", 1)[0] if "." in item_id else item_id
     if ".." in clean_id or "/" in clean_id:
         raise HTTPException(400, "Invalid id")
     row = _gdb.get_image(clean_id)
-    if not row or not row.get("thumb_path"):
+    if not row:
+        raise HTTPException(404, "Image not found")
+    # Prefer video thumbnail, fall back to original file
+    rel = row.get("thumb_path") or row.get("file_path")
+    if not rel:
         raise HTTPException(404, "Thumbnail not found")
-    path = _gdb.abs_path(row["thumb_path"])
+    path = _gdb.abs_path(rel)
     from media import serve_media
     return serve_media(path)
 
