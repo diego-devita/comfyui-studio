@@ -2415,7 +2415,8 @@
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
     } else {
-      thumb.innerHTML = '<img class="thumb-img" data-src="' + src + '">';
+      var imgThumbUrl = '/api/admin/loras/gallery/thumb/' + img.id;
+      thumb.innerHTML = '<img class="thumb-img" data-src="' + imgThumbUrl + '">';
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
     }

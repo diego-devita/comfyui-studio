@@ -5,7 +5,7 @@
   "components": {
     "runtime": {"version": 4, "date": "2026-03-30 12:00"},
     "backend": {"version": "27.10.2", "date": "2026-04-01 00:47", "dir": "backend/"},
-    "frontend": {"version": "27.11.2", "date": "2026-04-01 01:14", "dir": "frontend/"},
+    "frontend": {"version": "27.11.3", "date": "2026-04-01 01:15", "dir": "frontend/"},
     "models": {"version": 25, "date": "2026-03-31 15:06", "file": "catalogs/models.json"},
     "loras": {"version": 4, "date": "2026-03-26 18:24", "file": "catalogs/loras.json"},
     "llm_models": {"version": 9, "date": "2026-03-31 02:58", "file": "catalogs/llm.json"},
