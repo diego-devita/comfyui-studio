@@ -1499,9 +1499,8 @@ function stopResourcePoll() {
 
 async function _pollResources() {
   if (!_studioConnected) return;
-  // Spin the refresh icon
-  var refresh = $('studioRefresh');
-  if (refresh) { refresh.classList.add('spinning'); setTimeout(function() { refresh.classList.remove('spinning'); }, 600); }
+  var spin = $('resPollSpinner');
+  if (spin) { spin.style.display = ''; setTimeout(function() { spin.style.display = 'none'; }, 1500); }
   try {
     var map = await getCivitaiMap(true);
     var httpInfo = _getLastHttp();
