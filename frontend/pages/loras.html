@@ -10,6 +10,15 @@
 <style>
   .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
+  .lora-group { margin-bottom: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.01); }
+  .lora-group-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; }
+  .lora-group-header:hover { background: rgba(255,255,255,0.03); }
+  .lora-group-toggle { font-size: 10px; transition: transform 0.15s; color: var(--muted); }
+  .lora-group-header.collapsed .lora-group-toggle { transform: rotate(-90deg); }
+  .lora-group-name { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+  .lora-group-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .lora-group-body { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 12px 12px; }
+  .lora-group-header.collapsed + .lora-group-body { display: none; }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
     font-size: 16px;
@@ -278,6 +287,11 @@
       <button class="view-btn active" data-view="extended">Extended</button>
       <button class="view-btn" data-view="compact">Compact</button>
     </div>
+    <span class="filter-label">Group</span>
+    <div class="view-group" id="groupToggle">
+      <button class="view-btn active" data-group="grouped">Grouped</button>
+      <button class="view-btn" data-group="flat">Flat</button>
+    </div>
   </div>
   <div class="filter-row">
     <input type="text" id="searchInput" class="search-input" placeholder="Search LoRAs...">
@@ -447,6 +461,7 @@
   let currentSort = 'name';
   let sortAscending = true;
   let currentView = 'extended';
+  let currentGrouping = 'grouped';
   let searchQuery = '';
   let pollTimer = null;
   const cardMap = {};
@@ -656,6 +671,18 @@
     });
   });
 
+  // Group toggle
+  document.getElementById('groupToggle').querySelectorAll('.view-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var g = btn.dataset.group;
+      if (currentGrouping === g) return;
+      currentGrouping = g;
+      document.getElementById('groupToggle').querySelectorAll('.view-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      applyFiltersAndSort();
+    });
+  });
+
   // Search handler
   $searchInput.addEventListener('input', () => {
     searchQuery = $searchInput.value.trim().toLowerCase();
@@ -833,8 +860,92 @@
     // Sort cards
     sortCards();
 
+    // Apply grouping
+    if (currentGrouping === 'grouped') {
+      applyGrouping();
+    } else {
+      removeGrouping();
+    }
+
     // Update section visibility and counts
     updateSectionVisibility();
+  }
+
+  function applyGrouping() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      var grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+
+      // Remove existing groups
+      grid.querySelectorAll('.lora-group').forEach(function(g) { g.remove(); });
+
+      // Collect visible cards and group by civitai_model_id
+      var cards = Array.from(grid.querySelectorAll('.model-card:not(.card-hidden)'));
+      var groups = {};
+      var ungrouped = [];
+      var order = [];
+
+      cards.forEach(function(card) {
+        var entry = cardMap[card.dataset.file];
+        if (!entry) { ungrouped.push(card); return; }
+        var mid = entry.model.civitai_model_id;
+        var gname = entry.model.civitai_model_name;
+        if (!mid || !gname) { ungrouped.push(card); return; }
+        if (!groups[mid]) {
+          groups[mid] = { name: gname, cards: [], mid: mid };
+          order.push(mid);
+        }
+        groups[mid].cards.push(card);
+      });
+
+      // Build group wrappers for groups with 2+ cards
+      order.forEach(function(mid) {
+        var g = groups[mid];
+        if (g.cards.length < 2) {
+          ungrouped.push(g.cards[0]);
+          return;
+        }
+        var wrap = document.createElement('div');
+        wrap.className = 'lora-group';
+        wrap.dataset.groupId = mid;
+
+        var header = document.createElement('div');
+        header.className = 'lora-group-header';
+        header.innerHTML = '<span class="lora-group-toggle">&#9660;</span>' +
+          '<span class="lora-group-name">' + escHtml(g.name) + '</span>' +
+          '<span class="lora-group-count">' + g.cards.length + ' variants</span>';
+        header.addEventListener('click', function() {
+          header.classList.toggle('collapsed');
+        });
+        wrap.appendChild(header);
+
+        var body = document.createElement('div');
+        body.className = 'lora-group-body';
+        g.cards.forEach(function(card) { body.appendChild(card); });
+        wrap.appendChild(body);
+
+        grid.appendChild(wrap);
+      });
+
+      // Append ungrouped cards directly
+      ungrouped.forEach(function(card) { grid.appendChild(card); });
+    }
+  }
+
+  function removeGrouping() {
+    for (const [catId, section] of Object.entries(sectionMap)) {
+      var grid = section.querySelector('.card-grid');
+      if (!grid) continue;
+
+      // Move cards out of groups back into grid
+      grid.querySelectorAll('.lora-group').forEach(function(g) {
+        var cards = Array.from(g.querySelectorAll('.model-card'));
+        cards.forEach(function(card) { grid.appendChild(card); });
+        g.remove();
+      });
+    }
+    // Re-sort since cards were moved
+    sortCards();
   }
 
   function sortCards() {
