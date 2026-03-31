@@ -583,6 +583,7 @@
     <button class="page-tab active" data-tab="server">Server</button>
     <button class="page-tab" data-tab="chat">Chat</button>
     <button class="page-tab" data-tab="pipelines">Pipelines</button>
+    <button class="page-tab" data-tab="history">History</button>
   </div>
 
   <div id="tabServer" class="tab-content active">
@@ -725,6 +726,14 @@
       <div id="pipelineLog" style="display:none;background:#0a0a0f;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:var(--mono);font-size:11px;color:var(--muted);max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;"></div>
     </div>
   </div><!-- /tabPipelines -->
+
+  <div id="tabHistory" class="tab-content">
+    <div id="historyList"></div>
+    <div id="historyDetail" style="display:none;">
+      <button class="chat-clear-btn" id="historyBackBtn" style="margin-bottom:12px;">Back to list</button>
+      <div id="historyContent"></div>
+    </div>
+  </div><!-- /tabHistory -->
 
   <!-- System Prompts Dialog -->
   <dialog id="presetsDialog" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);color:var(--text);padding:0;max-width:850px;width:95%;margin:auto;max-height:90vh;">
@@ -1347,6 +1356,7 @@
       document.getElementById('tab' + this.dataset.tab.charAt(0).toUpperCase() + this.dataset.tab.slice(1)).classList.add('active');
       if (this.dataset.tab === 'chat') _chatBoot();
       if (this.dataset.tab === 'pipelines') _pipelinesBoot();
+      if (this.dataset.tab === 'history') _loadHistory();
     });
   });
 
@@ -2221,6 +2231,11 @@
       }
     }
 
+    // Attach Build with AI chat history if used
+    if (_pbHistory['description'] && _pbHistory['description'].length) {
+      inputs['_builder_chat'] = _pbHistory['description'];
+    }
+
     // Start pipeline
     try {
       var resp = await apiFetch('/api/admin/pipelines/' + _pipelineData.id + '/run', {
@@ -2298,6 +2313,115 @@
     el.innerHTML = html;
     el.scrollTop = el.scrollHeight;
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── HISTORY TAB ──
+  // ══════════════════════════════════════════════════════════════════════════
+
+  var $historyList = document.getElementById('historyList');
+  var $historyDetail = document.getElementById('historyDetail');
+  var $historyContent = document.getElementById('historyContent');
+
+  document.getElementById('historyBackBtn').addEventListener('click', function() {
+    $historyDetail.style.display = 'none';
+    $historyList.style.display = '';
+  });
+
+  async function _loadHistory() {
+    try {
+      var resp = await apiFetch('/api/admin/pipelines/history');
+      if (!resp.ok) return;
+      var runs = await resp.json();
+      if (!runs.length) {
+        $historyList.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:40px 0;">No pipeline runs yet.</div>';
+        return;
+      }
+      var html = '';
+      runs.forEach(function(r) {
+        var statusColor = r.status === 'completed' ? 'var(--success)' : r.status === 'failed' ? 'var(--error)' : 'var(--queued)';
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:' + statusColor + ';"></span>';
+        html += '<div class="llm-model-card" style="cursor:pointer;" onclick="window._viewHistoryRun(\'' + escHtml(r.id) + '\')">' +
+          '<div style="display:flex;align-items:center;gap:8px;">';
+        if (r.image_id) {
+          html += '<img src="/api/admin/llm/chat-images/' + escHtml(r.image_id) + '" style="width:48px;height:48px;border-radius:4px;object-fit:cover;">';
+        }
+        html += '<div class="model-info">' +
+            '<div class="model-name">' + dot + escHtml(r.pipeline_id) + '</div>' +
+            '<div class="model-meta"><span>' + escHtml(r.created_at || '') + '</span>' +
+              (r.status === 'failed' && r.error ? '<span style="color:var(--error);">' + escHtml(r.error).substring(0, 60) + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '</div>' +
+          '<span class="model-badge ' + (r.status === 'completed' ? 'present' : 'missing') + '">' + escHtml(r.status) + '</span>' +
+        '</div>';
+      });
+      $historyList.innerHTML = html;
+    } catch (_) {}
+  }
+
+  window._viewHistoryRun = async function(runId) {
+    try {
+      var resp = await apiFetch('/api/admin/pipelines/history/' + runId);
+      if (!resp.ok) return;
+      var run = await resp.json();
+
+      $historyList.style.display = 'none';
+      $historyDetail.style.display = '';
+
+      var html = '';
+
+      // Header
+      var statusColor = run.status === 'completed' ? 'var(--success)' : 'var(--error)';
+      html += '<div style="display:flex;gap:16px;margin-bottom:16px;align-items:flex-start;">';
+      if (run.image_id) {
+        html += '<img src="/api/admin/llm/chat-images/' + escHtml(run.image_id) + '" style="width:120px;border-radius:6px;cursor:pointer;" onclick="window.open(this.src,\'_blank\')">';
+      }
+      html += '<div style="flex:1;">' +
+        '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">' + escHtml(run.pipeline_id) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:2px;">Status: <span style="color:' + statusColor + ';">' + escHtml(run.status) + '</span></div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:2px;">Started: ' + escHtml(run.created_at || '') + '</div>' +
+        (run.finished_at ? '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:2px;">Finished: ' + escHtml(run.finished_at) + '</div>' : '') +
+        (run.error ? '<div style="font-family:var(--mono);font-size:11px;color:var(--error);margin-bottom:2px;">Error: ' + escHtml(run.error) + '</div>' : '') +
+      '</div></div>';
+
+      // Inputs
+      var inputs = run.inputs || {};
+      html += '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;margin-top:16px;">Inputs</div>';
+      html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:16px;">';
+      if (inputs.description) html += '<div><b>Description:</b> ' + escHtml(inputs.description) + '</div>';
+      if (inputs.scenes !== undefined) html += '<div><b>Scenes:</b> ' + (inputs.scenes || 'auto') + '</div>';
+      html += '</div>';
+
+      // Builder chat if present
+      if (inputs._builder_chat && inputs._builder_chat.length) {
+        html += '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Build with AI conversation</div>';
+        html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:var(--mono);font-size:11px;margin-bottom:16px;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">';
+        inputs._builder_chat.forEach(function(msg) {
+          var color = msg.role === 'user' ? 'var(--text)' : 'var(--accent)';
+          var label = msg.role === 'user' ? 'You' : 'AI';
+          html += '<div style="color:' + color + ';margin:4px 0;"><b>' + label + ':</b> ' + escHtml(msg.content) + '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Result
+      if (run.result) {
+        html += '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Result</div>';
+        html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:16px;">';
+        if (run.result.job_id) html += '<div>Job ID: ' + escHtml(run.result.job_id) + ' <a href="/admin/history" style="color:var(--accent);">View in History</a></div>';
+        if (run.result.scenes_count) html += '<div>Scenes: ' + run.result.scenes_count + '</div>';
+        html += '</div>';
+      }
+
+      // Full log
+      html += '<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Pipeline Log</div>';
+      html += '<div style="background:#0a0a0f;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:var(--mono);font-size:11px;color:var(--muted);max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;">';
+      html += escHtml(run.log || '(no log)');
+      html += '</div>';
+
+      $historyContent.innerHTML = html;
+    } catch (_) {}
+  };
 
   // ── Polling ──
   function startPoll() {
