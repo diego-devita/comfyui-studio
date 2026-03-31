@@ -1,5 +1,10 @@
 # Chrome Extension Changelog
 
+## v3.1.1 — 2026-03-31 15:05
+- Side panel background: dark gray (#1a1a2e) visible below and around the extension content
+- Content shadow: drop shadow under the app shell in panel mode
+- Color refresh: --surface #26264a, --border #5757a2 (was #12121a, #1e1e2e)
+
 ## v3.1.0 — 2026-03-31 13:42
 - Studio connection polling every 10s with flash on each check
 - Refresh button (↻) on Online/Offline badge to force connection check

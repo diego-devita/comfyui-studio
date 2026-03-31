@@ -2,8 +2,8 @@
 
 :root {
   --bg: #0a0a0f;
-  --surface: #12121a;
-  --border: #1e1e2e;
+  --surface: #26264a; /* was #12121a */
+  --border: #5757a2; /* was #1e1e2e */
   --text: #e8e8f0;
   --muted: #9898ac;
   --accent: #e8ff47;
@@ -17,7 +17,13 @@
 html, body {
   width: 680px;
   min-width: 680px;
+}
+body.panel-mode {
+  width: 100%; background: #1a1a2e !important;
+}
+body.panel-mode #appShell {
   background: var(--bg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   color: var(--text);
   font-family: var(--mono);
   font-size: 14px;

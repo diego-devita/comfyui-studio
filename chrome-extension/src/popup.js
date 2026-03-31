@@ -87,7 +87,10 @@ async function detectCivitaiPage() {
 
 function $(id) { return document.getElementById(id); }
 
-// Side panel only — no popup mode
+// Side panel mode detection
+if (window.location.search.includes('mode=panel')) {
+  document.body.classList.add('panel-mode');
+}
 
 // ── Width monitor ──
 var MIN_WIDTH = 680;
@@ -931,7 +934,7 @@ getSettings().then(s => {
 // ── Studio status dot ──
 
 var _studioConnected = false;
-var _studioCheckDone = null; // promise that resolves when check completes
+var _studioCheckDone = null;
 
 async function checkStudio() {
   const container = $('studioStatus');
@@ -1123,7 +1126,6 @@ async function initStudio() {
   }
 
   if (!_studioConnected) {
-    // Retry once — side panel may load before check completes
     await checkStudio();
     if (!_studioConnected) {
       noConnect.style.display = '';
