@@ -10,7 +10,9 @@
 <style>
   .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; position: relative; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
-  .gallery-stats-banner { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+  .gallery-stat { position: absolute; font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; pointer-events: none; color: #fff; }
+  .gallery-stat-orig { top: 4px; left: 4px; background: rgba(74,158,255,0.75); }
+  .gallery-stat-comm { bottom: 4px; right: 4px; background: rgba(232,100,71,0.75); }
   .group-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; }
   .model-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(100,149,237,0.15); color: #6495ed; vertical-align: middle; margin-right: 4px; }
   .group-count-boing { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 12px; background: var(--accent); color: var(--bg); font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 0 6px; vertical-align: middle; }
@@ -463,11 +465,10 @@
     return (bytes / 1073741824).toFixed(1) + 'GB';
   }
   function _galleryBanner(oc, ob, cc, cb) {
-    if (!oc && !cc) return '';
-    var parts = [];
-    if (oc) parts.push(oc + '(' + _fmtB(ob) + ')');
-    if (cc) parts.push(cc + '(' + _fmtB(cb) + ')');
-    return '<div class="gallery-stats-banner">' + parts.join('+') + '</div>';
+    var html = '';
+    if (oc) html += '<div class="gallery-stat gallery-stat-orig">' + oc + ' (' + _fmtB(ob) + ')</div>';
+    if (cc) html += '<div class="gallery-stat gallery-stat-comm">' + cc + ' (' + _fmtB(cb) + ')</div>';
+    return html;
   }
 
   // ── State ──
