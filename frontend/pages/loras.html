@@ -2657,7 +2657,7 @@
     var btn = this;
     btn.disabled = true;
     var dialog = document.createElement('dialog');
-    dialog.style.cssText = 'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:400px;max-width:500px;font-family:var(--mono);';
+    dialog.style.cssText = 'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:400px;max-width:500px;font-family:var(--mono);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;';
     dialog.innerHTML =
       '<h3 style="margin:0 0 12px;font-size:14px;">Generating Thumbnails</h3>' +
       '<div id="thumbLog" style="font-size:11px;color:var(--muted);margin-bottom:8px;max-height:100px;overflow-y:auto;"></div>' +
