@@ -2051,6 +2051,11 @@
     galleryModelId = null;
     galleryVersionId = null;
     galleryPlayingVideo = null;
+    // If a gallery download is still running, trigger card polling to show progress
+    if (galleryDownloading) {
+      pollModels();
+      if (!pollTimer) startPolling();
+    }
   }
 
   async function downloadCardsOnly() {
