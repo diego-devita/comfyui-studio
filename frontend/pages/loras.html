@@ -154,7 +154,7 @@
   }
   .gallery-thumb .expand-btn svg { width: 14px; height: 14px; fill: #fff; }
   .gallery-thumb:hover .expand-btn { opacity: 1; }
-  .gallery-thumb .thumb-img { width: 150px; height: 150px; object-fit: cover; display: block; border-radius: 4px; background: var(--bg); }
+  .gallery-thumb .thumb-img { width: 150px; height: 150px; object-fit: cover; display: block; border-radius: 4px; background: var(--surface); }
   .gallery-thumb .thumb-idx {
     position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.55);
     color: rgba(255,255,255,0.7); font-size: 10px; padding: 1px 5px;
@@ -2048,6 +2048,7 @@
   function closeGallery() {
     document.getElementById('galleryOverlay').style.display = 'none';
     if (galleryPollTimer) { clearInterval(galleryPollTimer); galleryPollTimer = null; }
+    _thumbObserver.disconnect();
     galleryModelId = null;
     galleryVersionId = null;
     galleryPlayingVideo = null;
@@ -2292,6 +2293,22 @@
     if (galleryPlayingVideo === thumb) galleryPlayingVideo = null;
   }
 
+  // Lazy load + unload: only load images when visible, remove src when not
+  var _thumbObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      var el = entry.target;
+      if (entry.isIntersecting) {
+        // Load: set real src from data-src
+        var imgEl = el.querySelector('.thumb-img[data-src]');
+        if (imgEl && !imgEl.src) imgEl.src = imgEl.dataset.src;
+      } else {
+        // Unload: clear src to free memory (keep data-src)
+        var imgEl = el.querySelector('.thumb-img[data-src]');
+        if (imgEl && imgEl.src) { imgEl.removeAttribute('src'); }
+      }
+    });
+  }, { root: document.querySelector('.civitai-dialog'), rootMargin: '200px 0px' });
+
   function makeThumb(img) {
     var ext = img.ext || '.jpeg';
     var src = '/api/admin/loras/gallery/media/' + img.id + ext;
@@ -2315,17 +2332,18 @@
       thumb.dataset.videoSrc = src;
       thumb.dataset.thumbSrc = thumbUrl;
       if (thumbUrl) {
-        thumb.innerHTML = '<img class="thumb-img" src="' + thumbUrl + '" loading="lazy"><div class="play-overlay">' + PLAY_SVG + '</div>';
+        thumb.innerHTML = '<img class="thumb-img" data-src="' + thumbUrl + '"><div class="play-overlay">' + PLAY_SVG + '</div>';
       } else {
         thumb.innerHTML = '<div class="thumb-img" style="background:var(--bg)"></div><div class="play-overlay">' + PLAY_SVG + '</div>';
       }
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; toggleVideoPlay(thumb); });
     } else {
-      thumb.innerHTML = '<img class="thumb-img" src="' + src + '" loading="lazy">';
+      thumb.innerHTML = '<img class="thumb-img" data-src="' + src + '">';
       thumb.appendChild(expandBtn);
       thumb.addEventListener('click', function(e) { if (e.target.closest('.expand-btn')) return; openDetail(galleryImages.indexOf(img)); });
     }
+    _thumbObserver.observe(thumb);
     var idx = galleryImages.indexOf(img) + 1;
     var badge = document.createElement('span');
     badge.className = 'thumb-idx';
