@@ -4,6 +4,7 @@ tools/
 workflows/.reference/
 catalogs/.drafts/
 catalogs/.custom/
+chrome-extension/.claude/
 __pycache__/
 
 # Runtime data (never tracked)
