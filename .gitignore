@@ -1,6 +1,5 @@
 CLAUDE.md
 .context/
-chrome-extension/.claude/
 tools/
 workflows/.reference/
 catalogs/.drafts/
