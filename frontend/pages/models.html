@@ -596,6 +596,7 @@
       '<div class="card-actions">' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
         '<button class="btn btn--sm btn--danger" data-ref="removeBtn" style="display:none;font-size:10px;">Remove</button>' +
+        '<button class="btn btn--sm" data-ref="promoteBtn" style="display:none;font-size:10px;" title="Move to Style LoRAs catalog">\u2B06 Style LoRA</button>' +
       '</div>';
 
     // Cache refs
@@ -655,6 +656,9 @@
 
     refs.actionBtn.addEventListener('click', () => handleCardAction(m.file));
     refs.removeBtn.addEventListener('click', () => handleRemoveFromCatalog(m.file, m.name));
+    if (m.civitai_version_id && m.dest === 'loras') {
+      refs.promoteBtn.addEventListener('click', () => handlePromoteToStyleLora(m));
+    }
 
     const grid = document.querySelector('[data-grid="' + catId + '"]');
     if (grid) grid.appendChild(card);
@@ -685,6 +689,7 @@
     el.classList.remove('status-downloading', 'status-error', 'status-present', 'status-missing', 'status-queued');
     el.classList.add('status-' + m.status);
     if (refs.removeBtn) refs.removeBtn.style.display = 'none';
+    if (refs.promoteBtn) refs.promoteBtn.style.display = (m.status === 'present' && m.civitai_version_id && m.dest === 'loras') ? '' : 'none';
 
     badge.className = 'status-badge ' + m.status;
 
@@ -787,6 +792,27 @@
       } else {
         const err = await resp.json().catch(() => ({}));
         showToast(err.detail || 'Remove failed', 5000, 'error');
+      }
+    } catch (e) {
+      if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');
+    }
+  }
+
+  async function handlePromoteToStyleLora(m) {
+    if (!await studioConfirm('Move "' + m.name + '" to Style LoRAs catalog?', {yes: 'Promote'})) return;
+    try {
+      const resp = await apiFetch('/api/admin/civitai/promote-to-lora/' + m.civitai_version_id, { method: 'POST' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.status === 'already_exists') {
+          showToast('Already in Style LoRAs', 3000, 'warning');
+        } else {
+          showToast('Promoted to Style LoRAs (' + data.category + ')', 3000);
+          initialLoad();
+        }
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        showToast(err.detail || 'Promote failed', 5000, 'error');
       }
     } catch (e) {
       if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error');

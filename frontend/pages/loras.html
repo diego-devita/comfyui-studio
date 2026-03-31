@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
+  .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
     font-size: 16px;
@@ -884,6 +886,7 @@
     // Old source link replaced by model-links badges
 
     card.innerHTML =
+      '<div class="card-thumb" data-ref="cardThumb" style="display:none;"></div>' +
       '<div class="card-top">' +
         '<div class="card-info">' +
           '<div class="card-name" data-ref="name"></div>' +
@@ -903,6 +906,7 @@
       '</div>' +
       '<div class="card-error" data-ref="error"></div>' +
       '<div class="card-actions">' +
+        '<a class="btn btn--sm" data-ref="civitaiLink" style="display:none;text-decoration:none;font-size:10px;" target="_blank" title="View on CivitAI">CivitAI</a>' +
         '<button class="btn btn--sm" data-ref="galleryBtn" style="display:none">Gallery</button>' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
         '<button class="btn btn--sm btn--danger" data-ref="removeBtn" style="display:none;font-size:10px;">Remove</button>' +
@@ -975,14 +979,27 @@
       } catch (e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
     });
 
+    if (m.civitai_model_id) {
+      var civUrl = 'https://civitai.com/models/' + m.civitai_model_id;
+      if (m.civitai_version_id) civUrl += '?modelVersionId=' + m.civitai_version_id;
+      refs.civitaiLink.href = civUrl;
+      refs.civitaiLink.style.display = '';
+    }
+
     if (m.civitai_model_id && m.status === 'present') {
       refs.galleryBtn.style.display = '';
-      var imgCount = (m.images || []).length;
+      var imgCount = m.gallery_count || 0;
       refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
       refs.galleryBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         openGallery(m.civitai_model_id, m.civitai_version_id, m.name, m.base_model || '');
       });
+    }
+
+    // Gallery thumbnail
+    if (m.gallery_thumb && refs.cardThumb) {
+      refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + m.gallery_thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+      refs.cardThumb.style.display = '';
     }
 
     const grid = document.querySelector('[data-grid="' + catId + '"]');

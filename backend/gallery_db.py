@@ -479,6 +479,24 @@ def count_and_size(model_id: int | None = None,
     return result
 
 
+def community_counts_by_model() -> dict[int, dict]:
+    """Return {model_id: {count, first_id}} for all models with community images.
+
+    first_id is the civitai_id of the top-reacted community image (for thumbnail).
+    """
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT model_id, COUNT(*) as cnt,
+               (SELECT civitai_id FROM gallery_images g2
+                WHERE g2.model_id = g.model_id AND g2.source = 'community'
+                ORDER BY g2.reactions DESC, g2.downloaded_at DESC LIMIT 1) as first_id
+        FROM gallery_images g
+        WHERE source = 'community'
+        GROUP BY model_id
+    """).fetchall()
+    return {row[0]: {"count": row[1], "first_id": row[2]} for row in rows}
+
+
 def delete_by_model(model_id: int) -> tuple[int, list[str]]:
     """Delete all gallery images for a model.
 

@@ -323,6 +323,19 @@ async def loras_list():
     ld = _catalogs._loras_data
     result_categories = _build_catalog_response(ld, MODELS_BASE, _download_state)
 
+    # Inject gallery_count + gallery_thumb (community images only) from gallery DB
+    try:
+        import gallery_db as _gdb
+        gcounts = _gdb.community_counts_by_model()
+        for cat in result_categories:
+            for m in cat["models"]:
+                mid = m.get("civitai_model_id")
+                info = gcounts.get(mid) if mid else None
+                m["gallery_count"] = info["count"] if info else 0
+                m["gallery_thumb"] = info["first_id"] if info else None
+    except Exception:
+        pass
+
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 

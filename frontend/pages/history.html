@@ -28,6 +28,7 @@
     color: var(--text);
   }
   .job-card.selected { border-color: var(--error); background: rgba(255,68,102,0.05); }
+  .job-card.viewed { border-color: var(--accent); background: rgba(232,255,71,0.04); }
 
   .job-check {
     appearance: none;
@@ -174,6 +175,7 @@
         var card = document.createElement('div');
         card.className = 'job-card';
         card.dataset.index = idx;
+        card.dataset.id = job.prompt_id;
         card.onclick = function(e) {
           if (e.target.classList.contains('job-check')) return;
           if (e.ctrlKey || e.metaKey) { toggleJobCard(card); return; }
@@ -228,11 +230,11 @@
           thumbHtml +
           '<div class="job-info">' +
             '<div class="job-title">' + escHtml(job.workflow_name || job.workflow_id) + '</div>' +
+            '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin:1px 0;">' + escHtml(job.prompt_id) + '</div>' +
             '<div class="job-meta">' +
               '<span class="pill"><b>Q</b> ' + fmtDate(job.queued_at) + '</span>' +
               '<span class="pill"><b>S</b> ' + fmtDate(job.started_at) + '</span>' +
               (job.duration ? fmtDuration(job.duration) : '') +
-              '<span style="color:bisque;">' + escHtml(job.prompt_id.substring(0, 12)) + '...</span>' +
             '</div>' +
             (prompt ? '<div class="job-prompt">' + escHtml(prompt) + '</div>' : '') +
           '</div>' +
@@ -323,6 +325,11 @@
   });
 
   function showDetail(job) {
+    // Mark viewed card
+    document.querySelectorAll('.job-card.viewed').forEach(function(c) { c.classList.remove('viewed'); });
+    var card = document.querySelector('.job-card[data-id="' + job.prompt_id + '"]');
+    if (card) card.classList.add('viewed');
+
     var rows = '';
     rows += '<tr><td>Job ID</td><td>' + escHtml(job.prompt_id) + copyBtn(job.prompt_id) + '</td></tr>';
     rows += '<tr><td>Workflow ID</td><td>' + escHtml(job.workflow_id || '--') + '</td></tr>';
