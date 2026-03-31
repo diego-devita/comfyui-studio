@@ -429,9 +429,20 @@ async def civitai_map():
                 dest = m.get("dest", "")
                 fname = m.get("file", "")
                 disk_path = Path(MODELS_BASE) / dest / fname if dest else Path(MODELS_BASE) / fname
-                status = "present" if disk_path.exists() else "missing"
 
-                by_version[vid_str] = {
+                # Check download state first
+                from download import _download_state
+                dl = _download_state.get(fname)
+                if dl and dl["status"] == "downloading":
+                    status = "downloading"
+                elif dl and dl["status"] == "queued":
+                    status = "queued"
+                elif disk_path.exists():
+                    status = "present"
+                else:
+                    status = "missing"
+
+                entry = {
                     "file": fname,
                     "dest": dest,
                     "name": m.get("name", ""),
@@ -439,7 +450,19 @@ async def civitai_map():
                     "status": status,
                     "civitai_model_id": mid,
                     "catalog": catalog_name,
+                    "size_expected": m.get("size_kb", 0),
                 }
+                if status == "present":
+                    try:
+                        entry["size_disk"] = disk_path.stat().st_size
+                    except OSError:
+                        pass
+                if dl and status == "downloading":
+                    entry["dl_bytes"] = dl.get("bytes", 0)
+                    entry["dl_total"] = dl.get("total", 0)
+                    entry["dl_speed"] = dl.get("speed", 0)
+
+                by_version[vid_str] = entry
 
                 if mid:
                     mid_str = str(mid)
