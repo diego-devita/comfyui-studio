@@ -335,6 +335,10 @@ async def loras_list():
                 m["gallery_thumb"] = info["custom_id"] or info["first_id"] if info else None
                 m["gallery_thumb_default"] = info["first_id"] if info else None
                 m["gallery_thumb_custom"] = info["custom_id"] if info else None
+                m["gallery_orig_count"] = info["orig_count"] if info else 0
+                m["gallery_orig_bytes"] = info["orig_bytes"] if info else 0
+                m["gallery_comm_count"] = info["comm_count"] if info else 0
+                m["gallery_comm_bytes"] = info["comm_bytes"] if info else 0
     except Exception:
         pass
 

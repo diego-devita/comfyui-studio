@@ -8,12 +8,12 @@
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/icons.css">
 <style>
-  .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; position: relative; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
+  .gallery-stats-banner { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
   .group-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; }
   .model-badge { display: inline-block; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: rgba(100,149,237,0.15); color: #6495ed; vertical-align: middle; margin-right: 4px; }
   .group-count-boing { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 12px; background: var(--accent); color: var(--bg); font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 0 6px; vertical-align: middle; }
-  .group-count-boing.sm { min-width: 18px; height: 18px; border-radius: 9px; font-size: 10px; padding: 0 4px; }
   .lora-group-card { border-color: rgba(232,255,71,0.2); }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
@@ -454,6 +454,21 @@
   var PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
   var PAUSE_SVG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
   var EXPAND_SVG = '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>';
+
+  function _fmtB(bytes) {
+    if (!bytes) return '0';
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(0) + 'KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(0) + 'MB';
+    return (bytes / 1073741824).toFixed(1) + 'GB';
+  }
+  function _galleryBanner(oc, ob, cc, cb) {
+    if (!oc && !cc) return '';
+    var parts = [];
+    if (oc) parts.push(oc + '(' + _fmtB(ob) + ')');
+    if (cc) parts.push(cc + '(' + _fmtB(cb) + ')');
+    return '<div class="gallery-stats-banner">' + parts.join('+') + '</div>';
+  }
 
   // ── State ──
   let categories = [];
@@ -922,19 +937,26 @@
         var galleryCount = 0;
         var baseModel = '';
         var thumb = null;
+        var gOrigCount = 0, gOrigBytes = 0, gCommCount = 0, gCommBytes = 0;
         g.models.forEach(function(m) {
           totalSize += m.size_gb || 0;
           galleryCount += m.gallery_count || 0;
           if (!baseModel) baseModel = m.base_model || m.civitai_base_model || '';
           if (!thumb) thumb = m.gallery_thumb;
+          // Original images are shared (same model_id), take max not sum
+          gOrigCount = Math.max(gOrigCount, m.gallery_orig_count || 0);
+          gOrigBytes = Math.max(gOrigBytes, m.gallery_orig_bytes || 0);
+          gCommCount += m.gallery_comm_count || 0;
+          gCommBytes += m.gallery_comm_bytes || 0;
         });
 
         var groupCard = document.createElement('div');
         groupCard.className = 'model-card lora-group-card';
         groupCard.dataset.groupId = mid;
 
+        var gBanner = _galleryBanner(gOrigCount, gOrigBytes, gCommCount, gCommBytes);
         var thumbHtml = thumb
-          ? '<div class="card-thumb" style="display:block"><img src="/api/admin/loras/gallery/thumb/' + thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>'
+          ? '<div class="card-thumb" style="display:block"><img src="/api/admin/loras/gallery/thumb/' + thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">' + gBanner + '</div>'
           : '';
 
         var sizeStr = totalSize >= 1 ? totalSize.toFixed(1) + ' GB' : (totalSize * 1000).toFixed(0) + ' MB';
@@ -955,7 +977,7 @@
             '<div class="card-info">' +
               '<div class="card-name"><span class="group-badge">GROUP</span> ' + escHtml(g.name) + ' ' + countBoing + '</div>' +
               '<div class="card-meta">' +
-                '<span>' + sizeStr + '</span> ' + countBoingSm +
+                '<span>' + sizeStr + ' (' + g.cards.length + ')</span>' +
                 ' <span class="source-badge civitai">civitai</span>' +
                 bmHtml +
               '</div>' +
@@ -1192,9 +1214,10 @@
       });
     }
 
-    // Gallery thumbnail
+    // Gallery thumbnail + stats banner
     if (m.gallery_thumb && refs.cardThumb) {
-      refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + m.gallery_thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+      var bannerHtml = _galleryBanner(m.gallery_orig_count, m.gallery_orig_bytes, m.gallery_comm_count, m.gallery_comm_bytes);
+      refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + m.gallery_thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">' + bannerHtml;
       refs.cardThumb.style.display = '';
     }
 
@@ -1355,7 +1378,8 @@
     if (refs.cardThumb) {
       var newThumb = m.gallery_thumb;
       if (newThumb && refs.cardThumb.dataset.currentThumb !== newThumb) {
-        refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + newThumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+        var bannerHtml = _galleryBanner(m.gallery_orig_count, m.gallery_orig_bytes, m.gallery_comm_count, m.gallery_comm_bytes);
+        refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + newThumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">' + bannerHtml;
         refs.cardThumb.style.display = '';
         refs.cardThumb.dataset.currentThumb = newThumb;
       }

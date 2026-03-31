@@ -493,13 +493,12 @@ def count_and_size(model_id: int | None = None,
 
 
 def gallery_stats_by_model() -> dict[int, dict]:
-    """Return {model_id: {count, first_id, custom_id}} for all models with gallery images.
+    """Return {model_id: stats} for all models with gallery images.
 
-    count: total images (original + community).
-    first_id: civitai_id of first original image (default thumbnail).
-    custom_id: user-chosen preview (from gallery_previews table), or None.
+    Includes: count, first_id, custom_id, and per-source counts/bytes.
     """
     conn = _get_conn()
+    # Main stats with first image and custom preview
     rows = conn.execute("""
         SELECT g.model_id, COUNT(*) as cnt,
                (SELECT civitai_id FROM gallery_images g2
@@ -511,7 +510,28 @@ def gallery_stats_by_model() -> dict[int, dict]:
         LEFT JOIN gallery_previews p ON g.model_id = p.model_id
         GROUP BY g.model_id
     """).fetchall()
-    return {row[0]: {"count": row[1], "first_id": row[2], "custom_id": row[3]} for row in rows}
+    result = {}
+    for row in rows:
+        result[row[0]] = {"count": row[1], "first_id": row[2], "custom_id": row[3],
+                          "orig_count": 0, "orig_bytes": 0, "comm_count": 0, "comm_bytes": 0}
+
+    # Per-source counts and bytes
+    source_rows = conn.execute("""
+        SELECT model_id, source, COUNT(*) as cnt, COALESCE(SUM(file_size), 0) as bytes
+        FROM gallery_images GROUP BY model_id, source
+    """).fetchall()
+    for row in source_rows:
+        mid = row[0]
+        if mid not in result:
+            continue
+        if row[1] == "original":
+            result[mid]["orig_count"] = row[2]
+            result[mid]["orig_bytes"] = row[3]
+        else:
+            result[mid]["comm_count"] = row[2]
+            result[mid]["comm_bytes"] = row[3]
+
+    return result
 
 
 def set_preview(model_id: int, civitai_id: str):

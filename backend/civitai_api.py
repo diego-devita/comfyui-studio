@@ -528,7 +528,7 @@ def _classify_lora_category(base_model: str) -> tuple[str, str]:
         return "illustrious_loras", "Illustrious LoRAs"
     if "pony" in b:
         return "pony_loras", "Pony LoRAs"
-    if "sdxl" in b:
+    if "sdxl" in b or "zimage" in b:
         return "sdxl_loras", "SDXL LoRAs"
     if "sd 1" in b or "sd1" in b:
         return "sd15_loras", "SD 1.5 LoRAs"
