@@ -348,7 +348,18 @@ select.input { font-size: 13px; }
 
 /* CivitAI Studio panel */
 .civitai-detect { margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
-.res-poll-spinner { opacity: 0.6; }
+.res-poll-controls { display: flex; align-items: center; gap: 6px; }
+.res-poll-refresh {
+  cursor: pointer; font-size: 14px; color: var(--muted);
+  transition: color 0.15s, transform 0.3s; user-select: none;
+}
+.res-poll-refresh:hover { color: var(--accent); }
+.res-poll-refresh.spinning { animation: spin 0.6s linear; }
+.res-poll-select {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--sans); font-size: 10px; padding: 2px 4px;
+  border-radius: 3px; cursor: pointer;
+}
 .civitai-badge {
   display: inline-block; padding: 2px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 600; text-transform: uppercase;

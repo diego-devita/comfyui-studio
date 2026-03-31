@@ -1454,8 +1454,6 @@ async function initStudio() {
   $('civitaiImagePanel').style.display = 'none';
   $('civitaiNone').style.display = 'none';
 
-  startResourcePoll();
-
   if (page.type === 'model') {
     logEvent('info', 'civitai — model #' + page.id + (page.versionId ? ' v' + page.versionId : ''));
     detect.innerHTML = '<span class="civitai-badge">Model #' + page.id + '</span>';
@@ -1485,22 +1483,28 @@ async function getCivitaiMap(force) {
 
 // ── Resource status polling ──
 
-var _resPollInterval = null;
+var _resPollTimer = null;
+var _resPollSec = 0; // 0 = off
 var _lastResStatus = {}; // vid → status
 
-function startResourcePoll() {
-  if (_resPollInterval) return;
-  _resPollInterval = setInterval(_pollResources, 5000);
+function _setResPoll(sec) {
+  _resPollSec = sec;
+  if (_resPollTimer) { clearInterval(_resPollTimer); _resPollTimer = null; }
+  var sel = $('resPollInterval');
+  if (sel) sel.value = String(sec);
+  if (sec > 0) {
+    _resPollTimer = setInterval(_pollResources, sec * 1000);
+  }
 }
 
-function stopResourcePoll() {
-  if (_resPollInterval) { clearInterval(_resPollInterval); _resPollInterval = null; }
+function _autoStartPollForDownload() {
+  if (_resPollSec === 0) _setResPoll(15);
 }
 
 async function _pollResources() {
   if (!_studioConnected) return;
-  var spin = $('resPollSpinner');
-  if (spin) { spin.style.display = ''; setTimeout(function() { spin.style.display = 'none'; }, 1500); }
+  var refresh = $('resPollRefresh');
+  if (refresh) { refresh.classList.add('spinning'); setTimeout(function() { refresh.classList.remove('spinning'); }, 600); }
   try {
     var map = await getCivitaiMap(true);
     var httpInfo = _getLastHttp();
@@ -1554,10 +1558,27 @@ async function _pollResources() {
         badge.className = 'ver-badge ver-in-catalog';
       }
     });
+    // Auto-stop when no downloads
+    if (dlCount === 0 && qCount === 0 && _resPollSec > 0) {
+      _setResPoll(0);
+      logEvent('info', 'poll stopped — no active downloads', 'civitai');
+    }
   } catch (e) {
     logEvent('err', 'resource poll failed — ' + e.message, 'civitai');
   }
 }
+
+// Wire poll controls
+$('resPollRefresh').addEventListener('click', function() {
+  this.classList.add('spinning');
+  var self = this;
+  _pollResources().then(function() { setTimeout(function() { self.classList.remove('spinning'); }, 600); });
+});
+$('resPollInterval').addEventListener('change', function() {
+  _setResPoll(parseInt(this.value));
+  if (_resPollSec > 0) _pollResources();
+  logEvent('info', 'poll interval → ' + (_resPollSec ? _resPollSec + 's' : 'off'), 'settings');
+});
 
 async function loadModelVersions(modelId, currentVersionId) {
   var el = $('modelVersionsList');
@@ -1640,7 +1661,8 @@ async function loadModelVersions(modelId, currentVersionId) {
         try {
           await studioPost('/api/admin/models/download/' + encodeURIComponent(btn.dataset.file), {});
           btn.textContent = 'Downloading...';
-          showStatus('Download started — check Models page for progress', 'success');
+          showStatus('Download started', 'success');
+          _autoStartPollForDownload();
           logEvent('ok', 'download queued — ' + btn.dataset.file);
         } catch (e) {
           showStatus('Download failed: ' + e.message, 'error');
@@ -1822,7 +1844,8 @@ async function loadImageGenData(imageId) {
         try {
           await studioPost('/api/admin/models/download/' + encodeURIComponent(btn.dataset.file), {});
           btn.textContent = 'Downloading...';
-          showStatus('Download started — check Models page for progress', 'success');
+          showStatus('Download started', 'success');
+          _autoStartPollForDownload();
           logEvent('ok', 'download queued — ' + btn.dataset.file);
         } catch (e) {
           showStatus('Download failed: ' + e.message, 'error');
@@ -1861,7 +1884,8 @@ async function loadImageGenData(imageId) {
               try {
                 await studioPost('/api/admin/models/download/' + encodeURIComponent(result.file), {});
                 dlBtn.textContent = 'Downloading...';
-                showStatus('Download started — check Models page for progress', 'success');
+                showStatus('Download started', 'success');
+          _autoStartPollForDownload();
                 logEvent('ok', 'download queued — ' + result.file);
               } catch (e) {
                 showStatus('Download failed: ' + e.message, 'error');

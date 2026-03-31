@@ -109,7 +109,19 @@
       Connect to a Studio instance in Settings first.
     </div>
     <div id="studioContent" style="display:none;">
-      <div id="civitaiDetect" class="civitai-detect"><span id="resPollSpinner" class="res-poll-spinner" style="display:none;"><span class="spinner"></span></span></div>
+      <div id="civitaiDetect" class="civitai-detect">
+        <span id="resPollControls" class="res-poll-controls">
+          <span class="res-poll-refresh" id="resPollRefresh" title="Refresh now">&#x21bb;</span>
+          <select class="res-poll-select" id="resPollInterval">
+            <option value="0">None</option>
+            <option value="5">5s</option>
+            <option value="10">10s</option>
+            <option value="15" selected>15s</option>
+            <option value="20">20s</option>
+            <option value="30">30s</option>
+          </select>
+        </span>
+      </div>
       <div id="civitaiModelPanel" style="display:none;">
         <div id="modelVersionsList"></div>
       </div>
