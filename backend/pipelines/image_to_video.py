@@ -43,7 +43,26 @@ LORA_MAP = {
         "low": "wan22-zoom-reveal-295epoc-low-k3nk.safetensors",
         "strength": 0.8,
     },
+    "nsfw-general": {
+        "high": "NSFW-22-H-e8.safetensors",
+        "low": "NSFW-22-L-e8.safetensors",
+        "strength": 0.9,
+    },
 }
+
+NSFW_KEYWORDS = [
+    "nude", "naked", "topless", "undress", "strip", "spoglia",
+    "pussy", "cunt", "cock", "dick", "tits", "ass",
+    "breast", "nipple", "areola", "vulva", "pubic", "genital",
+    "sex", "fuck", "blowjob", "penetrat", "oral", "climax",
+    "orgasm", "cum", "ejacul", "erect", "nuda", "nudo",
+]
+
+
+def _detect_nsfw(text: str) -> bool:
+    """Check if text contains NSFW content."""
+    lower = text.lower()
+    return any(kw in lower for kw in NSFW_KEYWORDS)
 
 DEFAULT_NEGATIVE = (
     "Overexposure, static, blurred details, subtitles, paintings, pictures, still, "
@@ -157,6 +176,17 @@ async def run(inputs: dict, ctx):
 
     # ── Step 3b: Parse LoRAs ──
     loras_high, loras_low = _parse_loras(scenes_text)
+
+    # Auto-detect NSFW and add nsfw-general LoRA if needed
+    all_text = image_description + "\n" + scenes_text + "\n" + description
+    if _detect_nsfw(all_text):
+        nsfw_entry = LORA_MAP["nsfw-general"]
+        nsfw_already = any(l["file"] == nsfw_entry["high"] for l in loras_high)
+        if not nsfw_already:
+            loras_high.append({"file": nsfw_entry["high"], "strength": nsfw_entry["strength"]})
+            loras_low.append({"file": nsfw_entry["low"], "strength": nsfw_entry["strength"]})
+            ctx.log("NSFW content detected — adding nsfw-general LoRA (str 0.9)")
+
     if loras_high:
         ctx.log(f"LoRAs HIGH: {[l['file'] for l in loras_high]}")
         ctx.log(f"LoRAs LOW: {[l['file'] for l in loras_low]}")
