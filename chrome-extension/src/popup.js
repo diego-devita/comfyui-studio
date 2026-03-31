@@ -1504,7 +1504,14 @@ async function _pollResources() {
   if (refresh) { refresh.classList.add('spinning'); setTimeout(function() { refresh.classList.remove('spinning'); }, 600); }
   try {
     var map = await getCivitaiMap(true);
+    var httpInfo = _getLastHttp();
     var byVer = map.by_version || {};
+    var dlCount = 0, qCount = 0;
+    for (var _v in byVer) { if (byVer[_v].status === 'downloading') dlCount++; if (byVer[_v].status === 'queued') qCount++; }
+    var pollMsg = 'poll ← ' + Object.keys(byVer).length + ' models';
+    if (dlCount) pollMsg += ', ' + dlCount + ' downloading';
+    if (qCount) pollMsg += ', ' + qCount + ' queued';
+    logEvent('info', pollMsg, 'civitai', httpInfo);
     for (var vid in byVer) {
       var cur = byVer[vid];
       var prev = _lastResStatus[vid];
