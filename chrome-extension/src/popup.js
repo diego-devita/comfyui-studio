@@ -1449,23 +1449,23 @@ async function initStudio() {
   noConnect.style.display = 'none';
   content.style.display = '';
 
-  var detect = $('civitaiDetect');
+  var detectLabel = $('civitaiDetectLabel');
   $('civitaiModelPanel').style.display = 'none';
   $('civitaiImagePanel').style.display = 'none';
   $('civitaiNone').style.display = 'none';
 
   if (page.type === 'model') {
     logEvent('info', 'civitai — model #' + page.id + (page.versionId ? ' v' + page.versionId : ''));
-    detect.innerHTML = '<span class="civitai-badge">Model #' + page.id + '</span>';
+    detectLabel.innerHTML = '<span class="civitai-badge">Model #' + page.id + '</span>';
     $('civitaiModelPanel').style.display = '';
     loadModelVersions(page.id, page.versionId);
   } else if (page.type === 'image') {
     logEvent('info', 'civitai — image #' + page.id);
-    detect.innerHTML = '<span class="civitai-badge">Image #' + page.id + '</span>';
+    detectLabel.innerHTML = '<span class="civitai-badge">Image #' + page.id + '</span>';
     $('civitaiImagePanel').style.display = '';
     loadImageGenData(page.id);
   } else {
-    detect.innerHTML = '';
+    detectLabel.innerHTML = '';
     $('civitaiNone').style.display = '';
   }
 }
