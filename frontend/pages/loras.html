@@ -10,15 +10,8 @@
 <style>
   .card-thumb { overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
   .card-thumb img { width: 100%; display: block; object-fit: cover; max-height: 160px; }
-  .lora-group { margin-bottom: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.01); }
-  .lora-group-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; }
-  .lora-group-header:hover { background: rgba(255,255,255,0.03); }
-  .lora-group-toggle { font-size: 10px; transition: transform 0.15s; color: var(--muted); }
-  .lora-group-header.collapsed .lora-group-toggle { transform: rotate(-90deg); }
-  .lora-group-name { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
-  .lora-group-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .lora-group-body { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 12px 12px; }
-  .lora-group-header.collapsed + .lora-group-body { display: none; }
+  .group-badge { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 3px; background: rgba(232,255,71,0.15); color: var(--accent); vertical-align: middle; margin-right: 4px; }
+  .lora-group-card { border-color: rgba(232,255,71,0.2); }
   /* ── Status badge override (icon-only, no border/padding) ── */
   .status-badge {
     font-size: 16px;
@@ -888,59 +881,103 @@
       var grid = section.querySelector('.card-grid');
       if (!grid) continue;
 
-      // Remove existing groups
-      grid.querySelectorAll('.lora-group').forEach(function(g) { g.remove(); });
+      // Remove existing group cards
+      grid.querySelectorAll('.lora-group-card').forEach(function(g) { g.remove(); });
+
+      // Show all individual cards first (undo previous grouping)
+      grid.querySelectorAll('.model-card').forEach(function(c) { c.style.display = ''; });
 
       // Collect visible cards and group by civitai_model_id
       var cards = Array.from(grid.querySelectorAll('.model-card:not(.card-hidden)'));
       var groups = {};
-      var ungrouped = [];
       var order = [];
 
       cards.forEach(function(card) {
         var entry = cardMap[card.dataset.file];
-        if (!entry) { ungrouped.push(card); return; }
+        if (!entry) return;
         var mid = entry.model.civitai_model_id;
         var gname = entry.model.civitai_model_name;
-        if (!mid || !gname) { ungrouped.push(card); return; }
+        if (!mid || !gname) return;
         if (!groups[mid]) {
-          groups[mid] = { name: gname, cards: [], mid: mid };
+          groups[mid] = { name: gname, cards: [], models: [], mid: mid };
           order.push(mid);
         }
         groups[mid].cards.push(card);
+        groups[mid].models.push(entry.model);
       });
 
-      // Build group wrappers for groups with 2+ cards
+      // Build group cards for groups with 2+ members
       order.forEach(function(mid) {
         var g = groups[mid];
-        if (g.cards.length < 2) {
-          ungrouped.push(g.cards[0]);
-          return;
-        }
-        var wrap = document.createElement('div');
-        wrap.className = 'lora-group';
-        wrap.dataset.groupId = mid;
+        if (g.cards.length < 2) return;
 
-        var header = document.createElement('div');
-        header.className = 'lora-group-header';
-        header.innerHTML = '<span class="lora-group-toggle">&#9660;</span>' +
-          '<span class="lora-group-name">' + escHtml(g.name) + '</span>' +
-          '<span class="lora-group-count">' + g.cards.length + ' variants</span>';
-        header.addEventListener('click', function() {
-          header.classList.toggle('collapsed');
+        // Hide individual cards
+        g.cards.forEach(function(c) { c.style.display = 'none'; });
+
+        // Compute aggregates
+        var totalSize = 0;
+        var galleryCount = 0;
+        var baseModel = '';
+        var thumb = null;
+        g.models.forEach(function(m) {
+          totalSize += m.size_gb || 0;
+          galleryCount += m.gallery_count || 0;
+          if (!baseModel) baseModel = m.base_model || m.civitai_base_model || '';
+          if (!thumb) thumb = m.gallery_thumb;
         });
-        wrap.appendChild(header);
 
-        var body = document.createElement('div');
-        body.className = 'lora-group-body';
-        g.cards.forEach(function(card) { body.appendChild(card); });
-        wrap.appendChild(body);
+        var groupCard = document.createElement('div');
+        groupCard.className = 'model-card lora-group-card';
+        groupCard.dataset.groupId = mid;
 
-        grid.appendChild(wrap);
+        var thumbHtml = thumb
+          ? '<div class="card-thumb" style="display:block"><img src="/api/admin/loras/gallery/thumb/' + thumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>'
+          : '';
+
+        var sizeStr = totalSize >= 1 ? totalSize.toFixed(1) + ' GB' : (totalSize * 1000).toFixed(0) + ' MB';
+        var bmHtml = baseModel ? ' <span class="base-model-pill">' + escHtml(baseModel) + '</span>' : '';
+
+        var linksHtml = '<div class="model-links">';
+        if (mid) {
+          linksHtml += '<a class="model-link" href="https://civitai.com/models/' + mid + '" target="_blank">model</a>';
+          linksHtml += '<a class="model-link" href="https://civitai.com/api/v1/models/' + mid + '" target="_blank">api:model</a>';
+        }
+        linksHtml += '</div>';
+
+        groupCard.innerHTML =
+          thumbHtml +
+          '<div class="card-top">' +
+            '<div class="card-info">' +
+              '<div class="card-name"><span class="group-badge">GROUP</span> ' + escHtml(g.name) + ' <span style="color:var(--muted);font-weight:normal;">(' + g.cards.length + ')</span></div>' +
+              '<div class="card-meta">' +
+                '<span>' + sizeStr + '</span>' +
+                bmHtml +
+                linksHtml +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="card-actions">' +
+            (galleryCount > 0 ? '<button class="btn btn--sm group-gallery-btn">Gallery (' + galleryCount + ')</button>' : '') +
+          '</div>';
+
+        // Stash member cards inside (hidden)
+        var stash = document.createElement('div');
+        stash.className = 'group-members';
+        stash.style.display = 'none';
+        g.cards.forEach(function(c) { stash.appendChild(c); });
+        groupCard.appendChild(stash);
+
+        // Gallery button opens group gallery
+        var galBtn = groupCard.querySelector('.group-gallery-btn');
+        if (galBtn) {
+          galBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openGallery(mid, null, g.name, baseModel);
+          });
+        }
+
+        grid.appendChild(groupCard);
       });
-
-      // Append ungrouped cards directly
-      ungrouped.forEach(function(card) { grid.appendChild(card); });
     }
   }
 
@@ -949,10 +986,15 @@
       var grid = section.querySelector('.card-grid');
       if (!grid) continue;
 
-      // Move cards out of groups back into grid
-      grid.querySelectorAll('.lora-group').forEach(function(g) {
-        var cards = Array.from(g.querySelectorAll('.model-card'));
-        cards.forEach(function(card) { grid.appendChild(card); });
+      // Move member cards out of group cards back into grid, show them
+      grid.querySelectorAll('.lora-group-card').forEach(function(g) {
+        var members = g.querySelector('.group-members');
+        if (members) {
+          Array.from(members.children).forEach(function(card) {
+            card.style.display = '';
+            grid.appendChild(card);
+          });
+        }
         g.remove();
       });
     }
@@ -1039,7 +1081,6 @@
       '</div>' +
       '<div class="card-error" data-ref="error"></div>' +
       '<div class="card-actions">' +
-        '<a class="btn btn--sm" data-ref="civitaiLink" style="display:none;text-decoration:none;font-size:10px;" target="_blank" title="View on CivitAI">CivitAI</a>' +
         '<button class="btn btn--sm" data-ref="galleryBtn" style="display:none">Gallery</button>' +
         '<button class="btn btn--sm" data-ref="actionBtn"></button>' +
         '<button class="btn btn--sm btn--danger" data-ref="removeBtn" style="display:none;font-size:10px;">Remove</button>' +
@@ -1111,13 +1152,6 @@
         else { const err = await resp.json().catch(() => ({})); showToast(err.detail || 'Remove failed', 5000, 'error'); }
       } catch (e) { if (e.message !== 'auth') showToast('Error: ' + e.message, 5000, 'error'); }
     });
-
-    if (m.civitai_model_id) {
-      var civUrl = 'https://civitai.com/models/' + m.civitai_model_id;
-      if (m.civitai_version_id) civUrl += '?modelVersionId=' + m.civitai_version_id;
-      refs.civitaiLink.href = civUrl;
-      refs.civitaiLink.style.display = '';
-    }
 
     if (m.civitai_model_id && m.status === 'present') {
       refs.galleryBtn.style.display = '';
