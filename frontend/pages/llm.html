@@ -2225,7 +2225,8 @@
       } else if (el.tagName === 'TEXTAREA') {
         inputs[key] = el.value.trim();
       } else if (el.type === 'number') {
-        inputs[key] = parseInt(el.value) || 4;
+        var numVal = parseInt(el.value);
+        inputs[key] = isNaN(numVal) ? 0 : numVal;
       } else {
         inputs[key] = el.value;
       }

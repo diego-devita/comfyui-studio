@@ -62,7 +62,7 @@ async def run(inputs: dict, ctx):
 
     image_id = inputs.get("image")
     description = inputs.get("description", "")
-    num_scenes = int(inputs.get("scenes", 4))
+    num_scenes = int(inputs.get("scenes", 0))
 
     if not image_id:
         raise RuntimeError("No image provided")
