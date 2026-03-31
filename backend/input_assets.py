@@ -173,13 +173,21 @@ _sync_cancel = threading.Event()
 
 def sync_input_assets_stream():
     """Generator that yields SSE log lines during sync. Supports cancellation via _sync_cancel."""
+    try:
+        yield from _sync_input_assets_inner()
+    except Exception as exc:
+        yield _sse("log", f"ERROR: {exc}")
+        yield _sse("done", {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0, "skipped": 0})
+
+
+def _sync_input_assets_inner():
     import json as _json
     from config import PRESETS_DIR, COMFYUI_DIR
 
     _sync_cancel.clear()
 
     if not ASSETS_INPUT_DIR.exists():
-        yield _sse("done", {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0})
+        yield _sse("done", {"files_on_disk": 0, "records_in_db": 0, "added": 0, "deduped": 0, "skipped": 0})
         return
 
     conn = _db._get_conn()
