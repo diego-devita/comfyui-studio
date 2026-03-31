@@ -717,12 +717,18 @@
     applyFiltersAndSort();
 
     // Auto-manage polling: only poll when something is active
-    _autoPoll(data.stats);
+    _autoPoll(data.stats, cats);
   }
 
-  function _autoPoll(stats) {
+  function _autoPoll(stats, cats) {
     const st = stats || {};
-    const busy = (st.downloading_count || 0) + (st.queued_count || 0);
+    var busy = (st.downloading_count || 0) + (st.queued_count || 0);
+    // Also poll if any model has an active gallery download
+    if (!busy && cats) {
+      busy = cats.some(function(cat) {
+        return cat.models.some(function(m) { return m.gallery_dl; });
+      }) ? 1 : 0;
+    }
     if (busy > 0) {
       if (!pollTimer) startPolling();
     } else {
@@ -1124,6 +1130,28 @@
           errorEl.classList.remove('visible');
         }
         break;
+    }
+
+    // Gallery download progress on card
+    var gd = m.gallery_dl;
+    if (gd && refs.galleryBtn) {
+      var gdl = gd.downloaded + gd.skipped;
+      var gtot = gd.total || '?';
+      refs.galleryBtn.textContent = 'Gallery \u2193 ' + gdl + '/' + gtot;
+      refs.galleryBtn.style.display = '';
+    } else if (refs.galleryBtn && m.civitai_model_id && m.status === 'present') {
+      var imgCount = m.gallery_count || 0;
+      refs.galleryBtn.textContent = 'Gallery' + (imgCount > 0 ? ' (' + imgCount + ')' : '');
+    }
+
+    // Update thumbnail if changed
+    if (refs.cardThumb) {
+      var newThumb = m.gallery_thumb;
+      if (newThumb && refs.cardThumb.dataset.currentThumb !== newThumb) {
+        refs.cardThumb.innerHTML = '<img src="/api/admin/loras/gallery/thumb/' + newThumb + '" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+        refs.cardThumb.style.display = '';
+        refs.cardThumb.dataset.currentThumb = newThumb;
+      }
     }
   }
 

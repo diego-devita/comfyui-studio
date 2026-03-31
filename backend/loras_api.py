@@ -32,6 +32,22 @@ import gallery_db as _gdb
 _gallery_state: dict = {}
 
 
+def get_active_gallery_downloads() -> dict[int, dict]:
+    """Return {model_id: {status, downloaded, total}} for active gallery downloads."""
+    result = {}
+    for mid, st in _gallery_state.items():
+        status = st.get("status", "idle")
+        if status in ("downloading", "stopping"):
+            result[mid] = {
+                "status": status,
+                "downloaded": st.get("downloaded", 0),
+                "skipped": st.get("skipped", 0),
+                "total": st.get("total", 0),
+            }
+    return result
+
+
+
 # ── Request schemas ──────────────────────────────────────────────────────────
 
 

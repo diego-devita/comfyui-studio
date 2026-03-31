@@ -338,6 +338,18 @@ async def loras_list():
     except Exception:
         pass
 
+    # Inject active gallery download status per model
+    try:
+        from loras_api import get_active_gallery_downloads
+        active_gal = get_active_gallery_downloads()
+        for cat in result_categories:
+            for m in cat["models"]:
+                mid = m.get("civitai_model_id")
+                gd = active_gal.get(mid) if mid else None
+                m["gallery_dl"] = gd  # None if not downloading
+    except Exception:
+        pass
+
     present_count = sum(1 for cat in result_categories for m in cat["models"] if m["status"] == "present")
     total_count = sum(len(cat["models"]) for cat in result_categories)
 
