@@ -29,13 +29,9 @@ from pathlib import Path
 import os
 from datetime import datetime, timezone
 
-STUDIO_DIR = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
-DB_DIR = STUDIO_DIR / "database"
-DB_PATH = DB_DIR / "studio.db"
+from app.settings import DB_PATH, MEDIA_STORE_DIR, now_iso
 
 # ── Constants ────────────────────────────────────────────────────────────────
-
-MEDIA_STORE_DIR = STUDIO_DIR / "media"
 
 ALLOWED_IMAGE = {
     ".jpeg", ".jpg", ".png", ".webp", ".gif", ".bmp",
@@ -532,7 +528,7 @@ def store(
         thumb_size_bytes = smallest["file_size"]
 
     # 8. Insert into DB
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = now_iso()
     conn = _get_conn()
     conn.execute("""
         INSERT INTO media (
