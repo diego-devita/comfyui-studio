@@ -22,14 +22,14 @@ import hashlib
 import json
 import sqlite3
 import subprocess
-import threading
 import uuid
 from pathlib import Path
 
 import os
 from datetime import datetime, timezone
 
-from app.settings import DB_PATH, MEDIA_STORE_DIR, now_iso
+from app.settings import MEDIA_STORE_DIR, now_iso
+from app.db import get_conn, register_schema
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,30 +52,11 @@ THUMB_QUALITY = 70
 
 SCHEMA_VERSION = 1
 
-# ── DB connection ────────────────────────────────────────────────────────────
-
-_local = threading.local()
-
-
-def _get_conn() -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        # DB_PATH defined at module level
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(DB_PATH), timeout=10)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=5000")
-        _local.conn = conn
-    return _local.conn
-
-
 # ── Schema ───────────────────────────────────────────────────────────────────
 
-def init_media_store():
-    """Create tables and indexes.  Safe to call multiple times."""
+def _init_schema(conn: sqlite3.Connection):
+    """Create media tables and indexes.  Called by db.init_db()."""
     MEDIA_STORE_DIR.mkdir(parents=True, exist_ok=True)
-    conn = _get_conn()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS media (
             id              TEXT PRIMARY KEY,
@@ -138,7 +119,10 @@ def init_media_store():
             FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
         );
     """)
-    conn.commit()
+
+
+# Register with db.py — called when db.init_db() runs
+register_schema("media_store", _init_schema)
 
 
 # ── Path helpers ─────────────────────────────────────────────────────────────
@@ -529,7 +513,7 @@ def store(
 
     # 8. Insert into DB
     now = now_iso()
-    conn = _get_conn()
+    conn = get_conn()
     conn.execute("""
         INSERT INTO media (
             id, file_path, thumb_path,
@@ -590,21 +574,21 @@ def store_from_bytes(
 
 def get(media_id: str) -> dict | None:
     """Get media record by ID."""
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT * FROM media WHERE id = ?", (media_id,)).fetchone()
     return dict(row) if row else None
 
 
 def get_by_hash(file_hash: str) -> dict | None:
     """Find media by SHA-256 hash (for dedup)."""
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT * FROM media WHERE hash = ?", (file_hash,)).fetchone()
     return dict(row) if row else None
 
 
 def get_by_origin(origin: str, origin_id: str) -> dict | None:
     """Find media by origin + origin_id."""
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute(
         "SELECT * FROM media WHERE origin = ? AND origin_id = ?",
         (origin, origin_id),
@@ -614,7 +598,7 @@ def get_by_origin(origin: str, origin_id: str) -> dict | None:
 
 def get_thumbs(media_id: str) -> list[dict]:
     """Get all thumbnails for a media."""
-    conn = _get_conn()
+    conn = get_conn()
     rows = conn.execute(
         "SELECT * FROM media_thumbs WHERE media_id = ? ORDER BY file_size ASC",
         (media_id,),
@@ -624,7 +608,7 @@ def get_thumbs(media_id: str) -> list[dict]:
 
 def get_thumb(media_id: str, size: str = "sm") -> dict | None:
     """Get a specific thumbnail.  Falls back to nearest available size."""
-    conn = _get_conn()
+    conn = get_conn()
     # Try exact size
     row = conn.execute(
         "SELECT * FROM media_thumbs WHERE media_id = ? AND size = ?",
@@ -641,13 +625,13 @@ def get_thumb(media_id: str, size: str = "sm") -> dict | None:
 
 
 def exists(media_id: str) -> bool:
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT 1 FROM media WHERE id = ?", (media_id,)).fetchone()
     return row is not None
 
 
 def hash_exists(file_hash: str) -> bool:
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT 1 FROM media WHERE hash = ?", (file_hash,)).fetchone()
     return row is not None
 
@@ -695,7 +679,7 @@ def delete(media_id: str) -> bool:
             tp.unlink()
 
     # Delete from DB (CASCADE deletes media_thumbs)
-    conn = _get_conn()
+    conn = get_conn()
     conn.execute("DELETE FROM media WHERE id = ?", (media_id,))
     conn.commit()
 
@@ -714,26 +698,26 @@ def delete(media_id: str) -> bool:
 
 def total_size() -> int:
     """Total bytes of all media files (originals only, no thumbs)."""
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT COALESCE(SUM(file_size), 0) FROM media").fetchone()
     return row[0]
 
 
 def total_size_with_thumbs() -> int:
     """Total bytes including thumbnails."""
-    conn = _get_conn()
+    conn = get_conn()
     media = conn.execute("SELECT COALESCE(SUM(file_size), 0) FROM media").fetchone()[0]
     thumbs = conn.execute("SELECT COALESCE(SUM(file_size), 0) FROM media_thumbs").fetchone()[0]
     return media + thumbs
 
 
 def count() -> int:
-    conn = _get_conn()
+    conn = get_conn()
     row = conn.execute("SELECT COUNT(*) FROM media").fetchone()
     return row[0]
 
 
 def count_by_type() -> dict:
-    conn = _get_conn()
+    conn = get_conn()
     rows = conn.execute("SELECT type, COUNT(*) FROM media GROUP BY type").fetchall()
     return {r[0]: r[1] for r in rows}

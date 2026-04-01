@@ -99,10 +99,17 @@ def _table(headers: list[str], rows: list[list[str]], min_widths: list[int] | No
 
 # ── Media commands ──────────────────────────────────────────────────────────
 
+def _db_conn():
+    """Get DB connection for CLI commands."""
+    from app.db import get_conn
+    return get_conn()
+
+
 def _get_media_store():
-    """Lazy import of media_store module."""
-    from app import media_store
-    media_store.init_media_store()
+    """Lazy import of media_store module. Initializes DB on first call."""
+    from app.db import init_db
+    from app import media_store  # importing registers its schema
+    init_db()
     return media_store
 
 
@@ -113,7 +120,7 @@ def cmd_media_stats(args):
     format distribution, thumbnail coverage, and schema version stats.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     # Total counts and sizes
     total = conn.execute("SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media").fetchone()
@@ -221,7 +228,7 @@ def cmd_media_list(args):
     Output is a table by default, JSON with --json flag.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     clauses = []
     params = []
@@ -298,7 +305,7 @@ def cmd_media_info(args):
     Accepts full ID or prefix (minimum 8 chars).
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     # Allow prefix match
     media_id = args.id
@@ -393,7 +400,7 @@ def cmd_media_find(args):
     Returns matching records in table or JSON format.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     if args.hash:
         rows = conn.execute("SELECT * FROM media WHERE hash = ?", (args.hash,)).fetchall()
@@ -441,7 +448,7 @@ def cmd_media_doctor(args):
     Use --fix to auto-resolve issues.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     issues = []
     fixed = 0
@@ -588,7 +595,7 @@ def cmd_media_reindex(args):
       --properties-only  Only re-extract file properties
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     if args.force:
         rows = conn.execute("SELECT id, file_path, type, ext FROM media").fetchall()
@@ -817,7 +824,7 @@ def cmd_media_delete(args):
 
     # Resolve prefix matches
     resolved = []
-    conn = ms._get_conn()
+    conn = _db_conn()
     for mid in ids:
         if len(mid) < 32:
             row = conn.execute("SELECT id, original_name, file_size FROM media WHERE id LIKE ?", (mid + "%",)).fetchone()
@@ -860,7 +867,7 @@ def cmd_media_verify(args):
     Use --id to verify a single file, or --all for everything.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     if args.id:
         rows = conn.execute("SELECT id, file_path, hash FROM media WHERE id LIKE ?", (args.id + "%",)).fetchall()
@@ -916,7 +923,7 @@ def cmd_media_dedup(args):
     Use --dry-run to preview without changes.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     dupes = conn.execute("""
         SELECT hash, COUNT(*) as cnt, GROUP_CONCAT(id, ',') as ids
@@ -961,7 +968,7 @@ def cmd_media_exif(args):
     The --raw flag shows the full JSON as stored in the database.
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     media_id = args.id
     if len(media_id) < 32:
@@ -1006,7 +1013,7 @@ def cmd_media_thumb(args):
     Use --size to regenerate only a specific size (xs, sm, md).
     """
     ms = _get_media_store()
-    conn = ms._get_conn()
+    conn = _db_conn()
 
     media_id = args.id
     if len(media_id) < 32:
