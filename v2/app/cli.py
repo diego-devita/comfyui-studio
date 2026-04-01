@@ -101,14 +101,14 @@ def _table(headers: list[str], rows: list[list[str]], min_widths: list[int] | No
 
 def _db_conn():
     """Get DB connection for CLI commands."""
-    from app.db import get_conn
+    from v2.app.db import get_conn
     return get_conn()
 
 
 def _get_media_store():
     """Lazy import of media_store module. Initializes DB on first call."""
-    from app.db import init_db
-    from app import media_store  # importing registers its schema
+    from v2.app.db import init_db
+    from v2.app import media_store  # importing registers its schema
     init_db()
     return media_store
 

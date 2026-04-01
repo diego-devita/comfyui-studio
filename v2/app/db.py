@@ -14,7 +14,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from app.settings import DB_DIR, DB_PATH
+from v2.app.settings import DB_DIR, DB_PATH
 
 # ── Thread-local connection pool ─────────────────────────────────────────────
 

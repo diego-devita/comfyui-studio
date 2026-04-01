@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""ComfyUI Studio CLI — entry point.
+
+This file lives in v2/app/bin/studio and is added to PATH
+by start.sh: export PATH="${STUDIO_DIR}/v2/app/bin:$PATH"
+
+All logic is in v2/app/cli.py — this is just a launcher.
+"""
+import os
+import sys
+from pathlib import Path
+
+# Add project root to Python path so v2.app.* imports work
+studio_dir = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
+sys.path.insert(0, str(studio_dir))
+
+from v2.app.cli import main
+main()

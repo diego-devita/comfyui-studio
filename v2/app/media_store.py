@@ -28,8 +28,8 @@ from pathlib import Path
 import os
 from datetime import datetime, timezone
 
-from app.settings import MEDIA_STORE_DIR, now_iso
-from app.db import get_conn, register_schema
+from v2.app.settings import MEDIA_STORE_DIR, now_iso
+from v2.app.db import get_conn, register_schema
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
