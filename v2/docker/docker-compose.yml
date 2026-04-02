@@ -1,0 +1,20 @@
+services:
+  studio-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: studio-v2-dev
+
+    volumes:
+      # Code (live from host repo — changes reflected immediately)
+      - ../../:/workspace/studio
+
+      # Persistent data (survives container rebuild)
+      - ~/.studio2-dev:/workspace/studio/v2/data
+
+    environment:
+      - WORKSPACE=/workspace
+
+    # Keep container alive for interactive use
+    stdin_open: true
+    tty: true
