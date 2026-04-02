@@ -64,7 +64,7 @@ def _init_schema(conn: sqlite3.Connection):
             thumb_path      TEXT,
 
             -- Type and format
-            type            TEXT NOT NULL,
+            type            TEXT NOT NULL CHECK (type IN ('image', 'video')),
             ext             TEXT NOT NULL,
             mime            TEXT,
             original_name   TEXT,
@@ -75,14 +75,14 @@ def _init_schema(conn: sqlite3.Connection):
 
             -- Video properties
             duration        REAL,
-            audio           INTEGER DEFAULT 0,
+            audio           INTEGER DEFAULT 0 CHECK (audio IN (0, 1)),
             fps             REAL,
             codec           TEXT,
 
             -- Colour properties
             color_space     TEXT,
             bit_depth       INTEGER,
-            has_alpha       INTEGER DEFAULT 0,
+            has_alpha       INTEGER DEFAULT 0 CHECK (has_alpha IN (0, 1)),
 
             -- File weight
             file_size       INTEGER NOT NULL DEFAULT 0,
@@ -95,8 +95,8 @@ def _init_schema(conn: sqlite3.Connection):
             -- Embedded metadata (JSON or NULL)
             exif            TEXT,
 
-            -- Provenance (informational — no FK)
-            origin          TEXT NOT NULL,
+            -- Provenance
+            origin          TEXT NOT NULL CHECK (origin IN ('civitai', 'comfyui', 'upload', 'generated')),
             origin_id       TEXT,
             origin_url      TEXT,
 
@@ -110,7 +110,7 @@ def _init_schema(conn: sqlite3.Connection):
 
         CREATE TABLE IF NOT EXISTS media_thumbs (
             media_id    TEXT NOT NULL,
-            size        TEXT NOT NULL,
+            size        TEXT NOT NULL CHECK (size IN ('xs', 'sm', 'md')),
             file_path   TEXT NOT NULL,
             file_size   INTEGER DEFAULT 0,
             width       INTEGER,
