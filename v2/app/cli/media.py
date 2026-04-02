@@ -4,7 +4,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from textwrap import dedent
 
 from v2.app.cli._common import (
     _init, _bold, _green, _red, _yellow, _cyan, _dim,
@@ -13,12 +12,14 @@ from v2.app.cli._common import (
 
 
 def _ms():
+    """Lazy import of domain module."""
     _init()
     from v2.app.stores import media
     return media
 
 
 def cmd_stats(args):
+    """Handle `studio media stats` command."""
     ms = _ms()
     s = ms.stats()
     if args.json:
@@ -58,6 +59,7 @@ def cmd_stats(args):
 
 
 def cmd_list(args):
+    """Handle `studio media list` command."""
     ms = _ms()
     rows, total = ms.find(
         type=args.type, origin=args.origin, ext=args.format,
@@ -84,6 +86,7 @@ def cmd_list(args):
 
 
 def cmd_info(args):
+    """Handle `studio media info` command."""
     ms = _ms()
     m = ms.get_by_prefix(args.id)
     if not m:
@@ -135,6 +138,7 @@ def cmd_info(args):
 
 
 def cmd_find(args):
+    """Handle `studio media find` command."""
     ms = _ms()
     if args.hash:
         results = [ms.get_by_hash(args.hash)] if ms.get_by_hash(args.hash) else []
@@ -158,6 +162,7 @@ def cmd_find(args):
 
 
 def cmd_doctor(args):
+    """Handle `studio media doctor` command."""
     ms = _ms()
     issues, fixed = [], 0
     print(f"\n  {_bold('Media Store Doctor')}\n")
@@ -251,6 +256,7 @@ def cmd_doctor(args):
 
 
 def cmd_reindex(args):
+    """Handle `studio media reindex` command."""
     ms = _ms()
     rows = ms.find_for_reindex(force=args.force)
     if not rows:
@@ -289,6 +295,7 @@ def cmd_reindex(args):
 
 
 def cmd_import(args):
+    """Handle `studio media import` command."""
     ms = _ms()
     source = Path(args.path)
     if not source.exists():
@@ -314,6 +321,7 @@ def cmd_import(args):
 
 
 def cmd_export(args):
+    """Handle `studio media export` command."""
     ms = _ms()
     path = ms.serve_path(args.id)
     if not path: print(_red(f"  Not found: {args.id}")); sys.exit(1)
@@ -330,6 +338,7 @@ def cmd_export(args):
 
 
 def cmd_delete(args):
+    """Handle `studio media delete` command."""
     ms = _ms()
     resolved = []
     for mid in args.ids:
@@ -349,6 +358,7 @@ def cmd_delete(args):
 
 
 def cmd_verify(args):
+    """Handle `studio media verify` command."""
     ms = _ms()
     from v2.app.core.db import get_conn; conn = get_conn()
     if args.id:
@@ -369,6 +379,7 @@ def cmd_verify(args):
 
 
 def cmd_dedup(args):
+    """Handle `studio media dedup` command."""
     ms = _ms()
     dupes = ms.find_duplicates()
     if not dupes: print(_green("  No duplicates.")); return
@@ -390,6 +401,7 @@ def cmd_dedup(args):
 
 
 def cmd_exif(args):
+    """Handle `studio media exif` command."""
     ms = _ms()
     m = ms.get_by_prefix(args.id)
     if not m: print(_red(f"  Not found: {args.id}")); sys.exit(1)
@@ -405,6 +417,7 @@ def cmd_exif(args):
 
 
 def cmd_thumb(args):
+    """Handle `studio media thumb` command."""
     ms = _ms()
     m = ms.get_by_prefix(args.id)
     if not m: print(_red(f"  Not found: {args.id}")); sys.exit(1)
@@ -440,6 +453,7 @@ def cmd_thumb(args):
 
 
 def register(subparsers, common):
+    """Register media subcommands with the argument parser."""
     p = subparsers.add_parser("media", help="Media store operations",
         description="Manage the centralised media file store.",
         formatter_class=argparse.RawDescriptionHelpFormatter)

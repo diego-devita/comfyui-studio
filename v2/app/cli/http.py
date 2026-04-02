@@ -5,6 +5,7 @@ from v2.app.cli._common import _bold, _green, _red, _dim, _fmt_bytes
 
 
 def cmd_stats(args):
+    """Handle `studio http stats` command."""
     from v2.app.core.http_client import http
     s = http.get_stats()
     if args.json:
@@ -29,6 +30,7 @@ def cmd_stats(args):
 
 
 def cmd_log(args):
+    """Handle `studio http log` command."""
     from v2.app.core.http_client import http
     entries = http.get_log(limit=args.limit, caller=args.caller)
     if args.json:
@@ -53,6 +55,7 @@ def cmd_log(args):
 
 
 def register(subparsers, common):
+    """Register http subcommands with the argument parser."""
     p = subparsers.add_parser("http", help="HTTP client stats and log",
         description="Monitor outgoing HTTP API calls.")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")

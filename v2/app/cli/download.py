@@ -10,12 +10,14 @@ from v2.app.cli._common import (
 
 
 def _get_scheduler():
+    """Lazy import of domain module."""
     _init()
     from v2.app.core import download
     return download
 
 
 def cmd_list(args):
+    """Handle `studio download list` command."""
     dl = _get_scheduler()
     rows = dl.list_active() if args.active else dl.list_all(limit=args.limit)
     if args.json:
@@ -35,6 +37,7 @@ def cmd_list(args):
 
 
 def cmd_status(args):
+    """Handle `studio download status` command."""
     dl = _get_scheduler()
     r = dl.get_status(args.id)
     if not r:
@@ -61,6 +64,7 @@ def cmd_status(args):
 
 
 def cmd_cancel(args):
+    """Handle `studio download cancel` command."""
     dl = _get_scheduler()
     if dl.cancel(args.id):
         print(f"  {_green('Cancelled')} {args.id}")
@@ -69,6 +73,7 @@ def cmd_cancel(args):
 
 
 def cmd_retry(args):
+    """Handle `studio download retry` command."""
     dl = _get_scheduler()
     if dl.retry(args.id):
         print(f"  {_green('Requeued')} {args.id}")
@@ -77,12 +82,14 @@ def cmd_retry(args):
 
 
 def cmd_cleanup(args):
+    """Handle `studio download cleanup` command."""
     dl = _get_scheduler()
     removed = dl.cleanup_temp()
     print(f"  {_green(f'{removed} temp file(s) removed')}")
 
 
 def cmd_queue(args):
+    """Handle `studio download queue` command."""
     dl = _get_scheduler()
     q = dl.queue_size()
     if args.json:
@@ -95,6 +102,7 @@ def cmd_queue(args):
 
 
 def register(subparsers, common):
+    """Register download subcommands with the argument parser."""
     p = subparsers.add_parser("download", help="Download queue operations")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")
 

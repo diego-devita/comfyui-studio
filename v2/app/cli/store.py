@@ -5,12 +5,14 @@ from v2.app.cli._common import _init, _bold, _dim, _fmt_bytes, _table
 
 
 def _ms():
+    """Lazy import of domain module."""
     _init()
     from v2.app.stores import model
     return model
 
 
 def cmd_stats(args):
+    """Handle `studio store stats` command."""
     ms = _ms()
     if args.json:
         print(json.dumps({"count": ms.count(), "total_bytes": ms.total_size()}, indent=2))
@@ -22,6 +24,7 @@ def cmd_stats(args):
 
 
 def cmd_list(args):
+    """Handle `studio store list` command."""
     ms = _ms()
     rows = ms.list_files(limit=args.limit)
     if args.json:
@@ -40,6 +43,7 @@ def cmd_list(args):
 
 
 def register(subparsers, common):
+    """Register store subcommands with the argument parser."""
     p = subparsers.add_parser("store", help="Model store operations",
         description="Physical model file storage.")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")

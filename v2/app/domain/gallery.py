@@ -301,7 +301,7 @@ def download_card_images(model_id: str, civitai_model_id: int, api_key: str) -> 
     Returns:
         Gallery job ID, or empty string if nothing to download.
     """
-    from v2.app.clients.civitai import CivitaiClient, extract_cdn_id_from_url, build_cdn_url
+    from v2.app.clients.civitai import CivitaiClient, build_cdn_url
 
     client = CivitaiClient(api_key=api_key)
     model_data = client.get_model(civitai_model_id)

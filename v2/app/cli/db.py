@@ -5,6 +5,7 @@ from v2.app.cli._common import _bold, _green, _red, _fmt_bytes
 
 
 def cmd_tables(args):
+    """Handle `studio db tables` command."""
     from v2.app.core.db import table_list, table_count
     tables = table_list()
     if args.json:
@@ -18,6 +19,7 @@ def cmd_tables(args):
 
 
 def cmd_integrity(args):
+    """Handle `studio db integrity` command."""
     from v2.app.core.db import integrity_check
     result = integrity_check()
     if result == "ok":
@@ -27,6 +29,7 @@ def cmd_integrity(args):
 
 
 def cmd_size(args):
+    """Handle `studio db size` command."""
     from v2.app.core.db import db_size_bytes
     size = db_size_bytes()
     if args.json:
@@ -36,6 +39,7 @@ def cmd_size(args):
 
 
 def register(subparsers, common):
+    """Register db subcommands with the argument parser."""
     p = subparsers.add_parser("db", help="Database operations",
         description="Database inspection and maintenance.")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")

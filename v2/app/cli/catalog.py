@@ -10,12 +10,14 @@ from v2.app.cli._common import (
 
 
 def _get_catalog():
+    """Lazy import of domain module."""
     _init()
     from v2.app.domain import catalog
     return catalog
 
 
 def cmd_stats(args):
+    """Handle `studio catalog stats` command."""
     cat = _get_catalog()
     s = cat.stats()
     if args.json:
@@ -31,6 +33,7 @@ def cmd_stats(args):
 
 
 def cmd_list(args):
+    """Handle `studio catalog list` command."""
     cat = _get_catalog()
     models = cat.find_models(
         name=args.search, category=args.category, type=args.type,
@@ -52,6 +55,7 @@ def cmd_list(args):
 
 
 def cmd_info(args):
+    """Handle `studio catalog info` command."""
     cat = _get_catalog()
     m = cat.get_model(args.id)
     if not m:
@@ -96,6 +100,7 @@ def cmd_info(args):
 
 
 def cmd_import(args):
+    """Handle `studio catalog import` command."""
     from v2.app.clients.civitai import CivitaiClient
     from v2.app.core.settings import CIVITAI_API_KEY
     cat = _get_catalog()
@@ -132,6 +137,7 @@ def cmd_import(args):
 
 
 def cmd_versions(args):
+    """Handle `studio catalog versions` command."""
     cat = _get_catalog()
     versions = cat.get_versions_by_model(args.model_id)
     if args.json:
@@ -150,6 +156,7 @@ def cmd_versions(args):
 
 
 def cmd_files(args):
+    """Handle `studio catalog files` command."""
     cat = _get_catalog()
     v = cat.get_version(args.version_id)
     if not v:
@@ -172,6 +179,7 @@ def cmd_files(args):
 
 
 def register(subparsers, common):
+    """Register catalog subcommands with the argument parser."""
     p = subparsers.add_parser("catalog", help="Model catalog operations")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")
 

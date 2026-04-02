@@ -26,7 +26,6 @@ import uuid
 from pathlib import Path
 
 import os
-from datetime import datetime, timezone
 
 from v2.app.core.settings import MEDIA_STORE_DIR, now_iso
 from v2.app.core.db import get_conn, register_schema

@@ -7,6 +7,7 @@ import sys
 _USE_COLOR = sys.stdout.isatty()
 
 def _c(code: str, text: str) -> str:
+    """Apply ANSI color code."""
     if not _USE_COLOR:
         return text
     return f"\033[{code}m{text}\033[0m"
@@ -20,6 +21,7 @@ def _bold(t: str) -> str: return _c("1", t)
 
 
 def _fmt_bytes(b: int) -> str:
+    """Format bytes as human-readable string (KB/MB/GB)."""
     if b < 1024:
         return f"{b} B"
     if b < 1024 * 1024:
@@ -30,12 +32,14 @@ def _fmt_bytes(b: int) -> str:
 
 
 def _fmt_date(iso: str) -> str:
+    """Format ISO date for display."""
     if not iso:
         return "-"
     return iso.replace("T", " ").replace("Z", " UTC").strip()
 
 
 def _table(headers: list[str], rows: list[list[str]], min_widths: list[int] | None = None):
+    """Print a formatted table with headers."""
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
@@ -79,6 +83,7 @@ def _init():
 
 
 def _db_conn():
+    """Get DB connection (initializes if needed)."""
     _init()
     from v2.app.core.db import get_conn
     return get_conn()

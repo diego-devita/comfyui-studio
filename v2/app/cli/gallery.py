@@ -4,7 +4,6 @@ import argparse
 import json
 import sys
 import time as _time
-from textwrap import dedent
 
 from v2.app.cli._common import (
     _init, _bold, _green, _red, _yellow, _cyan, _dim,
@@ -13,17 +12,20 @@ from v2.app.cli._common import (
 
 
 def _gal():
+    """Lazy import of domain module."""
     _init()
     from v2.app.domain import gallery
     return gallery
 
 def _cat():
+    """Lazy import of domain module."""
     _init()
     from v2.app.domain import catalog
     return catalog
 
 
 def cmd_stats(args):
+    """Handle `studio gallery stats` command."""
     s = _gal().get_gallery_stats()
     if args.json:
         print(json.dumps(s, indent=2)); return
@@ -35,6 +37,7 @@ def cmd_stats(args):
 
 
 def cmd_status(args):
+    """Handle `studio gallery status` command."""
     g, cat = _gal(), _cat()
     if args.model_id:
         m = cat.get_model(args.model_id)
@@ -70,6 +73,7 @@ def cmd_status(args):
 
 
 def cmd_download(args):
+    """Handle `studio gallery download` command."""
     g, cat = _gal(), _cat()
     from v2.app.core.settings import CIVITAI_API_KEY
     api_key = CIVITAI_API_KEY
@@ -149,6 +153,7 @@ def cmd_download(args):
 
 
 def cmd_jobs(args):
+    """Handle `studio gallery jobs` command."""
     jobs = _gal().list_active_jobs()
     if args.json: print(json.dumps(jobs, indent=2, default=str)); return
     if not jobs: print(_dim("  No active gallery jobs.")); return
@@ -161,6 +166,7 @@ def cmd_jobs(args):
 
 
 def cmd_job(args):
+    """Handle `studio gallery job` command."""
     g = _gal()
     j = g.get_job_status(args.id)
     if not j: print(_green("  Job completed (or not found).")); return
@@ -170,11 +176,13 @@ def cmd_job(args):
 
 
 def cmd_stop(args):
+    """Handle `studio gallery stop` command."""
     _gal().stop_job(args.id)
     print(f"  {_green('Stop signal sent')} for {args.id[:12]}...")
 
 
 def cmd_cleanup(args):
+    """Handle `studio gallery cleanup` command."""
     g, cat = _gal(), _cat()
     stale = g.list_stale_jobs()
     if not stale: print(_green("  No stale jobs.")); return
@@ -195,6 +203,7 @@ def cmd_cleanup(args):
 
 
 def cmd_resume(args):
+    """Handle `studio gallery resume` command."""
     g, cat = _gal(), _cat()
     from v2.app.core.settings import CIVITAI_API_KEY
     api_key = CIVITAI_API_KEY
@@ -244,6 +253,7 @@ def cmd_resume(args):
 # ── Live monitor helpers ─────────────────────────────────────────────────────
 
 def _monitor_jobs(g, job_ids):
+    """Live progress monitor for multiple gallery jobs."""
     print(f"\n  {_bold(f'Monitoring {len(job_ids)} job(s)...')}  (Ctrl+C to detach)\n")
     try:
         while True:
@@ -268,6 +278,7 @@ def _monitor_jobs(g, job_ids):
 
 
 def _monitor_single(g, job_id):
+    """Live progress monitor for a single gallery job."""
     try:
         while True:
             j = g.get_job_status(job_id)
@@ -288,6 +299,7 @@ def _monitor_single(g, job_id):
 # ── Parser registration ──────────────────────────────────────────────────────
 
 def register(subparsers, common):
+    """Register gallery subcommands with the argument parser."""
     p = subparsers.add_parser("gallery", help="Gallery operations",
         description="Download, monitor, and inspect gallery images.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
