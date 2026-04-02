@@ -194,9 +194,11 @@ def _seed_lookups(conn: sqlite3.Connection):
 
 
 def _seed2(conn, table, rows):
+    """Seed a 2-column lookup table (id, description)."""
     conn.executemany(f"INSERT OR IGNORE INTO {table} (id, description) VALUES (?, ?)", rows)
 
 def _seed3(conn, table, rows):
+    """Seed a 3-column lookup table (id, name, description)."""
     conn.executemany(f"INSERT OR IGNORE INTO {table} (id, name, description) VALUES (?, ?, ?)", rows)
 
 

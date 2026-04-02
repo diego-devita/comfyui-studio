@@ -82,6 +82,7 @@ class HttpClient:
     _DEFAULT_BACKOFF = 1.0      # seconds, multiplied by attempt number
 
     def __init__(self):
+        """Create a new HTTP client with empty log and counters."""
         self._log: deque[CallRecord] = deque(maxlen=self._LOG_SIZE)
         self._lock = threading.Lock()
 

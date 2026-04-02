@@ -28,6 +28,7 @@ from v2.app.settings import now_iso
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _init_schema(conn: sqlite3.Connection):
+    """Create gallery_jobs and civitai_image_meta tables."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS gallery_jobs (
             id          TEXT PRIMARY KEY,

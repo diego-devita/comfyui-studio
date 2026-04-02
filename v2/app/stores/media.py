@@ -133,14 +133,17 @@ def _shard_dir(media_id: str) -> str:
 
 
 def _rel_path(media_id: str, ext: str) -> str:
+    """Relative path inside the store: ab/cd/uuid.ext"""
     return f"{_shard_dir(media_id)}/{media_id}{ext}"
 
 
 def _abs_path(rel: str) -> Path:
+    """Absolute path from relative store path."""
     return MEDIA_STORE_DIR / rel
 
 
 def _ensure_dir(rel: str):
+    """Create parent directory for a relative path."""
     _abs_path(rel).parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -625,12 +628,14 @@ def get_thumb(media_id: str, size: str = "sm") -> dict | None:
 
 
 def exists(media_id: str) -> bool:
+    """Check if a media record exists in DB."""
     conn = get_conn()
     row = conn.execute("SELECT 1 FROM media WHERE id = ?", (media_id,)).fetchone()
     return row is not None
 
 
 def hash_exists(file_hash: str) -> bool:
+    """Check if a file with this hash is already in the store."""
     conn = get_conn()
     row = conn.execute("SELECT 1 FROM media WHERE hash = ?", (file_hash,)).fetchone()
     return row is not None
@@ -712,12 +717,14 @@ def total_size_with_thumbs() -> int:
 
 
 def count() -> int:
+    """Total number of media files."""
     conn = get_conn()
     row = conn.execute("SELECT COUNT(*) FROM media").fetchone()
     return row[0]
 
 
 def count_by_type() -> dict:
+    """Count media grouped by type (image/video)."""
     conn = get_conn()
     rows = conn.execute("SELECT type, COUNT(*) FROM media GROUP BY type").fetchall()
     return {r[0]: r[1] for r in rows}
