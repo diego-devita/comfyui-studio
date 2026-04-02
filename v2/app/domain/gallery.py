@@ -1,58 +1,43 @@
 """Gallery — orchestrates CivitAI image downloads into the media store.
 
-Connects civitai_client → download_scheduler → media_store → join tables.
-This is the module that gives meaning to downloaded media: "this image
-is a card image of model X" or "this is a community image of version Y".
+Connects: civitai_client → download_scheduler → media_store → join tables.
 
 Two types of gallery downloads:
-  1. Card images — author's showcase images for a model (belong to parent)
-  2. Community images — user-uploaded images for a specific version
+  Card images   — author's showcase images, belong to the parent model
+  Community     — user-uploaded images, belong to a specific version
 
-The gallery_jobs table tracks operations in progress. When a job completes
-successfully, its row is DELETED — no "done" status. If it's interrupted
-(crash/restart), it stays with status='interrupted' and can be resumed.
+Tracking:
+  gallery_jobs tracks operations in progress. Completed jobs auto-delete.
+  Interrupted jobs (from crash) stay for resume or cleanup.
 
-Callback delivery:
-  gallery.py registers a "gallery_deliver" callback with download_scheduler.
-  When a download completes, the callback:
-    1. Stores the file in media_store → gets media_id
-    2. Creates the relation in model_media or version_media
-    3. Fetches generation data from CivitAI (community images only)
-    4. Stores CivitAI metadata in civitai_image_meta
-    5. Updates the gallery_job progress counter
-    6. If job is complete → deletes the gallery_job row (auto-cleanup)
-  All steps in one transaction — if any fails, everything rolls back.
+Tables owned by this module:
+  gallery_jobs       — download operations in progress
+  civitai_image_meta — CivitAI generation metadata per media item
 """
 
 import json
 import sqlite3
+import uuid as _uuid
 
 from v2.app.db import get_conn, register_schema
 from v2.app.settings import now_iso
-from v2.app.stores import media as media_store
-from v2.app.domain import download as download_scheduler
-from v2.app.clients.civitai import (
-    CivitaiClient,
-    extract_cdn_id_from_url,
-    build_cdn_url,
-)
 
 
-# ── Schema ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  SCHEMA
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _init_schema(conn: sqlite3.Connection):
-    """Create gallery tables. Called by db.init_db()."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS gallery_jobs (
             id          TEXT PRIMARY KEY,
-            model_id    TEXT NOT NULL,           -- our model UUID (parent)
-            version_id  TEXT,                    -- our version UUID (null = card images only)
-            image_type  TEXT NOT NULL
-                        CHECK (image_type IN ('card', 'community')),
-            filters     TEXT DEFAULT '{}',       -- JSON, search filters used
-            total       INTEGER DEFAULT 0,       -- images to download
-            completed   INTEGER DEFAULT 0,       -- successfully stored + linked
-            failed      INTEGER DEFAULT 0,       -- failed deliveries
+            model_id    TEXT NOT NULL,
+            version_id  TEXT,
+            image_type  TEXT NOT NULL CHECK (image_type IN ('card', 'community')),
+            filters     TEXT DEFAULT '{}',
+            total       INTEGER DEFAULT 0,
+            completed   INTEGER DEFAULT 0,
+            failed      INTEGER DEFAULT 0,
             status      TEXT NOT NULL DEFAULT 'running'
                         CHECK (status IN ('running', 'stopping', 'interrupted', 'error')),
             created_at  TEXT NOT NULL
@@ -67,9 +52,9 @@ def _init_schema(conn: sqlite3.Connection):
             sampler         TEXT,
             seed            INTEGER,
             clip_skip       INTEGER,
-            resources       TEXT,                -- JSON array
-            tools           TEXT,                -- JSON array
-            techniques      TEXT,                -- JSON array
+            resources       TEXT,
+            tools           TEXT,
+            techniques      TEXT,
             post_id         INTEGER,
             post_title      TEXT,
             username        TEXT,
@@ -77,186 +62,235 @@ def _init_schema(conn: sqlite3.Connection):
             reactions       INTEGER DEFAULT 0,
             comments        INTEGER DEFAULT 0,
             collected       INTEGER DEFAULT 0,
-            raw_meta        TEXT,                -- full CivitAI meta JSON
+            raw_meta        TEXT,
             FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
         );
     """)
 
-
 register_schema("gallery", _init_schema)
 
 
-# ── Callback delivery ────────────────────────────────────────────────────────
-#
-# Registered with download_scheduler. Called when a gallery download completes.
-# Receives the downloaded file + args dict with all context.
-# Does everything in one transaction.
+# ══════════════════════════════════════════════════════════════════════════════
+#  INTERNAL HELPERS — small pieces used by the callback and download functions
+# ══════════════════════════════════════════════════════════════════════════════
 
-def _deliver_gallery_media(file_path, args):
-    """Callback: store file, create relation, fetch meta, update job.
+def _store_and_link(file_path, args):
+    """Store a downloaded file in media_store and create the join table relation.
 
-    Called by download_scheduler when a gallery image download completes.
-    Everything happens in one transaction for consistency.
+    This is step 1+2 of the delivery callback:
+      1. media_store.store() → file enters the media store, returns media_id
+      2. INSERT into model_media (card) or version_media (community)
 
-    Args:
-        file_path: Path to the downloaded file (in downloads/ temp dir).
-        args: Dict with keys:
-            origin, origin_id, origin_url, original_name — for media_store
-            model_id — our model UUID for model_media relation
-            version_id — our version UUID for version_media (null for card)
-            image_type — 'card' or 'community'
-            civitai_image_id — numeric CivitAI image ID (for generation data)
-            fetch_generation_data — bool, whether to call getGenerationData
-            civitai_api_key — needed for generation data fetch
-            gallery_job_id — to update progress
-            post_id, post_title, username — social context from listing
-            stats — {reactions, comments, collected} from listing
+    Returns the media_id.
+    """
+    from v2.app.stores import media as media_store
+
+    media_id = media_store.store(
+        source_path=file_path,
+        origin=args.get("origin", "civitai"),
+        origin_id=args.get("origin_id"),
+        origin_url=args.get("origin_url"),
+        original_name=args.get("original_name"),
+    )
+
+    conn = get_conn()
+    if args.get("image_type") == "card" and args.get("model_id"):
+        conn.execute(
+            "INSERT OR IGNORE INTO model_media (media_id, model_id, sort_order) VALUES (?, ?, 0)",
+            (media_id, args["model_id"]),
+        )
+    elif args.get("version_id"):
+        conn.execute(
+            "INSERT OR IGNORE INTO version_media (media_id, version_id, source, sort_order) VALUES (?, ?, 'community', 0)",
+            (media_id, args["version_id"]),
+        )
+
+    return media_id
+
+
+def _store_civitai_meta(media_id, args, generation_data=None):
+    """Store CivitAI metadata for a media item.
+
+    Combines data from the listing (username, postId, stats) with
+    generation data fetched per-image (prompt, resources, tools).
+
+    Only inserts if there's any data to store. Skips silently if empty.
+    """
+    meta = (generation_data or {}).get("meta", {}) or {}
+    resources = (generation_data or {}).get("resources", [])
+    tools = (generation_data or {}).get("tools", [])
+    techniques = (generation_data or {}).get("techniques", [])
+    stats = args.get("stats", {})
+
+    has_data = meta or resources or tools or techniques or args.get("post_id") or args.get("username")
+    if not has_data:
+        return
+
+    conn = get_conn()
+    conn.execute("""
+        INSERT OR IGNORE INTO civitai_image_meta (
+            media_id, prompt, negative_prompt, steps, cfg_scale,
+            sampler, seed, clip_skip, resources, tools, techniques,
+            post_id, post_title, username, civitai_url,
+            reactions, comments, collected, raw_meta
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        media_id,
+        meta.get("prompt"), meta.get("negativePrompt"),
+        meta.get("steps"), meta.get("cfgScale"),
+        meta.get("sampler"), meta.get("seed"), meta.get("clipSkip"),
+        json.dumps(resources) if resources else None,
+        json.dumps(tools) if tools else None,
+        json.dumps(techniques) if techniques else None,
+        args.get("post_id"), args.get("post_title"), args.get("username"),
+        args.get("civitai_url"),
+        stats.get("reactions", 0), stats.get("comments", 0), stats.get("collected", 0),
+        json.dumps(generation_data) if generation_data else None,
+    ))
+
+
+def _update_job_progress(job_id, success=True):
+    """Increment completed or failed counter on a gallery job.
+
+    If the job reaches total (completed + failed >= total), auto-deletes
+    on success or sets status='error' if all remaining failed.
     """
     conn = get_conn()
+    field = "completed" if success else "failed"
+    conn.execute(f"UPDATE gallery_jobs SET {field} = {field} + 1 WHERE id = ?", (job_id,))
+
+    row = conn.execute(
+        "SELECT total, completed, failed FROM gallery_jobs WHERE id = ?", (job_id,)
+    ).fetchone()
+
+    if row and (row["completed"] + row["failed"]) >= row["total"]:
+        if row["failed"] > 0 and row["completed"] == 0:
+            conn.execute("UPDATE gallery_jobs SET status = 'error' WHERE id = ?", (job_id,))
+        else:
+            # Success (possibly partial) — auto-cleanup
+            conn.execute("DELETE FROM gallery_jobs WHERE id = ?", (job_id,))
+
+    conn.commit()
+
+
+def _fetch_generation_data(civitai_image_id, api_key):
+    """Fetch generation data for a single image from CivitAI.
+
+    Returns the data dict, or empty dict on failure. Non-fatal — the image
+    is already stored, metadata is a bonus.
+    """
+    if not civitai_image_id or not api_key:
+        return {}
+    try:
+        from v2.app.clients.civitai import CivitaiClient
+        return CivitaiClient(api_key=api_key).get_image_generation_data(int(civitai_image_id))
+    except Exception:
+        return {}
+
+
+def _build_callback_args(
+    model_id, version_id, image_type,
+    origin_id, origin_url, original_name,
+    civitai_image_id, api_key, job_id,
+    post_id=None, post_title=None, username=None, stats=None,
+    fetch_generation_data=False,
+):
+    """Build the callback_args dict for download_scheduler.enqueue().
+
+    Centralises the construction so download_card_images, download_community_images,
+    and resume_job all produce identical args.
+    """
+    return {
+        "origin": "civitai",
+        "origin_id": origin_id,
+        "origin_url": origin_url,
+        "original_name": original_name,
+        "model_id": model_id,
+        "version_id": version_id,
+        "image_type": image_type,
+        "civitai_image_id": civitai_image_id,
+        "fetch_generation_data": fetch_generation_data,
+        "civitai_api_key": api_key,
+        "gallery_job_id": job_id,
+        "post_id": post_id,
+        "post_title": post_title,
+        "username": username,
+        "stats": stats or {},
+    }
+
+
+def _enqueue_image(url, callback_args):
+    """Enqueue a single image download via the download scheduler."""
+    from v2.app.domain import download as scheduler
+    scheduler.enqueue(url=url, callback="gallery_deliver", callback_args=callback_args)
+
+
+def _is_already_downloaded(origin_id):
+    """Check if a media with this origin_id already exists (dedup)."""
+    from v2.app.stores import media as media_store
+    return media_store.get_by_origin("civitai", origin_id) is not None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CALLBACK — called by download_scheduler when a gallery download completes
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _deliver_gallery_media(file_path, args):
+    """Delivery callback: store file, create relation, fetch meta, update job.
+
+    Called by download_scheduler when a gallery image download completes.
+    All steps run in one transaction. If any step fails, the whole thing
+    rolls back and the job's failed counter increments.
+
+    Steps:
+      1. Store file in media_store → get media_id
+      2. Create relation in model_media or version_media
+      3. Fetch generation data from CivitAI (community only, non-fatal)
+      4. Store CivitAI metadata in civitai_image_meta
+      5. Update gallery_job progress (auto-cleanup if done)
+    """
+    conn = get_conn()
+    job_id = args.get("gallery_job_id")
 
     try:
-        # 1. Store file in media store → get media_id
-        media_id = media_store.store(
-            source_path=file_path,
-            origin=args.get("origin", "civitai"),
-            origin_id=args.get("origin_id"),
-            origin_url=args.get("origin_url"),
-            original_name=args.get("original_name"),
-        )
+        # Steps 1 + 2: store file and create relation
+        media_id = _store_and_link(file_path, args)
 
-        # 2. Create relation in join table
-        image_type = args.get("image_type", "community")
-        model_id = args.get("model_id")
-        version_id = args.get("version_id")
+        # Step 3: fetch generation data (community only, non-fatal)
+        gen_data = {}
+        if args.get("fetch_generation_data") and args.get("civitai_image_id"):
+            gen_data = _fetch_generation_data(args["civitai_image_id"], args.get("civitai_api_key", ""))
 
-        if image_type == "card" and model_id:
-            conn.execute("""
-                INSERT OR IGNORE INTO model_media (media_id, model_id, sort_order)
-                VALUES (?, ?, 0)
-            """, (media_id, model_id))
+        # Step 4: store CivitAI metadata
+        _store_civitai_meta(media_id, args, gen_data)
 
-        elif version_id:
-            conn.execute("""
-                INSERT OR IGNORE INTO version_media (media_id, version_id, source, sort_order)
-                VALUES (?, ?, 'community', 0)
-            """, (media_id, version_id))
-
-        # 3. Fetch and store CivitAI generation metadata (community only)
-        civitai_image_id = args.get("civitai_image_id")
-        api_key = args.get("civitai_api_key", "")
-
-        meta_data = {}
-        if args.get("fetch_generation_data") and civitai_image_id and api_key:
-            try:
-                client = CivitaiClient(api_key=api_key)
-                gen = client.get_image_generation_data(int(civitai_image_id))
-                if gen:
-                    meta_data = gen
-            except Exception:
-                pass  # Non-fatal — we have the image, meta is a bonus
-
-        # Build civitai_image_meta record
-        meta = meta_data.get("meta", {}) or {}
-        resources = meta_data.get("resources", [])
-        tools = meta_data.get("tools", [])
-        techniques = meta_data.get("techniques", [])
-        stats = args.get("stats", {})
-
-        # Always insert meta row if we have any data
-        # (even card images get post_id/username from listing)
-        has_any_meta = (
-            meta or resources or tools or techniques
-            or args.get("post_id") or args.get("username")
-        )
-
-        if has_any_meta:
-            conn.execute("""
-                INSERT OR IGNORE INTO civitai_image_meta (
-                    media_id, prompt, negative_prompt, steps, cfg_scale,
-                    sampler, seed, clip_skip,
-                    resources, tools, techniques,
-                    post_id, post_title, username, civitai_url,
-                    reactions, comments, collected,
-                    raw_meta
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                media_id,
-                meta.get("prompt"),
-                meta.get("negativePrompt"),
-                meta.get("steps"),
-                meta.get("cfgScale"),
-                meta.get("sampler"),
-                meta.get("seed"),
-                meta.get("clipSkip"),
-                json.dumps(resources) if resources else None,
-                json.dumps(tools) if tools else None,
-                json.dumps(techniques) if techniques else None,
-                args.get("post_id"),
-                args.get("post_title"),
-                args.get("username"),
-                args.get("civitai_url"),
-                stats.get("reactions", 0),
-                stats.get("comments", 0),
-                stats.get("collected", 0),
-                json.dumps(meta_data) if meta_data else None,
-            ))
-
-        # 4. Update gallery job progress
-        job_id = args.get("gallery_job_id")
+        # Step 5: update job progress
         if job_id:
-            conn.execute("""
-                UPDATE gallery_jobs SET completed = completed + 1 WHERE id = ?
-            """, (job_id,))
-
-            # Check if job is done → auto-cleanup
-            row = conn.execute(
-                "SELECT total, completed, failed FROM gallery_jobs WHERE id = ?",
-                (job_id,)
-            ).fetchone()
-            if row and (row["completed"] + row["failed"]) >= row["total"]:
-                conn.execute("DELETE FROM gallery_jobs WHERE id = ?", (job_id,))
+            _update_job_progress(job_id, success=True)
 
         conn.commit()
 
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        # Update job failure count
-        job_id = args.get("gallery_job_id")
         if job_id:
-            conn.execute("""
-                UPDATE gallery_jobs SET failed = failed + 1 WHERE id = ?
-            """, (job_id,))
-
-            # Check if job is done (all failed) → keep for inspection, set error
-            row = conn.execute(
-                "SELECT total, completed, failed FROM gallery_jobs WHERE id = ?",
-                (job_id,)
-            ).fetchone()
-            if row and (row["completed"] + row["failed"]) >= row["total"]:
-                conn.execute(
-                    "UPDATE gallery_jobs SET status = 'error' WHERE id = ?",
-                    (job_id,),
-                )
-            conn.commit()
+            _update_job_progress(job_id, success=False)
         raise
 
 
 # Register callback with download scheduler
-download_scheduler.register_callback("gallery_deliver", _deliver_gallery_media)
+from v2.app.domain import download as _dl
+_dl.register_callback("gallery_deliver", _deliver_gallery_media)
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  DOWNLOAD OPERATIONS — start gallery downloads
+# ══════════════════════════════════════════════════════════════════════════════
 
-def download_card_images(
-    model_id: str,
-    civitai_model_id: int,
-    api_key: str,
-) -> str:
-    """Start downloading card images for a model.
+def download_card_images(model_id: str, civitai_model_id: int, api_key: str) -> str:
+    """Download card images for a model from CivitAI.
 
-    Fetches the model from CivitAI, collects all card images from all
-    versions, and enqueues them for download. Each downloaded image gets
-    stored in the media store and linked to the model via model_media.
+    Fetches all versions of the model, collects their card images,
+    deduplicates, creates a gallery_job, and enqueues downloads.
 
     Args:
         model_id: Our internal model UUID.
@@ -264,63 +298,47 @@ def download_card_images(
         api_key: CivitAI API key.
 
     Returns:
-        Gallery job ID.
+        Gallery job ID, or empty string if nothing to download.
     """
-    import uuid
+    from v2.app.clients.civitai import CivitaiClient, extract_cdn_id_from_url, build_cdn_url
 
     client = CivitaiClient(api_key=api_key)
     model_data = client.get_model(civitai_model_id)
 
-    # Collect all card images across all versions
+    # Collect unique card images across all versions
     images = []
-    seen_cdn_ids = set()
+    seen = set()
     for version in model_data.get("modelVersions", []):
         for img in client.extract_card_images(version):
             cdn_id = img.get("cdn_id", "")
-            if cdn_id and cdn_id not in seen_cdn_ids:
-                seen_cdn_ids.add(cdn_id)
+            if cdn_id and cdn_id not in seen and not _is_already_downloaded(cdn_id):
+                seen.add(cdn_id)
                 images.append(img)
 
     if not images:
         return ""
 
     # Create gallery job
-    job_id = uuid.uuid4().hex
+    job_id = _uuid.uuid4().hex
     conn = get_conn()
-    conn.execute("""
-        INSERT INTO gallery_jobs (id, model_id, version_id, image_type, total, status, created_at)
-        VALUES (?, ?, NULL, 'card', ?, 'running', ?)
-    """, (job_id, model_id, len(images), now_iso()))
+    conn.execute(
+        "INSERT INTO gallery_jobs (id, model_id, image_type, total, status, created_at) VALUES (?, ?, 'card', ?, 'running', ?)",
+        (job_id, model_id, len(images), now_iso()),
+    )
     conn.commit()
 
-    # Enqueue downloads
+    # Enqueue each image
     for img in images:
         cdn_id = img["cdn_id"]
         media_type = img.get("type", "image")
         url = build_cdn_url(cdn_id, media_type)
         ext = ".mp4" if media_type == "video" else ".jpeg"
 
-        download_scheduler.enqueue(
-            url=url,
-            callback="gallery_deliver",
-            callback_args={
-                "origin": "civitai",
-                "origin_id": cdn_id,
-                "origin_url": url,
-                "original_name": f"{cdn_id}{ext}",
-                "model_id": model_id,
-                "version_id": None,
-                "image_type": "card",
-                "civitai_image_id": None,  # card images have no numeric ID
-                "fetch_generation_data": False,
-                "civitai_api_key": api_key,
-                "gallery_job_id": job_id,
-                "post_id": None,
-                "post_title": None,
-                "username": None,
-                "stats": {},
-            },
-        )
+        _enqueue_image(url, _build_callback_args(
+            model_id=model_id, version_id=None, image_type="card",
+            origin_id=cdn_id, origin_url=url, original_name=f"{cdn_id}{ext}",
+            civitai_image_id=None, api_key=api_key, job_id=job_id,
+        ))
 
     return job_id
 
@@ -338,45 +356,46 @@ def download_community_images(
     max_images: int = 200,
     fetch_generation_data: bool = True,
 ) -> str:
-    """Start downloading community images for a model version.
+    """Download community images for a model version from CivitAI.
 
-    Fetches community images from CivitAI via tRPC, enqueues them for
-    download. Each downloaded image gets stored, linked to the version
-    via version_media, and enriched with CivitAI generation metadata.
+    Fetches images via tRPC, deduplicates against existing media,
+    creates a gallery_job, and enqueues downloads.
 
     Args:
         model_id: Our internal model UUID (parent).
         version_id: Our internal version UUID.
         civitai_version_id: CivitAI version ID for the API query.
         api_key: CivitAI API key.
-        sort: Sort order for the image search.
-        period: Time period filter.
-        types: Media type filter (['image'], ['video'], or None).
-        with_meta: Only images with generation metadata.
-        from_platform: Only images made on CivitAI.
-        max_images: Maximum number of images to download.
+        sort, period, types, with_meta, from_platform: Search filters.
+        max_images: Maximum images to download.
         fetch_generation_data: Whether to fetch per-image generation data.
 
     Returns:
-        Gallery job ID.
+        Gallery job ID, or empty string if nothing to download.
     """
-    import uuid
+    from v2.app.clients.civitai import CivitaiClient, build_cdn_url
 
     client = CivitaiClient(api_key=api_key)
+    filters = {
+        "sort": sort, "period": period, "types": types,
+        "with_meta": with_meta, "from_platform": from_platform,
+        "max_images": max_images, "fetch_generation_data": fetch_generation_data,
+    }
 
-    # Collect images from tRPC (paginated)
+    # Collect images via tRPC pagination
     images = []
     for item in client.iter_images_trpc(
-        version_id=civitai_version_id,
-        sort=sort,
-        period=period,
-        types=types,
-        with_meta=with_meta,
-        from_platform=from_platform,
+        version_id=civitai_version_id, sort=sort, period=period,
+        types=types, with_meta=with_meta, from_platform=from_platform,
         limit=min(max_images, 200),
     ):
         normalized = client.normalize_trpc_image(item)
-        images.append(normalized)
+        image_id = normalized.get("id")
+        cdn_id = normalized.get("cdn_id", "")
+        origin_key = str(image_id) if image_id else cdn_id
+
+        if not _is_already_downloaded(origin_key):
+            images.append(normalized)
         if len(images) >= max_images:
             break
 
@@ -384,68 +403,158 @@ def download_community_images(
         return ""
 
     # Create gallery job
-    job_id = uuid.uuid4().hex
-    filters = {
-        "sort": sort, "period": period, "types": types,
-        "with_meta": with_meta, "from_platform": from_platform,
-        "max_images": max_images,
-    }
+    job_id = _uuid.uuid4().hex
     conn = get_conn()
-    conn.execute("""
-        INSERT INTO gallery_jobs (id, model_id, version_id, image_type, filters, total, status, created_at)
-        VALUES (?, ?, ?, 'community', ?, ?, 'running', ?)
-    """, (job_id, model_id, version_id, json.dumps(filters), len(images), now_iso()))
+    conn.execute(
+        "INSERT INTO gallery_jobs (id, model_id, version_id, image_type, filters, total, status, created_at) VALUES (?, ?, ?, 'community', ?, ?, 'running', ?)",
+        (job_id, model_id, version_id, json.dumps(filters), len(images), now_iso()),
+    )
     conn.commit()
 
-    # Enqueue downloads
+    # Enqueue each image
     for img in images:
         cdn_id = img.get("cdn_id", "")
+        image_id = img.get("id")
         media_type = img.get("type", "image")
         url = img.get("full_url") or build_cdn_url(cdn_id, media_type)
         ext = ".mp4" if media_type == "video" else ".jpeg"
-        image_id = img.get("id")
-        stats_data = img.get("stats", {})
+        stats = img.get("stats", {})
 
-        download_scheduler.enqueue(
-            url=url,
-            callback="gallery_deliver",
-            callback_args={
-                "origin": "civitai",
-                "origin_id": str(image_id) if image_id else cdn_id,
-                "origin_url": url,
-                "original_name": f"{image_id or cdn_id}{ext}",
-                "model_id": model_id,
-                "version_id": version_id,
-                "image_type": "community",
-                "civitai_image_id": image_id,
-                "fetch_generation_data": fetch_generation_data,
-                "civitai_api_key": api_key,
-                "gallery_job_id": job_id,
-                "post_id": img.get("postId"),
-                "post_title": img.get("postTitle"),
-                "username": img.get("username"),
-                "stats": {
-                    "reactions": (stats_data.get("heartCount", 0) or 0)
-                                + (stats_data.get("likeCount", 0) or 0),
-                    "comments": stats_data.get("commentCount", 0) or 0,
-                    "collected": stats_data.get("collectedCount", 0) or 0,
-                },
-                "civitai_url": f"https://civitai.com/images/{image_id}" if image_id else None,
+        _enqueue_image(url, _build_callback_args(
+            model_id=model_id, version_id=version_id, image_type="community",
+            origin_id=str(image_id) if image_id else cdn_id,
+            origin_url=url, original_name=f"{image_id or cdn_id}{ext}",
+            civitai_image_id=image_id, api_key=api_key, job_id=job_id,
+            post_id=img.get("postId"), post_title=img.get("postTitle"),
+            username=img.get("username"),
+            stats={
+                "reactions": (stats.get("heartCount", 0) or 0) + (stats.get("likeCount", 0) or 0),
+                "comments": stats.get("commentCount", 0) or 0,
+                "collected": stats.get("collectedCount", 0) or 0,
             },
-        )
+            fetch_generation_data=fetch_generation_data,
+        ))
 
     return job_id
 
 
+def resume_job(job_id: str, api_key: str) -> int:
+    """Resume an interrupted gallery job.
+
+    Re-fetches the image list from CivitAI with the same filters,
+    checks which images are already downloaded (dedup), and enqueues
+    only the missing ones. Reuses the same gallery_job record.
+
+    Args:
+        job_id: Gallery job ID (must be status='interrupted').
+        api_key: CivitAI API key.
+
+    Returns:
+        Number of new downloads enqueued.
+
+    Raises:
+        ValueError: If job not found, not interrupted, or missing source mapping.
+    """
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM gallery_jobs WHERE id = ? AND status = 'interrupted'", (job_id,)
+    ).fetchone()
+    if not row:
+        raise ValueError(f"Job not found or not interrupted: {job_id}")
+
+    job = dict(row)
+    conn.execute("UPDATE gallery_jobs SET status = 'running' WHERE id = ?", (job_id,))
+    conn.commit()
+
+    from v2.app.domain import catalog as cat
+    from v2.app.clients.civitai import CivitaiClient, build_cdn_url
+
+    client = CivitaiClient(api_key=api_key)
+    enqueued = 0
+
+    try:
+        if job["image_type"] == "card":
+            source = cat.get_by_source_entity("model", job["model_id"])
+            if not source:
+                raise ValueError("No CivitAI source for model")
+            model_data = client.get_model(int(source["source_id"]))
+            for version in model_data.get("modelVersions", []):
+                for img in client.extract_card_images(version):
+                    cdn_id = img.get("cdn_id", "")
+                    if cdn_id and not _is_already_downloaded(cdn_id):
+                        media_type = img.get("type", "image")
+                        url = build_cdn_url(cdn_id, media_type)
+                        ext = ".mp4" if media_type == "video" else ".jpeg"
+                        _enqueue_image(url, _build_callback_args(
+                            model_id=job["model_id"], version_id=None, image_type="card",
+                            origin_id=cdn_id, origin_url=url, original_name=f"{cdn_id}{ext}",
+                            civitai_image_id=None, api_key=api_key, job_id=job_id,
+                        ))
+                        enqueued += 1
+
+        elif job["image_type"] == "community" and job.get("version_id"):
+            source = cat.get_by_source_entity("version", job["version_id"])
+            if not source:
+                raise ValueError("No CivitAI source for version")
+            filters = json.loads(job.get("filters") or "{}")
+            max_images = filters.get("max_images", 200)
+            completed = job.get("completed", 0)
+
+            for item in client.iter_images_trpc(
+                version_id=int(source["source_id"]),
+                sort=filters.get("sort", "Most Reactions"),
+                period=filters.get("period", "AllTime"),
+                types=filters.get("types"),
+                with_meta=filters.get("with_meta", False),
+                from_platform=filters.get("from_platform", False),
+                limit=min(max_images, 200),
+            ):
+                normalized = client.normalize_trpc_image(item)
+                image_id = normalized.get("id")
+                cdn_id = normalized.get("cdn_id", "")
+                origin_key = str(image_id) if image_id else cdn_id
+
+                if not _is_already_downloaded(origin_key):
+                    media_type = normalized.get("type", "image")
+                    url = normalized.get("full_url") or build_cdn_url(cdn_id, media_type)
+                    ext = ".mp4" if media_type == "video" else ".jpeg"
+                    stats = normalized.get("stats", {})
+                    _enqueue_image(url, _build_callback_args(
+                        model_id=job["model_id"], version_id=job["version_id"],
+                        image_type="community",
+                        origin_id=origin_key, origin_url=url,
+                        original_name=f"{image_id or cdn_id}{ext}",
+                        civitai_image_id=image_id, api_key=api_key, job_id=job_id,
+                        post_id=normalized.get("postId"), post_title=normalized.get("postTitle"),
+                        username=normalized.get("username"),
+                        stats={
+                            "reactions": (stats.get("heartCount", 0) or 0) + (stats.get("likeCount", 0) or 0),
+                            "comments": stats.get("commentCount", 0) or 0,
+                            "collected": stats.get("collectedCount", 0) or 0,
+                        },
+                        fetch_generation_data=filters.get("fetch_generation_data", True),
+                    ))
+                    enqueued += 1
+                    if enqueued + completed >= max_images:
+                        break
+
+    except Exception:
+        conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
+        conn.commit()
+        raise
+
+    return enqueued
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  JOB MANAGEMENT — track, stop, resume, cleanup gallery download jobs
+# ══════════════════════════════════════════════════════════════════════════════
+
 def stop_job(job_id: str):
     """Signal a running gallery job to stop.
 
-    Sets status to 'stopping'. Downloads already enqueued will complete
-    but no new images are added. The job row remains until all pending
-    downloads finish, then auto-cleans.
-
-    Args:
-        job_id: Gallery job ID.
+    Downloads already enqueued will complete, but the job won't be
+    considered successful — it stays until cleanup or resume.
     """
     conn = get_conn()
     conn.execute(
@@ -456,41 +565,46 @@ def stop_job(job_id: str):
 
 
 def get_job_status(job_id: str) -> dict | None:
-    """Get current status of a gallery job.
-
-    Returns None if job completed successfully (row was deleted).
-
-    Args:
-        job_id: Gallery job ID.
-
-    Returns:
-        Job dict, or None if completed/not found.
-    """
+    """Get gallery job status. Returns None if completed (auto-deleted) or not found."""
     conn = get_conn()
     row = conn.execute("SELECT * FROM gallery_jobs WHERE id = ?", (job_id,)).fetchone()
     return dict(row) if row else None
 
 
 def list_active_jobs() -> list[dict]:
-    """List all active gallery jobs (running, stopping, interrupted).
-
-    Returns:
-        List of job dicts.
-    """
+    """List jobs that are running or stopping."""
     conn = get_conn()
-    rows = conn.execute("""
-        SELECT * FROM gallery_jobs
-        WHERE status IN ('running', 'stopping', 'interrupted')
-        ORDER BY created_at DESC
-    """).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM gallery_jobs WHERE status IN ('running', 'stopping', 'interrupted') ORDER BY created_at DESC"
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
-def recover_interrupted():
-    """Reset interrupted jobs for resume. Called at boot.
+def list_stale_jobs() -> list[dict]:
+    """List interrupted and error jobs (candidates for cleanup or resume)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM gallery_jobs WHERE status IN ('interrupted', 'error') ORDER BY created_at DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
-    Changes 'running' → 'interrupted'. The caller can then decide
-    whether to resume or abandon each job.
+
+def delete_stale_jobs() -> int:
+    """Delete all interrupted and error jobs. Returns count deleted."""
+    conn = get_conn()
+    count = conn.execute(
+        "DELETE FROM gallery_jobs WHERE status IN ('interrupted', 'error')"
+    ).rowcount
+    conn.commit()
+    return count
+
+
+def recover_interrupted():
+    """Boot recovery: set all 'running' jobs to 'interrupted'.
+
+    Called at application startup. Downloads already in the scheduler
+    will continue (the scheduler has its own recovery), but the gallery
+    job needs to know it was interrupted so resume can re-enqueue missing images.
     """
     conn = get_conn()
     count = conn.execute(
@@ -502,82 +616,56 @@ def recover_interrupted():
     return count
 
 
-# ── Query functions ──────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  QUERIES — read gallery data
+# ══════════════════════════════════════════════════════════════════════════════
 
 def get_model_gallery(model_id: str) -> dict:
-    """Get all gallery data for a model.
+    """Get gallery summary for a model: card images + community counts per version.
 
-    Returns card images (from model_media) and community image counts
-    per version (from version_media).
-
-    Args:
-        model_id: Our internal model UUID.
-
-    Returns:
-        Dict with 'card_images' list and 'versions' dict of counts.
+    Returns dict with card_count, card_bytes, versions (per-version community counts),
+    community_count, community_bytes.
     """
     conn = get_conn()
 
-    # Card images
     card_rows = conn.execute("""
         SELECT m.* FROM media m
         JOIN model_media mm ON m.id = mm.media_id
-        WHERE mm.model_id = ?
-        ORDER BY mm.sort_order ASC
+        WHERE mm.model_id = ? ORDER BY mm.sort_order ASC
     """, (model_id,)).fetchall()
 
-    # Community counts per version
     version_rows = conn.execute("""
         SELECT vm.version_id, COUNT(*) as count,
                COALESCE(SUM(m.file_size), 0) as total_bytes
         FROM version_media vm
         JOIN media m ON m.id = vm.media_id
         JOIN model_versions mv ON mv.id = vm.version_id
-        WHERE mv.model_id = ?
-        GROUP BY vm.version_id
+        WHERE mv.model_id = ? GROUP BY vm.version_id
     """, (model_id,)).fetchall()
 
     return {
         "card_images": [dict(r) for r in card_rows],
         "card_count": len(card_rows),
         "card_bytes": sum(r["file_size"] for r in card_rows),
-        "versions": {
-            r["version_id"]: {"count": r["count"], "bytes": r["total_bytes"]}
-            for r in version_rows
-        },
+        "versions": {r["version_id"]: {"count": r["count"], "bytes": r["total_bytes"]} for r in version_rows},
         "community_count": sum(r["count"] for r in version_rows),
         "community_bytes": sum(r["total_bytes"] for r in version_rows),
     }
 
 
 def get_version_gallery(version_id: str) -> list[dict]:
-    """Get community images for a specific version.
-
-    Args:
-        version_id: Our internal version UUID.
-
-    Returns:
-        List of media dicts.
-    """
+    """Get community images for a specific version."""
     conn = get_conn()
     rows = conn.execute("""
         SELECT m.* FROM media m
         JOIN version_media vm ON m.id = vm.media_id
-        WHERE vm.version_id = ?
-        ORDER BY vm.sort_order ASC
+        WHERE vm.version_id = ? ORDER BY vm.sort_order ASC
     """, (version_id,)).fetchall()
     return [dict(r) for r in rows]
 
 
 def get_image_meta(media_id: str) -> dict | None:
-    """Get CivitAI generation metadata for a media item.
-
-    Args:
-        media_id: Media UUID.
-
-    Returns:
-        Meta dict, or None if no CivitAI meta exists.
-    """
+    """Get CivitAI generation metadata for a media item."""
     conn = get_conn()
     row = conn.execute(
         "SELECT * FROM civitai_image_meta WHERE media_id = ?", (media_id,)
@@ -585,187 +673,28 @@ def get_image_meta(media_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-def set_model_preview(model_id: str, media_id: str):
-    """Set the preview image for a model.
-
-    Args:
-        model_id: Our internal model UUID.
-        media_id: Media UUID to use as preview.
-    """
-    conn = get_conn()
-    conn.execute(
-        "UPDATE models SET preview_id = ? WHERE id = ?",
-        (media_id, model_id),
-    )
-    conn.commit()
-
-
-def list_stale_jobs() -> list[dict]:
-    """List interrupted and error gallery jobs."""
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM gallery_jobs WHERE status IN ('interrupted', 'error') ORDER BY created_at DESC"
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def delete_stale_jobs() -> int:
-    """Delete all interrupted and error gallery jobs. Returns count deleted."""
-    conn = get_conn()
-    count = conn.execute(
-        "DELETE FROM gallery_jobs WHERE status IN ('interrupted', 'error')"
-    ).rowcount
-    conn.commit()
-    return count
-
-
-def resume_job(job_id: str, api_key: str) -> int:
-    """Resume an interrupted gallery job. Re-fetches from CivitAI, enqueues missing.
-
-    Returns number of new downloads enqueued.
-    """
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT * FROM gallery_jobs WHERE id = ? AND status = 'interrupted'", (job_id,)
-    ).fetchone()
-    if not row:
-        raise ValueError(f"Job not found or not interrupted: {job_id}")
-
-    job = dict(row)
-    model_id = job["model_id"]
-    version_id = job.get("version_id")
-    image_type = job["image_type"]
-    filters = json.loads(job.get("filters") or "{}")
-
-    from v2.app.domain import catalog as cat
-    from v2.app.domain import download as download_scheduler
-
-    # Set back to running
-    conn.execute("UPDATE gallery_jobs SET status = 'running' WHERE id = ?", (job_id,))
-    conn.commit()
-
-    client = CivitaiClient(api_key=api_key)
-    enqueued = 0
-
-    if image_type == "card":
-        model_source = cat.get_by_source_entity("model", model_id)
-        if not model_source:
-            conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
-            conn.commit()
-            raise ValueError("No CivitAI source for model")
-
-        civitai_model_id = int(model_source["source_id"])
-        model_data = client.get_model(civitai_model_id)
-
-        for version in model_data.get("modelVersions", []):
-            for img in client.extract_card_images(version):
-                cdn_id = img.get("cdn_id", "")
-                if not cdn_id:
-                    continue
-                existing = media_store.get_by_origin("civitai", cdn_id)
-                if existing:
-                    continue
-                media_type = img.get("type", "image")
-                url = build_cdn_url(cdn_id, media_type)
-                ext = ".mp4" if media_type == "video" else ".jpeg"
-                download_scheduler.enqueue(
-                    url=url, callback="gallery_deliver",
-                    callback_args={
-                        "origin": "civitai", "origin_id": cdn_id,
-                        "origin_url": url, "original_name": f"{cdn_id}{ext}",
-                        "model_id": model_id, "version_id": None,
-                        "image_type": "card", "civitai_image_id": None,
-                        "fetch_generation_data": False, "civitai_api_key": api_key,
-                        "gallery_job_id": job_id,
-                        "post_id": None, "post_title": None, "username": None, "stats": {},
-                    },
-                )
-                enqueued += 1
-
-    elif image_type == "community" and version_id:
-        version_source = cat.get_by_source_entity("version", version_id)
-        if not version_source:
-            conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
-            conn.commit()
-            raise ValueError("No CivitAI source for version")
-
-        civitai_vid = int(version_source["source_id"])
-        max_images = filters.get("max_images", 200)
-        completed = job.get("completed", 0)
-
-        for item in client.iter_images_trpc(
-            version_id=civitai_vid,
-            sort=filters.get("sort", "Most Reactions"),
-            period=filters.get("period", "AllTime"),
-            types=filters.get("types"),
-            with_meta=filters.get("with_meta", False),
-            from_platform=filters.get("from_platform", False),
-            limit=min(max_images, 200),
-        ):
-            normalized = client.normalize_trpc_image(item)
-            image_id = normalized.get("id")
-            cdn_id = normalized.get("cdn_id", "")
-            origin_key = str(image_id) if image_id else cdn_id
-
-            existing = media_store.get_by_origin("civitai", origin_key)
-            if existing:
-                continue
-
-            media_type = normalized.get("type", "image")
-            url = normalized.get("full_url") or build_cdn_url(cdn_id, media_type)
-            ext = ".mp4" if media_type == "video" else ".jpeg"
-            stats_data = normalized.get("stats", {})
-
-            download_scheduler.enqueue(
-                url=url, callback="gallery_deliver",
-                callback_args={
-                    "origin": "civitai", "origin_id": origin_key,
-                    "origin_url": url, "original_name": f"{image_id or cdn_id}{ext}",
-                    "model_id": model_id, "version_id": version_id,
-                    "image_type": "community", "civitai_image_id": image_id,
-                    "fetch_generation_data": filters.get("fetch_generation_data", True),
-                    "civitai_api_key": api_key, "gallery_job_id": job_id,
-                    "post_id": normalized.get("postId"),
-                    "post_title": normalized.get("postTitle"),
-                    "username": normalized.get("username"),
-                    "stats": {
-                        "reactions": (stats_data.get("heartCount", 0) or 0) + (stats_data.get("likeCount", 0) or 0),
-                        "comments": stats_data.get("commentCount", 0) or 0,
-                        "collected": stats_data.get("collectedCount", 0) or 0,
-                    },
-                    "civitai_url": f"https://civitai.com/images/{image_id}" if image_id else None,
-                },
-            )
-            enqueued += 1
-            if enqueued + completed >= max_images:
-                break
-
-    return enqueued
-
-
 def get_gallery_stats() -> dict:
-    """Get aggregate gallery statistics.
-
-    Returns:
-        Dict with total counts and bytes for card + community images.
-    """
+    """Get aggregate gallery statistics: total card + community counts and bytes."""
     conn = get_conn()
-
-    card = conn.execute("""
-        SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as bytes
-        FROM media m JOIN model_media mm ON m.id = mm.media_id
-    """).fetchone()
-
-    community = conn.execute("""
-        SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as bytes
-        FROM media m JOIN version_media vm ON m.id = vm.media_id
-    """).fetchone()
-
+    card = conn.execute(
+        "SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as bytes FROM media m JOIN model_media mm ON m.id = mm.media_id"
+    ).fetchone()
+    community = conn.execute(
+        "SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as bytes FROM media m JOIN version_media vm ON m.id = vm.media_id"
+    ).fetchone()
     return {
-        "card_count": card["count"],
-        "card_bytes": card["bytes"],
-        "community_count": community["count"],
-        "community_bytes": community["bytes"],
+        "card_count": card["count"], "card_bytes": card["bytes"],
+        "community_count": community["count"], "community_bytes": community["bytes"],
         "total_count": card["count"] + community["count"],
         "total_bytes": card["bytes"] + community["bytes"],
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PREVIEW — choose which image represents a model
+# ══════════════════════════════════════════════════════════════════════════════
+
+def set_model_preview(model_id: str, media_id: str):
+    """Set the preview image for a model. Uses catalog.update_model()."""
+    from v2.app.domain import catalog
+    catalog.update_model(model_id, preview_id=media_id)
