@@ -1,33 +1,31 @@
 """Download Scheduler — queued, resumable file downloads with callback delivery.
 
-Manages a pool of worker threads that download files from remote URLs.
-Downloads are persisted in SQLite — they survive restarts and support resume.
+An independent background process that executes queued file downloads.
+Runs as its own process (studio-downloader), separate from backend and CLI.
 
-Flow:
-  1. Caller calls enqueue(url, headers, callback, callback_args, ...)
-  2. Record created in DB with status='queued'
-  3. A worker thread picks it up, sets status='downloading'
-  4. File downloaded to V2_DIR/downloads/{id}.partial with streaming
-  5. Progress (downloaded_bytes) updated in DB periodically
-  6. On completion: callback function called to deliver file to destination store
-  7. Status set to 'done', temp file cleaned up
-  8. On error: retries up to max_retries, then status='error'
+Architecture:
+  - Callers write to the 'downloads' table (enqueue). This is just an INSERT.
+  - The scheduler process polls the table when woken, downloads files, delivers via callback.
+  - Only one scheduler at a time (DB lock with PID, verified via os.kill).
+  - Event-driven wake via filesystem sentinel (.wake file + inotify).
+  - Zero DB access when idle — sleeps on inotify, no polling.
 
-Resume:
-  If a partial file exists from a previous attempt, the worker sends
-  a Range header to resume from where it left off.
+Wake mechanism:
+  1. Caller does enqueue() → INSERT into DB + touch .wake file
+  2. Scheduler sleeps on inotify watching downloads/ dir
+  3. .wake appears → scheduler wakes, processes entire queue
+  4. Queue empty → deletes .wake, goes back to sleep
+  5. Safety: 60s timeout on inotify in case events are missed
 
-Boot recovery:
-  init_scheduler() finds any downloads stuck in 'downloading' status
-  (from a crash) and resets them to 'queued' for retry.
+Tables:
+  downloads       — queued/active/done file downloads
+  scheduler_lock  — singleton row with PID of owning process
 
-Callback registry:
-  Modules register delivery functions by name (e.g. "media_store").
-  The name is stored in the DB. On completion, the scheduler looks up
-  the function by name and calls it with the downloaded file path + args.
+See DOWNLOAD_SCHEDULER.md for full architecture docs.
 """
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -41,11 +39,9 @@ from v2.app.core.db import get_conn, register_schema
 from v2.app.core.settings import DOWNLOADS_DIR, MAX_CONCURRENT_DOWNLOADS, now_iso
 
 
-# ── Callback registry ────────────────────────────────────────────────────────
-#
-# Modules register their delivery functions here at import time.
-# The scheduler calls them when a download completes.
-# Names are stored in the DB so they survive restarts.
+# ══════════════════════════════════════════════════════════════════════════════
+#  CALLBACK REGISTRY
+# ══════════════════════════════════════════════════════════════════════════════
 
 _callbacks: dict[str, callable] = {}
 
@@ -53,20 +49,22 @@ _callbacks: dict[str, callable] = {}
 def register_callback(name: str, func: callable):
     """Register a delivery callback.
 
-    The function receives (file_path: Path, args: dict) and is responsible
-    for moving the file into its final destination (e.g. media store, model store).
+    Called by modules at import time. The name is stored in the DB so it
+    survives restarts. The function must be re-registered every startup.
 
     Args:
-        name: Short name stored in DB (e.g. "media_store", "model_store").
+        name: Short name (e.g. "media_store", "gallery_deliver").
         func: Callable(file_path: Path, args: dict) -> Any.
     """
     _callbacks[name] = func
 
 
-# ── Schema ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  SCHEMA
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _init_schema(conn: sqlite3.Connection):
-    """Create downloads + scheduler_lock tables. Called by db.init_db()."""
+    """Create downloads + scheduler_lock tables."""
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS downloads (
@@ -92,14 +90,12 @@ def _init_schema(conn: sqlite3.Connection):
         CREATE INDEX IF NOT EXISTS idx_dl_status   ON downloads(status);
         CREATE INDEX IF NOT EXISTS idx_dl_priority ON downloads(priority DESC);
 
-        -- Singleton lock: only one scheduler process at a time.
-        -- CHECK (id = 1) guarantees at most one row.
-        -- heartbeat is updated every poll cycle; if stale (>30s), scheduler is dead.
+        -- Singleton: only one scheduler process at a time.
+        -- PID verified via os.kill(pid, 0) — no heartbeat needed.
         CREATE TABLE IF NOT EXISTS scheduler_lock (
             id          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
             pid         INTEGER NOT NULL,
-            started_at  TEXT NOT NULL,
-            heartbeat   TEXT NOT NULL
+            started_at  TEXT NOT NULL
         );
     """)
 
@@ -107,31 +103,172 @@ def _init_schema(conn: sqlite3.Connection):
 register_schema("download_scheduler", _init_schema)
 
 
-# ── Scheduler state ──────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  SENTINEL — wake mechanism for cross-process notification
+# ══════════════════════════════════════════════════════════════════════════════
 
-_pool: ThreadPoolExecutor | None = None
-_running = False
-_poll_thread: threading.Thread | None = None
-_our_pid: int | None = None
+_WAKE_FILE = DOWNLOADS_DIR / ".wake"
+_INOTIFY_TIMEOUT_S = 60  # safety wake even if inotify misses events
 
-# How often the poll thread checks for new queued downloads (seconds)
-_POLL_INTERVAL = 2
 
-# Heartbeat older than this = scheduler is dead (seconds)
-_HEARTBEAT_TIMEOUT = 30
+def _touch_wake():
+    """Create the sentinel file to wake the scheduler.
 
-# How often download progress is flushed to DB (bytes between flushes)
-_PROGRESS_FLUSH_BYTES = 256 * 1024  # every 256 KB
+    Called by enqueue() after inserting a download. If the scheduler is
+    sleeping on inotify, this wakes it immediately. If it's already awake
+    or not running, the file just sits there harmlessly.
+    """
+    try:
+        DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        _WAKE_FILE.touch()
+    except Exception:
+        pass  # Non-fatal — scheduler will wake on timeout
+
+
+def _clear_wake():
+    """Remove the sentinel file after processing the queue."""
+    try:
+        _WAKE_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _wait_for_wake():
+    """Block until .wake appears or timeout expires.
+
+    Uses inotify (Linux kernel notification) for zero-CPU waiting.
+    Falls back to simple sleep if inotify is unavailable.
+
+    Returns when:
+      - .wake file is created/modified (immediate wake)
+      - Timeout expires (safety wake, every 60s)
+      - _running becomes False (shutdown)
+    """
+    # If .wake already exists, return immediately
+    if _WAKE_FILE.exists():
+        return
+
+    try:
+        import inotify.adapters
+        i = inotify.adapters.Inotify()
+        i.add_watch(str(DOWNLOADS_DIR))
+        for event in i.event_gen(timeout_s=_INOTIFY_TIMEOUT_S):
+            if not _running:
+                break
+            if event is not None:
+                _, type_names, _, filename = event
+                if filename == ".wake":
+                    break
+            else:
+                # Timeout — safety wake
+                break
+    except ImportError:
+        # inotify not available — fall back to polling with long sleep
+        for _ in range(_INOTIFY_TIMEOUT_S):
+            if not _running or _WAKE_FILE.exists():
+                break
+            time.sleep(1)
+    except Exception:
+        # inotify error — fall back to sleep
+        time.sleep(_INOTIFY_TIMEOUT_S)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LOCK — ensures only one scheduler process at a time
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID exists."""
+    try:
+        os.kill(pid, 0)  # Signal 0 = check existence, don't actually signal
+        return True
+    except ProcessLookupError:
+        return False  # Process does not exist
+    except PermissionError:
+        return True  # Exists but we can't signal it (different user)
+
+
+def _acquire_lock() -> bool:
+    """Acquire the scheduler lock via exclusive DB transaction.
+
+    Checks if another scheduler is alive (PID check). If not, claims
+    the lock with our PID. Atomic via BEGIN EXCLUSIVE.
+
+    Returns True if acquired, False if another scheduler is running.
+    """
+    global _our_pid
+    conn = get_conn()
+
+    try:
+        conn.execute("BEGIN EXCLUSIVE")
+        row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
+
+        if row and _pid_alive(row["pid"]):
+            conn.execute("ROLLBACK")
+            print(f"[downloader] Another scheduler is running (PID {row['pid']})", flush=True)
+            return False
+
+        # Claim the lock
+        _our_pid = os.getpid()
+        conn.execute("DELETE FROM scheduler_lock")
+        conn.execute(
+            "INSERT INTO scheduler_lock (id, pid, started_at) VALUES (1, ?, ?)",
+            (_our_pid, now_iso()),
+        )
+        conn.execute("COMMIT")
+        return True
+
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        print(f"[downloader] Failed to acquire lock: {e}", flush=True)
+        return False
+
+
+def _release_lock():
+    """Release the scheduler lock. Non-fatal if it fails."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM scheduler_lock WHERE id = 1 AND pid = ?", (_our_pid,))
+        conn.commit()
+    except Exception:
+        pass  # Stale lock will be detected by PID check
+
+
+def is_running() -> bool:
+    """Check if the download scheduler is running (any process).
+
+    Reads the PID from the lock table and checks if the process exists.
+    Safe to call from any process — read-only, no lock needed.
+    """
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
+        if not row:
+            return False
+        return _pid_alive(row["pid"])
+    except Exception:
+        return False
+
+
+def get_lock_info() -> dict | None:
+    """Get scheduler lock info (PID, started_at). None if not locked."""
+    conn = get_conn()
+    row = conn.execute("SELECT pid, started_at FROM scheduler_lock WHERE id = 1").fetchone()
+    return dict(row) if row else None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  WORKER — downloads a single file
+# ══════════════════════════════════════════════════════════════════════════════
+
+_PROGRESS_FLUSH_BYTES = 256 * 1024
 
 
 def _get_next_queued() -> dict | None:
-    """Pop the highest-priority queued download from DB.
-
-    Atomically sets status to 'downloading' so no other worker picks it.
-
-    Returns:
-        Download record dict, or None if queue is empty.
-    """
+    """Pop the highest-priority queued download. Atomically marks it 'downloading'."""
     conn = get_conn()
     row = conn.execute("""
         SELECT * FROM downloads
@@ -151,18 +288,13 @@ def _get_next_queued() -> dict | None:
 
 
 def _do_download(record: dict):
-    """Execute a single download. Called by a worker thread.
+    """Execute a single download: stream file, deliver via callback.
 
     Steps:
-    1. Determine temp file path and check for partial file (resume)
-    2. Build HTTP request with Range header if resuming
-    3. Stream response, writing chunks to disk
-    4. Update progress in DB periodically
-    5. On completion, call the registered callback to deliver the file
-    6. Update status to 'done' or 'error'
-
-    Args:
-        record: Download record dict from the DB.
+      1. Resume from partial file if it exists (Range header)
+      2. Stream HTTP response to disk, flush progress periodically
+      3. Call registered callback to deliver file to its store
+      4. Mark done or retry on error
     """
     dl_id = record["id"]
     url = record["url"]
@@ -170,44 +302,35 @@ def _do_download(record: dict):
     callback_name = record["callback"]
     callback_args = json.loads(record["callback_args"]) if record["callback_args"] else {}
 
-    # Temp file path
     filename = record["filename"] or f"{dl_id}.partial"
     temp_path = DOWNLOADS_DIR / filename
-    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Update filename in DB if it wasn't set
+    # Save filename if not set
     if not record["filename"]:
         conn = get_conn()
         conn.execute("UPDATE downloads SET filename = ? WHERE id = ?", (filename, dl_id))
         conn.commit()
 
     try:
-        # Check for existing partial file (resume support)
+        # Resume support
         existing_bytes = 0
         if temp_path.exists():
             existing_bytes = temp_path.stat().st_size
             if existing_bytes > 0:
-                # Ask server to resume from where we left off
                 headers["Range"] = f"bytes={existing_bytes}-"
 
-        # Stream download
         with httpx.stream("GET", url, headers=headers, timeout=60,
                           follow_redirects=True) as response:
 
-            # Handle resume response
-            # 206 = partial content (resume accepted)
-            # 200 = full content (server ignored Range, start over)
             if response.status_code == 200 and existing_bytes > 0:
-                # Server didn't support resume — start from scratch
                 existing_bytes = 0
                 temp_path.unlink(missing_ok=True)
             elif response.status_code not in (200, 206):
                 response.raise_for_status()
 
-            # Get total size from Content-Length or Content-Range
+            # Parse total size
             total = None
             if response.status_code == 206:
-                # Content-Range: bytes 1000-9999/10000
                 cr = response.headers.get("content-range", "")
                 if "/" in cr:
                     try:
@@ -219,16 +342,12 @@ def _do_download(record: dict):
                 if cl:
                     total = int(cl) + existing_bytes
 
-            # Update total_bytes in DB
             if total:
                 conn = get_conn()
-                conn.execute(
-                    "UPDATE downloads SET total_bytes = ? WHERE id = ?",
-                    (total, dl_id),
-                )
+                conn.execute("UPDATE downloads SET total_bytes = ? WHERE id = ?", (total, dl_id))
                 conn.commit()
 
-            # Write chunks to disk
+            # Stream to disk
             downloaded = existing_bytes
             last_flush = downloaded
             mode = "ab" if existing_bytes > 0 else "wb"
@@ -238,7 +357,6 @@ def _do_download(record: dict):
                     f.write(chunk)
                     downloaded += len(chunk)
 
-                    # Periodic progress flush to DB
                     if downloaded - last_flush >= _PROGRESS_FLUSH_BYTES:
                         conn = get_conn()
                         conn.execute(
@@ -248,14 +366,14 @@ def _do_download(record: dict):
                         conn.commit()
                         last_flush = downloaded
 
-                        # Check if cancelled
+                        # Check cancellation
                         row = conn.execute(
                             "SELECT status FROM downloads WHERE id = ?", (dl_id,)
                         ).fetchone()
                         if row and row["status"] == "cancelled":
                             return
 
-            # Final progress update
+            # Final progress
             conn = get_conn()
             conn.execute(
                 "UPDATE downloads SET downloaded_bytes = ? WHERE id = ?",
@@ -263,20 +381,14 @@ def _do_download(record: dict):
             )
             conn.commit()
 
-        # ── Delivery: call the callback to move file to its store ──
-
+        # Deliver via callback
         if callback_name not in _callbacks:
             raise ValueError(f"Unknown callback '{callback_name}'. "
                              f"Registered: {list(_callbacks.keys())}")
 
-        deliver = _callbacks[callback_name]
-        deliver(temp_path, callback_args)
-
-        # If callback succeeded, the file was moved out of temp.
-        # If it's still there (callback copies instead of moves), clean up.
+        _callbacks[callback_name](temp_path, callback_args)
         temp_path.unlink(missing_ok=True)
 
-        # Mark done
         conn = get_conn()
         conn.execute(
             "UPDATE downloads SET status = 'done', completed_at = ?, error = NULL WHERE id = ?",
@@ -285,20 +397,15 @@ def _do_download(record: dict):
         conn.commit()
 
     except Exception as e:
-        # Download or delivery failed
         error_msg = str(e)[:500]
         conn = get_conn()
         retries = record["retries"] + 1
-        max_retries = record["max_retries"]
-
-        if retries < max_retries:
-            # Retry: set back to queued with incremented retry count
+        if retries < record["max_retries"]:
             conn.execute(
                 "UPDATE downloads SET status = 'queued', retries = ?, error = ? WHERE id = ?",
                 (retries, error_msg, dl_id),
             )
         else:
-            # Max retries reached: mark as error
             conn.execute(
                 "UPDATE downloads SET status = 'error', retries = ?, error = ? WHERE id = ?",
                 (retries, error_msg, dl_id),
@@ -306,122 +413,68 @@ def _do_download(record: dict):
         conn.commit()
 
 
-def _poll_loop():
-    """Background thread: update heartbeat, feed worker pool, repeat.
+# ══════════════════════════════════════════════════════════════════════════════
+#  SCHEDULER LIFECYCLE — init, run loop, stop
+# ══════════════════════════════════════════════════════════════════════════════
 
-    Runs until _running is False. Updates the scheduler_lock heartbeat
-    every cycle so other processes know we're alive. If the heartbeat
-    update fails (someone stole our lock), we stop.
+_pool: ThreadPoolExecutor | None = None
+_running = False
+_main_thread: threading.Thread | None = None
+_our_pid: int | None = None
+
+
+def _drain_queue() -> int:
+    """Process all queued downloads. Returns number submitted to pool."""
+    submitted = 0
+    while _running:
+        record = _get_next_queued()
+        if not record:
+            break
+        _pool.submit(_do_download, record)
+        submitted += 1
+    return submitted
+
+
+def _scheduler_loop():
+    """Main scheduler loop: sleep → wake → drain queue → repeat.
+
+    Runs until _running is False. Zero DB access while sleeping.
     """
     while _running:
-        try:
-            # Update heartbeat — proves we're alive
-            conn = get_conn()
-            rows = conn.execute(
-                "UPDATE scheduler_lock SET heartbeat = ? WHERE id = 1 AND pid = ?",
-                (now_iso(), _our_pid),
-            ).rowcount
-            conn.commit()
-            if rows == 0:
-                # Someone deleted our lock or replaced it — stop gracefully
-                print("[downloader] Lost lock ownership, stopping.", flush=True)
-                break
+        # Wait for wake signal (inotify) or timeout (60s safety)
+        _wait_for_wake()
 
-            # Check for queued work
-            record = _get_next_queued()
-            if record:
-                _pool.submit(_do_download, record)
-            else:
-                time.sleep(_POLL_INTERVAL)
-        except Exception as e:
-            print(f"[downloader] Poll error: {e}", flush=True)
-            time.sleep(_POLL_INTERVAL)
+        if not _running:
+            break
 
+        # Woken — process the entire queue
+        _clear_wake()
+        submitted = _drain_queue()
 
-# ── Public API ───────────────────────────────────────────────────────────────
-
-def _is_heartbeat_alive(conn) -> bool:
-    """Check if an existing scheduler lock has a fresh heartbeat."""
-    row = conn.execute("SELECT heartbeat FROM scheduler_lock WHERE id = 1").fetchone()
-    if not row:
-        return False
-    from datetime import datetime, timezone
-    try:
-        hb = datetime.fromisoformat(row["heartbeat"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - hb).total_seconds()
-        return age < _HEARTBEAT_TIMEOUT
-    except Exception:
-        return False
-
-
-def is_running() -> bool:
-    """Check if the download scheduler is running (any process).
-
-    Reads the heartbeat from the DB. If it's recent, the scheduler is alive.
-    Safe to call from any process (CLI, backend, etc.) — read-only.
-    """
-    try:
-        conn = get_conn()
-        return _is_heartbeat_alive(conn)
-    except Exception:
-        return False
+        if submitted > 0:
+            print(f"[downloader] Submitted {submitted} download(s)", flush=True)
 
 
 def init_scheduler() -> bool:
     """Start the download scheduler in this process.
 
-    Acquires an exclusive lock in the DB to ensure only one scheduler
-    runs at a time across all processes. If another scheduler is alive
-    (fresh heartbeat), refuses to start.
+    Acquires exclusive lock, recovers interrupted downloads, starts
+    worker pool and main loop. Only one scheduler across all processes.
 
-    Steps:
-      1. Check _running flag (same-process guard)
-      2. BEGIN EXCLUSIVE (cross-process guard)
-      3. Check heartbeat — if alive, abort
-      4. Claim lock with our PID
-      5. Recovery: reset 'downloading' → 'queued'
-      6. Start worker pool + poll thread
-
-    Returns:
-        True if started, False if another scheduler is already running.
+    Returns True if started, False if another is already running.
     """
-    global _pool, _running, _poll_thread, _our_pid
-    import os
+    global _pool, _running, _main_thread
 
     # Same-process guard
     if _running:
         return True
 
-    conn = get_conn()
-
-    # Cross-process guard: exclusive transaction
-    try:
-        conn.execute("BEGIN EXCLUSIVE")
-        if _is_heartbeat_alive(conn):
-            conn.execute("ROLLBACK")
-            row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
-            pid = row["pid"] if row else "?"
-            print(f"[downloader] Another scheduler is running (PID {pid})", flush=True)
-            return False
-
-        # Claim the lock
-        _our_pid = os.getpid()
-        now = now_iso()
-        conn.execute("DELETE FROM scheduler_lock")
-        conn.execute(
-            "INSERT INTO scheduler_lock (id, pid, started_at, heartbeat) VALUES (1, ?, ?, ?)",
-            (_our_pid, now, now),
-        )
-        conn.execute("COMMIT")
-    except Exception as e:
-        try:
-            conn.execute("ROLLBACK")
-        except Exception:
-            pass
-        print(f"[downloader] Failed to acquire lock: {e}", flush=True)
+    # Cross-process lock
+    if not _acquire_lock():
         return False
 
-    # Recovery: downloads stuck in 'downloading' from a previous crash
+    # Recovery: downloads stuck in 'downloading' from a crash
+    conn = get_conn()
     stuck = conn.execute(
         "UPDATE downloads SET status = 'queued' WHERE status = 'downloading'"
     ).rowcount
@@ -436,45 +489,54 @@ def init_scheduler() -> bool:
     )
     _running = True
 
-    # Start poll thread (updates heartbeat + feeds pool)
-    _poll_thread = threading.Thread(target=_poll_loop, daemon=True, name="dl-poll")
-    _poll_thread.start()
+    # Start main loop thread
+    _main_thread = threading.Thread(target=_scheduler_loop, daemon=True, name="dl-main")
+    _main_thread.start()
 
     queued = conn.execute("SELECT COUNT(*) FROM downloads WHERE status = 'queued'").fetchone()[0]
     print(f"[downloader] Started (PID {_our_pid}, {MAX_CONCURRENT_DOWNLOADS} workers, {queued} queued)", flush=True)
+
+    # If there's already work, wake immediately
+    if queued > 0:
+        _touch_wake()
+
     return True
 
 
 def stop_scheduler():
-    """Stop the download scheduler gracefully.
-
-    Signals the poll loop to stop, waits for running downloads to complete,
-    then releases the lock. If the lock release fails (crash), the heartbeat
-    goes stale and another process can take over.
-    """
-    global _running, _pool, _poll_thread, _our_pid
+    """Stop the scheduler gracefully: finish active downloads, release lock, checkpoint WAL."""
+    global _running, _pool, _main_thread, _our_pid
 
     if not _running:
         return
 
     _running = False
 
+    # Wake the main loop so it exits the inotify wait
+    _touch_wake()
+
     if _pool:
         _pool.shutdown(wait=True)
         _pool = None
-    _poll_thread = None
+    _main_thread = None
 
     # Release lock
+    _release_lock()
+
+    # WAL checkpoint — flush everything to disk for clean shutdown
     try:
         conn = get_conn()
-        conn.execute("DELETE FROM scheduler_lock WHERE id = 1 AND pid = ?", (_our_pid,))
-        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception:
-        pass  # Lock will expire via stale heartbeat
+        pass
 
     _our_pid = None
     print("[downloader] Stopped", flush=True)
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PUBLIC API — enqueue, cancel, retry, status, list
+# ══════════════════════════════════════════════════════════════════════════════
 
 def enqueue(
     url: str,
@@ -484,26 +546,22 @@ def enqueue(
     priority: int = 0,
     max_retries: int = 3,
 ) -> str:
-    """Add a download to the queue.
+    """Add a download to the queue and wake the scheduler.
 
-    The download will be picked up by a worker thread and executed.
-    When complete, the callback function delivers the file to its store.
+    The download record is written to the DB, then the .wake sentinel file
+    is touched to notify the scheduler (if running). If the scheduler is
+    not running, the record waits until it starts.
 
     Args:
         url: URL to download.
-        callback: Registered callback name (e.g. "media_store", "model_store").
-        callback_args: Dict passed to the callback function alongside the file path.
-                       Must be JSON-serializable. Contains everything the store
-                       needs (origin, origin_id, file, dest, format, etc.).
-        headers: HTTP headers for the request (e.g. auth tokens).
-        priority: Higher = picked first. Default 0.
-        max_retries: Max retry attempts on failure. Default 3.
+        callback: Registered callback name.
+        callback_args: Dict passed to callback on completion.
+        headers: HTTP headers (auth tokens, etc).
+        priority: Higher = picked first.
+        max_retries: Max attempts on failure.
 
     Returns:
         Download ID (UUID string).
-
-    Raises:
-        ValueError: If callback name is not registered.
     """
     if callback not in _callbacks:
         raise ValueError(f"Unknown callback '{callback}'. "
@@ -512,62 +570,40 @@ def enqueue(
     dl_id = uuid.uuid4().hex
     conn = get_conn()
     conn.execute("""
-        INSERT INTO downloads (id, url, headers, callback, callback_args, status, priority, max_retries, created_at)
+        INSERT INTO downloads (id, url, headers, callback, callback_args,
+                               status, priority, max_retries, created_at)
         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)
     """, (
-        dl_id,
-        url,
+        dl_id, url,
         json.dumps(headers) if headers else None,
-        callback,
-        json.dumps(callback_args or {}),
-        priority,
-        max_retries,
-        now_iso(),
+        callback, json.dumps(callback_args or {}),
+        priority, max_retries, now_iso(),
     ))
     conn.commit()
+
+    # Wake the scheduler
+    _touch_wake()
+
     return dl_id
 
 
 def cancel(dl_id: str) -> bool:
-    """Cancel a download.
-
-    If queued, removes it. If downloading, signals the worker to stop
-    (checked at next progress flush).
-
-    Args:
-        dl_id: Download ID.
-
-    Returns:
-        True if found and cancelled, False if not found.
-    """
+    """Cancel a download. Signals active worker to stop at next progress flush."""
     conn = get_conn()
     row = conn.execute("SELECT status FROM downloads WHERE id = ?", (dl_id,)).fetchone()
-    if not row:
-        return False
-    if row["status"] in ("done", "error", "cancelled"):
+    if not row or row["status"] in ("done", "error", "cancelled"):
         return False
     conn.execute(
         "UPDATE downloads SET status = 'cancelled', completed_at = ? WHERE id = ?",
         (now_iso(), dl_id),
     )
     conn.commit()
-    # Clean up temp file
-    temp = DOWNLOADS_DIR / f"{dl_id}.partial"
-    temp.unlink(missing_ok=True)
+    (DOWNLOADS_DIR / f"{dl_id}.partial").unlink(missing_ok=True)
     return True
 
 
 def retry(dl_id: str) -> bool:
-    """Retry a failed or cancelled download.
-
-    Resets status to 'queued' and clears error. Retries counter is NOT reset.
-
-    Args:
-        dl_id: Download ID.
-
-    Returns:
-        True if found and reset, False if not found or not in retryable state.
-    """
+    """Retry a failed/cancelled download. Requeues and wakes scheduler."""
     conn = get_conn()
     row = conn.execute("SELECT status FROM downloads WHERE id = ?", (dl_id,)).fetchone()
     if not row or row["status"] not in ("error", "cancelled"):
@@ -577,29 +613,19 @@ def retry(dl_id: str) -> bool:
         (dl_id,),
     )
     conn.commit()
+    _touch_wake()
     return True
 
 
 def get_status(dl_id: str) -> dict | None:
-    """Get current status of a download.
-
-    Args:
-        dl_id: Download ID.
-
-    Returns:
-        Dict with all download fields, or None if not found.
-    """
+    """Get current status of a single download."""
     conn = get_conn()
     row = conn.execute("SELECT * FROM downloads WHERE id = ?", (dl_id,)).fetchone()
     return dict(row) if row else None
 
 
 def list_active() -> list[dict]:
-    """List all non-terminal downloads (queued + downloading).
-
-    Returns:
-        List of download record dicts, ordered by priority then created_at.
-    """
+    """List queued + downloading records, ordered by priority."""
     conn = get_conn()
     rows = conn.execute("""
         SELECT * FROM downloads
@@ -610,57 +636,33 @@ def list_active() -> list[dict]:
 
 
 def list_all(limit: int = 50) -> list[dict]:
-    """List all downloads, newest first.
-
-    Args:
-        limit: Max results.
-
-    Returns:
-        List of download record dicts.
-    """
+    """List all downloads, newest first."""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?",
-        (limit,),
+        "SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?", (limit,)
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def cleanup_temp():
-    """Remove temp files for completed, failed, or cancelled downloads.
-
-    Scans V2_DIR/downloads/ for .partial files that aren't actively downloading.
-
-    Returns:
-        Number of files removed.
-    """
+def cleanup_temp() -> int:
+    """Remove temp .partial files for non-active downloads."""
     conn = get_conn()
-    # Get IDs of active downloads
     active_ids = {
         r[0] for r in conn.execute(
             "SELECT id FROM downloads WHERE status IN ('queued', 'downloading')"
         ).fetchall()
     }
-
     removed = 0
     if DOWNLOADS_DIR.exists():
         for f in DOWNLOADS_DIR.iterdir():
-            if f.is_file() and f.suffix == ".partial":
-                # Extract ID from filename (format: {id}.partial)
-                file_id = f.stem
-                if file_id not in active_ids:
-                    f.unlink()
-                    removed += 1
-
+            if f.is_file() and f.suffix == ".partial" and f.stem not in active_ids:
+                f.unlink()
+                removed += 1
     return removed
 
 
 def queue_size() -> dict:
-    """Get queue statistics.
-
-    Returns:
-        Dict with counts: queued, downloading, done, error, cancelled.
-    """
+    """Get counts by status: queued, downloading, done, error, cancelled."""
     conn = get_conn()
     rows = conn.execute(
         "SELECT status, COUNT(*) FROM downloads GROUP BY status"

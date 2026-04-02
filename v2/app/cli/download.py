@@ -136,13 +136,11 @@ def cmd_stop(args):
     if not dl.is_running():
         print(_dim("  Scheduler is not running."))
         return
-    from v2.app.core.db import get_conn
-    conn = get_conn()
-    row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
-    if not row:
+    info = dl.get_lock_info()
+    if not info:
         print(_dim("  No scheduler lock found."))
         return
-    pid = row["pid"]
+    pid = info["pid"]
     import os, signal
     try:
         os.kill(pid, signal.SIGTERM)
@@ -164,14 +162,11 @@ def cmd_running(args):
         print(json.dumps({"running": running}))
         return
     if running:
-        from v2.app.core.db import get_conn
-        conn = get_conn()
-        row = conn.execute("SELECT pid, started_at, heartbeat FROM scheduler_lock WHERE id = 1").fetchone()
+        info = dl.get_lock_info()
         print(f"  {_green('Scheduler is running')}")
-        if row:
-            print(f"  PID:       {row['pid']}")
-            print(f"  Started:   {_fmt_date(row['started_at'])}")
-            print(f"  Heartbeat: {_fmt_date(row['heartbeat'])}")
+        if info:
+            print(f"  PID:       {info['pid']}")
+            print(f"  Started:   {_fmt_date(info['started_at'])}")
     else:
         print(f"  {_dim('Scheduler is not running.')}")
 
