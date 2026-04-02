@@ -31,7 +31,10 @@ from datetime import datetime, timezone
 from v2.app.settings import MEDIA_STORE_DIR, now_iso
 from v2.app.db import get_conn, register_schema
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════════
+# ────────────────────────────────────────────────────────────────
 
 ALLOWED_IMAGE = {
     ".jpeg", ".jpg", ".png", ".webp", ".gif", ".bmp",
@@ -52,7 +55,9 @@ THUMB_QUALITY = 70
 
 SCHEMA_VERSION = 1
 
-# ── Schema ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  SCHEMA
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _init_schema(conn: sqlite3.Connection):
     """Create media tables and indexes.  Called by db.init_db()."""
@@ -125,7 +130,9 @@ def _init_schema(conn: sqlite3.Connection):
 register_schema("media_store", _init_schema)
 
 
-# ── Path helpers ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  PATH HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _shard_dir(media_id: str) -> str:
     """Return shard path: first 2 + next 2 chars of UUID → 'ab/cd'."""
@@ -147,7 +154,9 @@ def _ensure_dir(rel: str):
     _abs_path(rel).parent.mkdir(parents=True, exist_ok=True)
 
 
-# ── Validation ───────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  VALIDATION
+# ══════════════════════════════════════════════════════════════════════════════
 
 def validate(path: Path) -> tuple[str, str]:
     """Validate file: extension must be allowed and content must match.
@@ -197,7 +206,9 @@ def validate(path: Path) -> tuple[str, str]:
     raise ValueError(f"Unhandled extension '{ext}'")
 
 
-# ── Property extraction ──────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  PROPERTY EXTRACTION
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _extract_image_properties(path: Path) -> dict:
     """Extract properties from an image file using Pillow."""
@@ -291,7 +302,9 @@ def extract_properties(path: Path, media_type: str) -> dict:
     return {}
 
 
-# ── EXIF / metadata extraction ───────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXIF / METADATA EXTRACTION
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _extract_image_exif(path: Path) -> dict | None:
     """Extract embedded metadata from an image file."""
@@ -370,7 +383,9 @@ def extract_exif(path: Path, media_type: str) -> dict | None:
     return None
 
 
-# ── Hash ─────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  HASH
+# ══════════════════════════════════════════════════════════════════════════════
 
 def compute_hash(path: Path) -> str:
     """Compute SHA-256 of a file."""
@@ -384,7 +399,9 @@ def compute_hash(path: Path) -> str:
     return h.hexdigest()
 
 
-# ── Thumbnail generation ────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  THUMBNAIL GENERATION
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _generate_image_thumb(source: Path, dest: Path, max_side: int) -> bool:
     """Resize image so longest side = max_side.  Skip if source is smaller."""
@@ -461,7 +478,9 @@ def generate_thumbs(media_id: str, source_path: Path, media_type: str) -> list[d
     return results
 
 
-# ── Core operations ──────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  CORE OPERATIONS
+# ══════════════════════════════════════════════════════════════════════════════
 
 def store(
     source_path: Path,
@@ -573,7 +592,9 @@ def store_from_bytes(
         raise
 
 
-# ── Queries ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  QUERIES
+# ══════════════════════════════════════════════════════════════════════════════
 
 def get(media_id: str) -> dict | None:
     """Get media record by ID."""
@@ -641,7 +662,9 @@ def hash_exists(file_hash: str) -> bool:
     return row is not None
 
 
-# ── Serve ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  SERVE
+# ══════════════════════════════════════════════════════════════════════════════
 
 def serve_path(media_id: str) -> Path | None:
     """Get absolute path of the original file for serving."""
@@ -663,7 +686,9 @@ def serve_thumb_path(media_id: str, size: str = "sm") -> Path | None:
     return serve_path(media_id)
 
 
-# ── Delete ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  DELETE
+# ══════════════════════════════════════════════════════════════════════════════
 
 def delete(media_id: str) -> bool:
     """Delete media: remove files from disk and record from DB."""
@@ -699,7 +724,9 @@ def delete(media_id: str) -> bool:
     return True
 
 
-# ── Stats ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  STATS
+# ══════════════════════════════════════════════════════════════════════════════
 
 def total_size() -> int:
     """Total bytes of all media files (originals only, no thumbs)."""
@@ -764,6 +791,8 @@ def stats() -> dict:
     }
 
 
+# ── Queries: search and filter ────────────────────────────────────────────────
+
 def get_by_prefix(prefix: str) -> dict | None:
     """Find media by ID prefix (min 8 chars)."""
     conn = get_conn()
@@ -814,6 +843,8 @@ def find_by_name(name: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ── Diagnostics: dedup, orphans, schema ───────────────────────────────────────
+
 def find_duplicates() -> list[dict]:
     """Find media with duplicate hashes."""
     conn = get_conn()
@@ -850,6 +881,8 @@ def find_for_reindex(force: bool = False) -> list[dict]:
         "SELECT id, file_path, type, ext FROM media WHERE schema_version < ?", (SCHEMA_VERSION,)
     ).fetchall()]
 
+
+# ── Mutations: update, delete thumbs, insert thumbs ──────────────────────────
 
 def update_fields(media_id: str, **kwargs):
     """Update specific fields on a media record."""
