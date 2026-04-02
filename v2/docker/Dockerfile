@@ -17,7 +17,9 @@ RUN pip install \
     inotify
 
 # Workspace structure (matches production layout)
-ENV WORKSPACE=/workspace
+ENV WORKSPACE=/workspace \
+    PYTHONPATH=/workspace/studio \
+    PATH="/workspace/studio/v2/app/bin:${PATH}"
 RUN mkdir -p /workspace/studio/v2
 
 # Entrypoint

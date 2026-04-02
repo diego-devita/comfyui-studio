@@ -29,17 +29,36 @@ for dir in db media models downloads; do
     echo "  ${dir}/ → data/${dir}/"
 done
 
-# ── Ready ────────────────────────────────────────────────────────
-echo "[3/3] Container ready."
+# ── PATH and aliases ──────────────────────────────────────────────
+echo "[3/3] Setting up PATH and aliases..."
+export PATH="${STUDIO_V2}/app/bin:${PATH}"
+export PYTHONPATH="/workspace/studio"
+
+# Write to bashrc so interactive shells get them too
+cat >> /root/.bashrc << 'BASHEOF'
+export PATH="/workspace/studio/v2/app/bin:${PATH}"
+export PYTHONPATH="/workspace/studio"
+cd /workspace/studio
+BASHEOF
+
 echo ""
-echo "  WORKSPACE:  /workspace"
-echo "  STUDIO_DIR: /workspace/studio"
-echo "  V2_DIR:     /workspace/studio/v2"
-echo "  Data:       /workspace/studio/v2/data/ (persistent)"
+echo "  ══════════════════════════════════════════"
+echo "  Studio v2 Dev Container ready"
+echo "  ══════════════════════════════════════════"
 echo ""
-echo "  CLI:  python3 -m v2.app.cli --help"
-echo "  Test: python3 -m v2.app.cli db tables"
+echo "  Commands:"
+echo "    studio --help"
+echo "    studio db tables"
+echo "    studio media stats"
+echo "    studio-downloader"
+echo ""
+echo "  Paths:"
+echo "    WORKSPACE:  /workspace"
+echo "    STUDIO_DIR: /workspace/studio"
+echo "    V2_DIR:     /workspace/studio/v2"
+echo "    Data:       /workspace/studio/v2/data/"
 echo ""
 
-# Keep container alive
+# Keep container alive, start in repo root
+cd /workspace/studio
 exec bash
