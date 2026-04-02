@@ -21,13 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 
-# ── Resolve app/ imports ────────────────────────────────────────────────────
-# When invoked as `studio` from PATH, we need app/ on sys.path.
-# STUDIO_DIR/app/ contains the modules.
-_STUDIO_DIR = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
-_APP_DIR = _STUDIO_DIR / "app"
-if str(_APP_DIR.parent) not in sys.path:
-    sys.path.insert(0, str(_APP_DIR.parent))
+# ── Resolve imports ──────────────────────────────────────────────────────────
+# When invoked via bin/studio, the project root must be on sys.path
+# so that "from v2.app.xxx" imports work. The bin/studio launcher handles this.
 
 
 # ── Output helpers ──────────────────────────────────────────────────────────
@@ -99,17 +95,34 @@ def _table(headers: list[str], rows: list[list[str]], min_widths: list[int] | No
 
 # ── Media commands ──────────────────────────────────────────────────────────
 
+_initialized = False
+
+def _init():
+    """Initialize all modules and DB. Called once, idempotent."""
+    global _initialized
+    if _initialized:
+        return
+    from v2.app import media_store        # registers schema
+    from v2.app import model_store        # registers schema
+    from v2.app import catalog            # registers schema
+    from v2.app import download_scheduler # registers schema
+    from v2.app import gallery            # registers schema + callback
+    from v2.app.db import init_db
+    init_db()
+    _initialized = True
+
+
 def _db_conn():
     """Get DB connection for CLI commands."""
+    _init()
     from v2.app.db import get_conn
     return get_conn()
 
 
 def _get_media_store():
-    """Lazy import of media_store module. Initializes DB on first call."""
-    from v2.app.db import init_db
-    from v2.app import media_store  # importing registers its schema
-    init_db()
+    """Get media_store module (initializes DB on first call)."""
+    _init()
+    from v2.app import media_store
     return media_store
 
 
@@ -1096,6 +1109,1115 @@ def cmd_media_thumb(args):
     print()
 
 
+# ── Catalog commands ─────────────────────────────────────────────────────────
+
+def _get_catalog():
+    _init()
+    from v2.app import catalog
+    return catalog
+
+
+def cmd_catalog_stats(args):
+    """Show catalog statistics."""
+    cat = _get_catalog()
+    s = cat.stats()
+    if args.json:
+        print(json.dumps(s, indent=2))
+        return
+    print(f"\n  {_bold('Catalog Statistics')}\n")
+    print(f"  Models (parents):  {_cyan(str(s['models']))}")
+    print(f"  Versions:          {_cyan(str(s['versions']))}")
+    print(f"  Files (catalog):   {_cyan(str(s['files']))}")
+    print(f"  Downloaded:        {_green(str(s['downloaded']))}")
+    print(f"  Not downloaded:    {_yellow(str(s['not_downloaded']))}")
+    print()
+
+
+def cmd_catalog_list(args):
+    """List models with optional filters."""
+    cat = _get_catalog()
+    models = cat.find_models(
+        name=args.search,
+        category=args.category,
+        type=args.type,
+        limit=args.limit,
+        offset=args.offset,
+    )
+    if args.json:
+        print(json.dumps(models, indent=2, default=str))
+        return
+    if not models:
+        print(_dim("  No models found."))
+        return
+    print(f"\n  {_bold(f'Models ({len(models)})')}\n")
+    _table(
+        ["ID", "Name", "Category", "Type", "Creator"],
+        [[m["id"][:12] + "...", m["name"][:40], m.get("category") or "-",
+          m.get("type") or "-", m.get("creator") or "-"] for m in models],
+    )
+    print()
+
+
+def cmd_catalog_info(args):
+    """Show detailed info about a model."""
+    cat = _get_catalog()
+    m = cat.get_model(args.id)
+    if not m:
+        print(_red(f"  Model not found: {args.id}"))
+        sys.exit(1)
+    if args.json:
+        versions = cat.get_versions_by_model(m["id"])
+        m["versions"] = versions
+        for v in versions:
+            v["files"] = cat.get_version(v["id"]).get("files", [])
+        print(json.dumps(m, indent=2, default=str))
+        return
+    print(f"\n  {_bold('Model Info')}\n")
+    print(f"  ID:       {_cyan(m['id'])}")
+    print(f"  Name:     {m['name']}")
+    print(f"  Category: {m.get('category') or '-'}")
+    print(f"  Type:     {m.get('type') or '-'}")
+    print(f"  Creator:  {m.get('creator') or '-'}")
+    print(f"  NSFW:     {'yes' if m.get('nsfw') else 'no'}")
+    if m.get("tags"):
+        try:
+            print(f"  Tags:     {', '.join(json.loads(m['tags']))}")
+        except Exception:
+            print(f"  Tags:     {m['tags']}")
+    sources = cat.get_sources("model", m["id"])
+    for s in sources:
+        print(f"  Source:   {s['source']} → {s['source_id']}" + (f"  {s['source_url']}" if s.get("source_url") else ""))
+    versions = cat.get_versions_by_model(m["id"])
+    print(f"\n  {_bold(f'Versions ({len(versions)})')}")
+    for v in versions:
+        vdata = cat.get_version(v["id"])
+        files = vdata.get("files", [])
+        downloaded = sum(1 for f in files if f.get("store_id"))
+        print(f"\n    {_cyan(v['id'][:12])}... {v['name']}")
+        print(f"      base_model: {v.get('base_model') or '-'}")
+        print(f"      files: {len(files)} ({downloaded} downloaded)")
+        for f in files:
+            status = _green("DL") if f.get("store_id") else _dim("--")
+            role = f.get("role") or ""
+            print(f"        {status} {f['file'][:50]} [{f['file_type']}] {role}")
+    print()
+
+
+def cmd_catalog_import(args):
+    """Import a model from CivitAI (upsert)."""
+    from v2.app.civitai_client import CivitaiClient
+    from v2.app.settings import CIVITAI_API_KEY
+    cat = _get_catalog()
+
+    api_key = args.api_key or CIVITAI_API_KEY
+    if not api_key:
+        print(_red("  CivitAI API key required. Use --api-key or set CIVITAI_API_KEY."))
+        sys.exit(1)
+
+    client = CivitaiClient(api_key=api_key)
+    print(f"  Fetching model {args.civitai_id} from CivitAI...", end="", flush=True)
+    try:
+        data = client.get_model(args.civitai_id)
+    except Exception as e:
+        print(f" {_red(str(e))}")
+        sys.exit(1)
+
+    print(f" {_green(data.get('name', '?'))}")
+    total_versions = len(data.get("modelVersions", []))
+    print(f"  Type: {data.get('type')}  Versions: {total_versions}")
+
+    version_ids = None
+    if args.versions:
+        version_ids = [int(v) for v in args.versions.split(",")]
+        print(f"  Importing only versions: {version_ids}")
+
+    result = cat.import_from_civitai(
+        civitai_data=data,
+        version_ids=version_ids,
+        category=args.category,
+    )
+
+    print(f"\n  {_green('Done:')}")
+    print(f"    Model ID:        {result['model_id'][:12]}...")
+    print(f"    Versions created: {result['versions_created']}")
+    print(f"    Versions skipped: {result['versions_skipped']}")
+    print(f"    Files created:    {result['files_created']}")
+    print()
+
+
+def cmd_catalog_versions(args):
+    """List versions of a model."""
+    cat = _get_catalog()
+    versions = cat.get_versions_by_model(args.model_id)
+    if args.json:
+        print(json.dumps(versions, indent=2, default=str))
+        return
+    if not versions:
+        print(_dim("  No versions found."))
+        return
+    print(f"\n  {_bold(f'Versions ({len(versions)})')}\n")
+    _table(
+        ["ID", "Name", "Base Model", "Published"],
+        [[v["id"][:12] + "...", v["name"][:35], v.get("base_model") or "-",
+          _fmt_date(v.get("published_at") or "")[:10]] for v in versions],
+    )
+    print()
+
+
+def cmd_catalog_files(args):
+    """List files of a version."""
+    cat = _get_catalog()
+    v = cat.get_version(args.version_id)
+    if not v:
+        print(_red(f"  Version not found: {args.version_id}"))
+        sys.exit(1)
+    files = v.get("files", [])
+    if args.json:
+        print(json.dumps(files, indent=2, default=str))
+        return
+    if not files:
+        print(_dim("  No files."))
+        return
+    vname = v["name"]
+    print(f"\n  {_bold(f'Files for {vname} ({len(files)})')}\n")
+    for f in files:
+        status = _green("DOWNLOADED") if f.get("store_id") else _yellow("NOT DOWNLOADED")
+        print(f"  {f['id'][:12]}... {f['file'][:45]}")
+        print(f"    type: {f['file_type']}  dest: {f['dest']}  role: {f.get('role') or '-'}  {status}")
+    print()
+
+
+# ── Download commands ────────────────────────────────────────────────────────
+
+def _get_scheduler():
+    _init()
+    from v2.app import download_scheduler
+    return download_scheduler
+
+
+def cmd_download_list(args):
+    """List downloads."""
+    dl = _get_scheduler()
+    if args.active:
+        rows = dl.list_active()
+    else:
+        rows = dl.list_all(limit=args.limit)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return
+    if not rows:
+        print(_dim("  No downloads."))
+        return
+    print(f"\n  {_bold(f'Downloads ({len(rows)})')}\n")
+    _table(
+        ["ID", "Status", "Progress", "Callback", "Created"],
+        [[r["id"][:12] + "...", r["status"],
+          f"{r.get('downloaded_bytes', 0) or 0}/{r.get('total_bytes') or '?'}",
+          r["callback"], _fmt_date(r["created_at"])[:16]] for r in rows],
+    )
+    print()
+
+
+def cmd_download_status(args):
+    """Show download status."""
+    dl = _get_scheduler()
+    r = dl.get_status(args.id)
+    if not r:
+        print(_red(f"  Download not found: {args.id}"))
+        sys.exit(1)
+    if args.json:
+        print(json.dumps(r, indent=2, default=str))
+        return
+    print(f"\n  {_bold('Download')}\n")
+    print(f"  ID:         {_cyan(r['id'])}")
+    print(f"  URL:        {r['url'][:80]}")
+    print(f"  Status:     {r['status']}")
+    print(f"  Progress:   {_fmt_bytes(r.get('downloaded_bytes', 0) or 0)} / {_fmt_bytes(r.get('total_bytes') or 0)}")
+    print(f"  Callback:   {r['callback']}")
+    print(f"  Retries:    {r.get('retries', 0)}/{r.get('max_retries', 3)}")
+    if r.get("error"):
+        print(f"  Error:      {_red(r['error'][:200])}")
+    print(f"  Created:    {_fmt_date(r['created_at'])}")
+    if r.get("started_at"):
+        print(f"  Started:    {_fmt_date(r['started_at'])}")
+    if r.get("completed_at"):
+        print(f"  Completed:  {_fmt_date(r['completed_at'])}")
+    print()
+
+
+def cmd_download_cancel(args):
+    """Cancel a download."""
+    dl = _get_scheduler()
+    if dl.cancel(args.id):
+        print(f"  {_green('Cancelled')} {args.id}")
+    else:
+        print(_red(f"  Not found or already terminal: {args.id}"))
+
+
+def cmd_download_retry(args):
+    """Retry a failed download."""
+    dl = _get_scheduler()
+    if dl.retry(args.id):
+        print(f"  {_green('Requeued')} {args.id}")
+    else:
+        print(_red(f"  Not found or not in retryable state: {args.id}"))
+
+
+def cmd_download_cleanup(args):
+    """Clean up temp download files."""
+    dl = _get_scheduler()
+    removed = dl.cleanup_temp()
+    print(f"  {_green(f'{removed} temp file(s) removed')}")
+
+
+def cmd_download_queue(args):
+    """Show queue statistics."""
+    dl = _get_scheduler()
+    q = dl.queue_size()
+    if args.json:
+        print(json.dumps(q, indent=2))
+        return
+    print(f"\n  {_bold('Download Queue')}\n")
+    for status, count in q.items():
+        print(f"  {status:15s} {count}")
+    print()
+
+
+# ── Gallery commands ─────────────────────────────────────────────────────────
+
+def _get_gallery():
+    _init()
+    from v2.app import gallery
+    return gallery
+
+
+def cmd_gallery_stats(args):
+    """Show total gallery statistics (card + community counts and sizes)."""
+    g = _get_gallery()
+    s = g.get_gallery_stats()
+    if args.json:
+        print(json.dumps(s, indent=2))
+        return
+    print(f"\n  {_bold('Gallery Statistics')}\n")
+    print(f"  Card images:      {s['card_count']:>6d}  ({_fmt_bytes(s['card_bytes'])})")
+    print(f"  Community images: {s['community_count']:>6d}  ({_fmt_bytes(s['community_bytes'])})")
+    print(f"  Total:            {s['total_count']:>6d}  ({_fmt_bytes(s['total_bytes'])})")
+    print()
+
+
+def cmd_gallery_status(args):
+    """Show gallery status for models/versions in the catalog."""
+    g = _get_gallery()
+    cat = _get_catalog()
+    conn = _db_conn()
+
+    # Single model or single version
+    if args.model_id:
+        m = cat.get_model(args.model_id)
+        if not m:
+            print(_red(f"  Model not found: {args.model_id}"))
+            sys.exit(1)
+
+        gal = g.get_model_gallery(m["id"])
+
+        if args.version:
+            # Single version
+            v_count = gal["versions"].get(args.version, {})
+            if args.json:
+                print(json.dumps({"model_id": m["id"], "version_id": args.version, **v_count}, indent=2))
+                return
+            print(f"\n  {m['name']} / version {args.version[:12]}...")
+            print(f"  Community: {v_count.get('count', 0)} images ({_fmt_bytes(v_count.get('bytes', 0))})")
+            print()
+            return
+
+        # Whole model
+        if args.json:
+            print(json.dumps({"model_id": m["id"], "name": m["name"], **gal}, indent=2, default=str))
+            return
+        print(f"\n  {_bold(m['name'])}\n")
+        print(f"  Card images: {gal['card_count']} ({_fmt_bytes(gal['card_bytes'])})")
+        versions = cat.get_versions_by_model(m["id"])
+        for v in versions:
+            vc = gal["versions"].get(v["id"], {})
+            count = vc.get("count", 0)
+            vbytes = vc.get("bytes", 0)
+            print(f"    {v['name']:35s}  {count:>5d} community  ({_fmt_bytes(vbytes)})")
+        print()
+        return
+
+    # All models
+    models = cat.find_models(limit=500)
+    rows = []
+    for m in models:
+        gal = g.get_model_gallery(m["id"])
+        card_count = gal["card_count"]
+        comm_count = gal["community_count"]
+        if args.empty and (card_count > 0 or comm_count > 0):
+            continue
+        if not args.empty or (card_count == 0 and comm_count == 0):
+            rows.append({
+                "model_id": m["id"], "name": m["name"],
+                "card": card_count, "community": comm_count,
+                "card_bytes": gal["card_bytes"], "community_bytes": gal["community_bytes"],
+            })
+
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        print(_dim("  No models match."))
+        return
+    print(f"\n  {_bold('Gallery Status')}\n")
+    _table(
+        ["Model", "Card", "Community", "Total Size"],
+        [[r["name"][:40], str(r["card"]), str(r["community"]),
+          _fmt_bytes(r["card_bytes"] + r["community_bytes"])] for r in rows],
+    )
+    total_card = sum(r["card"] for r in rows)
+    total_comm = sum(r["community"] for r in rows)
+    print(f"\n  {len(rows)} models, {total_card} card, {total_comm} community")
+    print()
+
+
+def cmd_gallery_download(args):
+    """Download gallery images for a model."""
+    g = _get_gallery()
+    cat = _get_catalog()
+    from v2.app.settings import CIVITAI_API_KEY
+    import time as _time
+
+    api_key = CIVITAI_API_KEY
+    if not api_key:
+        print(_red("  CIVITAI_API_KEY not set."))
+        sys.exit(1)
+
+    # Interactive mode: no model_id given
+    if not args.model_id:
+        models = cat.find_models(limit=100)
+        if not models:
+            print(_dim("  Catalog is empty. Import models first with 'studio catalog import'."))
+            return
+        print(f"\n  {_bold('Choose a model:')}\n")
+        for i, m in enumerate(models):
+            print(f"  {i+1:3d}. {m['name'][:50]}  ({m.get('category') or '?'})")
+        print()
+        try:
+            choice = int(input("  Number: ").strip()) - 1
+            if choice < 0 or choice >= len(models):
+                print("  Cancelled.")
+                return
+        except (ValueError, EOFError):
+            print("  Cancelled.")
+            return
+        selected_model = models[choice]
+    else:
+        selected_model = cat.get_model(args.model_id)
+        if not selected_model:
+            print(_red(f"  Model not found: {args.model_id}"))
+            sys.exit(1)
+
+    model_id = selected_model["id"]
+    model_name = selected_model["name"]
+
+    # Get CivitAI model ID from source mappings
+    source = cat.get_by_source_entity("model", model_id)
+    if not source:
+        print(_red(f"  No CivitAI source for model '{model_name}'. Only CivitAI models supported."))
+        sys.exit(1)
+    civitai_model_id = int(source["source_id"])
+
+    # Determine what to download
+    job_ids = []
+
+    if args.cards or args.all:
+        print(f"\n  Downloading card images for {_cyan(model_name)}...")
+        jid = g.download_card_images(model_id, civitai_model_id, api_key)
+        if jid:
+            job_ids.append(("card", jid))
+            print(f"  Job: {jid[:12]}...")
+        else:
+            print(_dim("  No card images found."))
+
+    if args.version:
+        # Community for specific version
+        version = cat.get_version(args.version)
+        if not version:
+            print(_red(f"  Version not found: {args.version}"))
+            sys.exit(1)
+        vs = cat.get_by_source_entity("version", args.version)
+        if not vs:
+            print(_red(f"  No CivitAI source for version."))
+            sys.exit(1)
+        civitai_vid = int(vs["source_id"])
+        print(f"  Downloading community for {_cyan(version['name'])}...")
+        jid = g.download_community_images(model_id, args.version, civitai_vid, api_key)
+        if jid:
+            job_ids.append(("community", jid))
+            print(f"  Job: {jid[:12]}...")
+        else:
+            print(_dim("  No community images found."))
+
+    elif args.all:
+        # Community for ALL versions
+        versions = cat.get_versions_by_model(model_id)
+        for v in versions:
+            vs = cat.get_by_source_entity("version", v["id"])
+            if not vs:
+                continue
+            civitai_vid = int(vs["source_id"])
+            print(f"  Downloading community for {_cyan(v['name'])}...")
+            jid = g.download_community_images(model_id, v["id"], civitai_vid, api_key)
+            if jid:
+                job_ids.append(("community", jid))
+                print(f"  Job: {jid[:12]}...")
+
+    elif not args.cards:
+        # Interactive: ask what to download
+        print(f"\n  Model: {_bold(model_name)}")
+        versions = cat.get_versions_by_model(model_id)
+        print(f"  Versions: {len(versions)}\n")
+        print("  What to download?")
+        print("    1. Card images only")
+        print("    2. Community images (choose version)")
+        print("    3. Everything (cards + community all versions)")
+        print()
+        try:
+            choice = input("  Choice [1/2/3]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("  Cancelled.")
+            return
+
+        if choice == "1":
+            jid = g.download_card_images(model_id, civitai_model_id, api_key)
+            if jid:
+                job_ids.append(("card", jid))
+        elif choice == "2":
+            for i, v in enumerate(versions):
+                print(f"    {i+1}. {v['name']}")
+            try:
+                vi = int(input("  Version: ").strip()) - 1
+            except (ValueError, EOFError):
+                print("  Cancelled.")
+                return
+            if vi < 0 or vi >= len(versions):
+                print("  Cancelled.")
+                return
+            v = versions[vi]
+            vs = cat.get_by_source_entity("version", v["id"])
+            if vs:
+                jid = g.download_community_images(model_id, v["id"], int(vs["source_id"]), api_key)
+                if jid:
+                    job_ids.append(("community", jid))
+        elif choice == "3":
+            jid = g.download_card_images(model_id, civitai_model_id, api_key)
+            if jid:
+                job_ids.append(("card", jid))
+            for v in versions:
+                vs = cat.get_by_source_entity("version", v["id"])
+                if vs:
+                    jid = g.download_community_images(model_id, v["id"], int(vs["source_id"]), api_key)
+                    if jid:
+                        job_ids.append(("community", jid))
+
+    if not job_ids:
+        print(_dim("\n  Nothing to download."))
+        return
+
+    # Background mode: just print IDs and exit
+    if args.background:
+        print(f"\n  {_green(f'{len(job_ids)} job(s) started in background:')}")
+        for jtype, jid in job_ids:
+            print(f"    {jtype}: {jid[:12]}...")
+        print(f"\n  Monitor: studio gallery jobs")
+        print()
+        return
+
+    # Live monitoring mode: poll and show progress
+    print(f"\n  {_bold(f'Monitoring {len(job_ids)} job(s)...')}  (Ctrl+C to detach)\n")
+    try:
+        while True:
+            all_done = True
+            for jtype, jid in job_ids:
+                j = g.get_job_status(jid)
+                if j is None:
+                    # Job completed and auto-deleted
+                    print(f"\r  {_green('✓')} {jtype}: completed                              ")
+                    continue
+                all_done = False
+                total = j["total"] or 0
+                completed = j["completed"]
+                failed = j["failed"]
+                pct = (completed / total * 100) if total > 0 else 0
+                bar_w = 30
+                filled = int(bar_w * pct / 100)
+                bar = "█" * filled + "░" * (bar_w - filled)
+                fail_str = f"  {_red(f'{failed} failed')}" if failed else ""
+                print(f"\r  [{bar}] {completed}/{total} {pct:.0f}%  {jtype}{fail_str}    ", end="", flush=True)
+
+            if all_done:
+                print(f"\n\n  {_green('All done.')}")
+                break
+            _time.sleep(1)
+
+    except KeyboardInterrupt:
+        print(f"\n\n  Detached. Jobs continue in background.")
+        print(f"  Monitor: studio gallery jobs")
+        for _, jid in job_ids:
+            print(f"  Stop:    studio gallery stop {jid[:12]}")
+        print()
+
+
+def cmd_gallery_jobs(args):
+    """List active gallery jobs (snapshot)."""
+    g = _get_gallery()
+    jobs = g.list_active_jobs()
+    if args.json:
+        print(json.dumps(jobs, indent=2, default=str))
+        return
+    if not jobs:
+        print(_dim("  No active gallery jobs."))
+        return
+    print(f"\n  {_bold(f'Gallery Jobs ({len(jobs)})')}\n")
+    _table(
+        ["ID", "Type", "Status", "Progress", "Failed", "Created"],
+        [[j["id"][:12] + "...", j["image_type"], j["status"],
+          f"{j['completed']}/{j['total']}", str(j["failed"]),
+          _fmt_date(j["created_at"])[:16]] for j in jobs],
+    )
+    print()
+
+
+def cmd_gallery_job(args):
+    """Monitor a gallery job. Live by default, snapshot with --json."""
+    g = _get_gallery()
+    import time as _time
+
+    j = g.get_job_status(args.id)
+    if not j:
+        print(_green("  Job completed (or not found)."))
+        return
+
+    if args.json:
+        print(json.dumps(j, indent=2, default=str))
+        return
+
+    # Live monitoring
+    print(f"\n  {_bold('Gallery Job')} {_cyan(j['id'][:12])}...  (Ctrl+C to exit)\n")
+    try:
+        while True:
+            j = g.get_job_status(args.id)
+            if j is None:
+                print(f"\r  {_green('Completed.')}                                     ")
+                break
+            total = j["total"] or 0
+            completed = j["completed"]
+            failed = j["failed"]
+            pct = (completed / total * 100) if total > 0 else 0
+            bar_w = 40
+            filled = int(bar_w * pct / 100)
+            bar = "█" * filled + "░" * (bar_w - filled)
+            fail_str = f"  {_red(f'{failed} failed')}" if failed else ""
+            print(f"\r  [{bar}] {completed}/{total} {pct:.0f}%  {j['status']}{fail_str}    ", end="", flush=True)
+            if j["status"] in ("error",):
+                print(f"\n  {_red('Job failed.')}")
+                break
+            _time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"\n  Exited monitoring. Job continues.")
+    print()
+
+
+def cmd_gallery_stop(args):
+    """Stop a running gallery job."""
+    g = _get_gallery()
+    g.stop_job(args.id)
+    print(f"  {_green('Stop signal sent')} for {args.id[:12]}...")
+
+
+def cmd_gallery_cleanup(args):
+    """Clean up interrupted/failed gallery jobs with a report."""
+    g = _get_gallery()
+    cat = _get_catalog()
+    conn = _db_conn()
+
+    rows = conn.execute("""
+        SELECT * FROM gallery_jobs WHERE status IN ('interrupted', 'error')
+        ORDER BY created_at DESC
+    """).fetchall()
+
+    if not rows:
+        print(_green("  No interrupted or failed gallery jobs."))
+        return
+
+    if args.json:
+        print(json.dumps([dict(r) for r in rows], indent=2, default=str))
+        return
+
+    print(f"\n  {_bold(f'Gallery jobs to clean up ({len(rows)})')}\n")
+    for r in rows:
+        m = cat.get_model(r["model_id"])
+        model_name = m["name"][:35] if m else "?"
+        total = r["total"] or 0
+        completed = r["completed"]
+        failed = r["failed"]
+        never_started = max(0, total - completed - failed)
+        print(f"  {r['id'][:12]}...  {r['status']:12s}  {model_name}")
+        print(f"    {r['image_type']}  {completed}/{total} done, {failed} failed, {never_started} never started")
+        print(f"    created: {_fmt_date(r['created_at'])}")
+        print()
+
+    if args.force:
+        pass  # skip confirmation
+    else:
+        try:
+            answer = input(f"  Delete {len(rows)} job(s)? [y/N] ").strip().lower()
+            if answer != "y":
+                print("  Cancelled.")
+                return
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Cancelled.")
+            return
+
+    conn.execute("DELETE FROM gallery_jobs WHERE status IN ('interrupted', 'error')")
+    conn.commit()
+    print(f"  {_green(f'{len(rows)} job(s) cleaned up.')}")
+
+
+def cmd_gallery_resume(args):
+    """Resume interrupted gallery jobs."""
+    g = _get_gallery()
+    cat = _get_catalog()
+    from v2.app.settings import CIVITAI_API_KEY
+    from v2.app.civitai_client import CivitaiClient
+    import time as _time
+
+    api_key = CIVITAI_API_KEY
+    if not api_key:
+        print(_red("  CIVITAI_API_KEY not set."))
+        sys.exit(1)
+
+    conn = _db_conn()
+
+    if args.job_id:
+        # Resume specific job
+        rows = conn.execute(
+            "SELECT * FROM gallery_jobs WHERE id = ? AND status = 'interrupted'",
+            (args.job_id,)
+        ).fetchall()
+        if not rows:
+            print(_red(f"  Job not found or not interrupted: {args.job_id}"))
+            sys.exit(1)
+    elif args.all:
+        rows = conn.execute(
+            "SELECT * FROM gallery_jobs WHERE status = 'interrupted'"
+        ).fetchall()
+    else:
+        # Interactive: list and choose
+        rows = conn.execute(
+            "SELECT * FROM gallery_jobs WHERE status = 'interrupted' ORDER BY created_at DESC"
+        ).fetchall()
+        if not rows:
+            print(_green("  No interrupted jobs to resume."))
+            return
+        print(f"\n  {_bold('Interrupted gallery jobs:')}\n")
+        for i, r in enumerate(rows):
+            m = cat.get_model(r["model_id"])
+            mname = m["name"][:40] if m else "?"
+            print(f"  {i+1:3d}. {r['id'][:12]}... {mname}  {r['image_type']}  {r['completed']}/{r['total']}")
+        print()
+        try:
+            choice = input("  Resume which? (number, 'all', or Enter to cancel): ").strip()
+            if choice.lower() == "all":
+                pass  # resume all
+            elif choice == "":
+                print("  Cancelled.")
+                return
+            else:
+                idx = int(choice) - 1
+                if idx < 0 or idx >= len(rows):
+                    print("  Cancelled.")
+                    return
+                rows = [rows[idx]]
+        except (ValueError, EOFError, KeyboardInterrupt):
+            print("\n  Cancelled.")
+            return
+
+    if not rows:
+        print(_green("  No interrupted jobs to resume."))
+        return
+
+    job_ids = []
+    for r in rows:
+        r = dict(r)
+        model_id = r["model_id"]
+        version_id = r.get("version_id")
+        image_type = r["image_type"]
+        job_id = r["id"]
+        total = r["total"] or 0
+        completed = r["completed"]
+        filters = json.loads(r.get("filters") or "{}")
+
+        m = cat.get_model(model_id)
+        mname = m["name"][:40] if m else "?"
+        print(f"\n  Resuming {_cyan(mname)} ({image_type}) — {completed}/{total} already done...")
+
+        # Get CivitAI IDs
+        model_source = cat.get_by_source_entity("model", model_id)
+        if not model_source:
+            print(_red(f"    No CivitAI source for model. Skipping."))
+            continue
+        civitai_model_id = int(model_source["source_id"])
+
+        # Set job back to running
+        conn.execute("UPDATE gallery_jobs SET status = 'running' WHERE id = ?", (job_id,))
+        conn.commit()
+
+        if image_type == "card":
+            # Re-fetch card images and enqueue only missing ones
+            client = CivitaiClient(api_key=api_key)
+            try:
+                model_data = client.get_model(civitai_model_id)
+            except Exception as e:
+                print(f"    {_red(f'CivitAI error: {e}')}")
+                conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
+                conn.commit()
+                continue
+
+            from v2.app.civitai_client import extract_cdn_id_from_url, build_cdn_url
+            enqueued = 0
+            for version in model_data.get("modelVersions", []):
+                for img in client.extract_card_images(version):
+                    cdn_id = img.get("cdn_id", "")
+                    if not cdn_id:
+                        continue
+                    # Dedup: check if already in media store by origin
+                    from v2.app import media_store
+                    existing = media_store.get_by_origin("civitai", cdn_id)
+                    if existing:
+                        continue
+                    media_type = img.get("type", "image")
+                    url = build_cdn_url(cdn_id, media_type)
+                    ext = ".mp4" if media_type == "video" else ".jpeg"
+                    from v2.app import download_scheduler
+                    download_scheduler.enqueue(
+                        url=url,
+                        callback="gallery_deliver",
+                        callback_args={
+                            "origin": "civitai", "origin_id": cdn_id,
+                            "origin_url": url, "original_name": f"{cdn_id}{ext}",
+                            "model_id": model_id, "version_id": None,
+                            "image_type": "card", "civitai_image_id": None,
+                            "fetch_generation_data": False, "civitai_api_key": api_key,
+                            "gallery_job_id": job_id,
+                            "post_id": None, "post_title": None, "username": None, "stats": {},
+                        },
+                    )
+                    enqueued += 1
+            print(f"    Enqueued {enqueued} missing card images.")
+
+        elif image_type == "community" and version_id:
+            version_source = cat.get_by_source_entity("version", version_id)
+            if not version_source:
+                print(_red(f"    No CivitAI source for version. Skipping."))
+                conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
+                conn.commit()
+                continue
+            civitai_vid = int(version_source["source_id"])
+
+            client = CivitaiClient(api_key=api_key)
+            max_images = filters.get("max_images", 200)
+            enqueued = 0
+
+            for item in client.iter_images_trpc(
+                version_id=civitai_vid,
+                sort=filters.get("sort", "Most Reactions"),
+                period=filters.get("period", "AllTime"),
+                types=filters.get("types"),
+                with_meta=filters.get("with_meta", False),
+                from_platform=filters.get("from_platform", False),
+                limit=min(max_images, 200),
+            ):
+                normalized = client.normalize_trpc_image(item)
+                image_id = normalized.get("id")
+                cdn_id = normalized.get("cdn_id", "")
+                origin_key = str(image_id) if image_id else cdn_id
+
+                # Dedup
+                from v2.app import media_store
+                existing = media_store.get_by_origin("civitai", origin_key)
+                if existing:
+                    continue
+
+                media_type = normalized.get("type", "image")
+                url = normalized.get("full_url") or build_cdn_url(cdn_id, media_type)
+                ext = ".mp4" if media_type == "video" else ".jpeg"
+                stats_data = normalized.get("stats", {})
+
+                from v2.app import download_scheduler
+                download_scheduler.enqueue(
+                    url=url,
+                    callback="gallery_deliver",
+                    callback_args={
+                        "origin": "civitai",
+                        "origin_id": origin_key,
+                        "origin_url": url,
+                        "original_name": f"{image_id or cdn_id}{ext}",
+                        "model_id": model_id, "version_id": version_id,
+                        "image_type": "community",
+                        "civitai_image_id": image_id,
+                        "fetch_generation_data": filters.get("fetch_generation_data", True),
+                        "civitai_api_key": api_key,
+                        "gallery_job_id": job_id,
+                        "post_id": normalized.get("postId"),
+                        "post_title": normalized.get("postTitle"),
+                        "username": normalized.get("username"),
+                        "stats": {
+                            "reactions": (stats_data.get("heartCount", 0) or 0) + (stats_data.get("likeCount", 0) or 0),
+                            "comments": stats_data.get("commentCount", 0) or 0,
+                            "collected": stats_data.get("collectedCount", 0) or 0,
+                        },
+                        "civitai_url": f"https://civitai.com/images/{image_id}" if image_id else None,
+                    },
+                )
+                enqueued += 1
+                if enqueued + completed >= total:
+                    break
+
+            print(f"    Enqueued {enqueued} missing community images.")
+
+        job_ids.append(job_id)
+
+    if not job_ids:
+        print(_dim("\n  Nothing resumed."))
+        return
+
+    if args.background or args.all:
+        print(f"\n  {_green(f'{len(job_ids)} job(s) resumed.')}")
+        print(f"  Monitor: studio gallery jobs")
+        return
+
+    # Live monitor
+    print(f"\n  {_bold(f'Monitoring {len(job_ids)} job(s)...')}  (Ctrl+C to detach)\n")
+    try:
+        while True:
+            all_done = True
+            for jid in job_ids:
+                j = g.get_job_status(jid)
+                if j is None:
+                    print(f"\r  {_green('✓')} {jid[:12]}... completed                     ")
+                    continue
+                all_done = False
+                total = j["total"] or 0
+                completed = j["completed"]
+                failed = j["failed"]
+                pct = (completed / total * 100) if total > 0 else 0
+                bar_w = 30
+                filled = int(bar_w * pct / 100)
+                bar = "█" * filled + "░" * (bar_w - filled)
+                fail_str = f"  {_red(f'{failed} failed')}" if failed else ""
+                print(f"\r  [{bar}] {completed}/{total} {pct:.0f}%{fail_str}    ", end="", flush=True)
+            if all_done:
+                print(f"\n\n  {_green('All done.')}")
+                break
+            import time as _time
+            _time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"\n  Detached. Jobs continue in background.")
+    print()
+
+
+# ── HTTP commands ────────────────────────────────────────────────────────────
+
+def cmd_http_stats(args):
+    """Show HTTP client statistics."""
+    from v2.app.http_client import http
+    s = http.get_stats()
+    if args.json:
+        print(json.dumps({
+            "total_calls": s.total_calls,
+            "total_errors": s.total_errors,
+            "total_bytes": s.total_bytes,
+            "avg_duration_ms": round(s.avg_duration_ms, 1),
+            "calls_by_caller": s.calls_by_caller,
+            "errors_by_caller": s.errors_by_caller,
+        }, indent=2))
+        return
+    print(f"\n  {_bold('HTTP Client Statistics')}\n")
+    print(f"  Total calls:    {s.total_calls}")
+    print(f"  Total errors:   {s.total_errors}")
+    print(f"  Total bytes:    {_fmt_bytes(s.total_bytes)}")
+    print(f"  Avg duration:   {s.avg_duration_ms:.0f} ms")
+    if s.calls_by_caller:
+        print(f"\n  {_bold('By caller:')}")
+        for caller, count in sorted(s.calls_by_caller.items()):
+            errors = s.errors_by_caller.get(caller, 0)
+            err_str = f" ({_red(f'{errors} errors')})" if errors else ""
+            print(f"    {caller:40s} {count:>5d}{err_str}")
+    print()
+
+
+def cmd_http_log(args):
+    """Show recent HTTP calls."""
+    from v2.app.http_client import http
+    entries = http.get_log(limit=args.limit, caller=args.caller)
+    if args.json:
+        print(json.dumps([{
+            "timestamp": e.timestamp, "method": e.method, "url": e.url,
+            "status": e.status, "duration_ms": e.duration_ms,
+            "caller": e.caller, "error": e.error, "bytes": e.response_bytes,
+        } for e in entries], indent=2))
+        return
+    if not entries:
+        print(_dim("  No HTTP calls logged."))
+        return
+    print(f"\n  {_bold(f'HTTP Log (last {len(entries)})')}\n")
+    for e in entries:
+        status_str = _green(str(e.status)) if e.status < 400 else _red(str(e.status))
+        print(f"  {status_str} {e.duration_ms:>5d}ms {e.method} {e.url[:70]}")
+        if e.caller:
+            print(f"    {_dim(e.caller)}")
+        if e.error:
+            print(f"    {_red(e.error[:100])}")
+    print()
+
+
+# ── DB commands ──────────────────────────────────────────────────────────────
+
+def cmd_db_tables(args):
+    """List all tables with row counts."""
+    _init()
+    from v2.app.db import table_list, table_count
+    tables = table_list()
+    if args.json:
+        print(json.dumps({t: table_count(t) for t in tables}, indent=2))
+        return
+    print(f"\n  {_bold(f'Tables ({len(tables)})')}\n")
+    for t in tables:
+        count = table_count(t)
+        print(f"  {t:30s} {count:>8d} rows")
+    print()
+
+
+def cmd_db_integrity(args):
+    """Run SQLite integrity check."""
+    _init()
+    from v2.app.db import integrity_check
+    result = integrity_check()
+    if result == "ok":
+        print(f"  {_green('Database integrity OK')}")
+    else:
+        print(f"  {_red(f'Integrity issue: {result}')}")
+
+
+def cmd_db_size(args):
+    """Show database file size."""
+    _init()
+    from v2.app.db import db_size_bytes
+    size = db_size_bytes()
+    if args.json:
+        print(json.dumps({"bytes": size}))
+        return
+    print(f"  Database size: {_fmt_bytes(size)}")
+
+
+# ── Store commands ───────────────────────────────────────────────────────────
+
+def cmd_store_stats(args):
+    """Show model store statistics."""
+    from v2.app import model_store as ms
+    if args.json:
+        print(json.dumps({"count": ms.count(), "total_bytes": ms.total_size()}, indent=2))
+        return
+    print(f"\n  {_bold('Model Store')}\n")
+    print(f"  Files:      {ms.count()}")
+    print(f"  Total size: {_fmt_bytes(ms.total_size())}")
+    print()
+
+
+def cmd_store_list(args):
+    """List files in model store."""
+    from v2.app.db import get_conn
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM model_store_files ORDER BY created_at DESC LIMIT ?",
+        (args.limit,)
+    ).fetchall()
+    if args.json:
+        print(json.dumps([dict(r) for r in rows], indent=2, default=str))
+        return
+    if not rows:
+        print(_dim("  Model store is empty."))
+        return
+    print(f"\n  {_bold(f'Model Store Files ({len(rows)})')}\n")
+    _table(
+        ["ID", "Format", "Precision", "Size", "Original Name"],
+        [[r["id"][:12] + "...", r["format"], r.get("precision") or "-",
+          _fmt_bytes(r["file_size"]), (r.get("original_name") or "")[:35]] for r in rows],
+    )
+    print()
+
+
+# ── Config commands ──────────────────────────────────────────────────────────
+
+def cmd_config_list(args):
+    """List all settings with resolved values."""
+    from v2.app.settings import (
+        WORKSPACE, STUDIO_DIR, V2_DIR, COMFYUI_DIR, DB_PATH,
+        MEDIA_STORE_DIR, MODEL_STORE_DIR, DOWNLOADS_DIR,
+        COMFYUI_PORT, COMFYUI_URL, STUDIO_PORT,
+        RUNTIME_VERSION, DEV_MODE, REPO_URL, REPO_BRANCH,
+        API_KEY, CIVITAI_API_KEY, HF_TOKEN, MAX_CONCURRENT_DOWNLOADS,
+        LLAMA_SERVER_PATH, LLAMA_SERVER_PORT,
+    )
+    items = [
+        ("WORKSPACE", str(WORKSPACE)),
+        ("STUDIO_DIR", str(STUDIO_DIR)),
+        ("V2_DIR", str(V2_DIR)),
+        ("COMFYUI_DIR", str(COMFYUI_DIR)),
+        ("DB_PATH", str(DB_PATH)),
+        ("MEDIA_STORE_DIR", str(MEDIA_STORE_DIR)),
+        ("MODEL_STORE_DIR", str(MODEL_STORE_DIR)),
+        ("DOWNLOADS_DIR", str(DOWNLOADS_DIR)),
+        ("COMFYUI_PORT", COMFYUI_PORT),
+        ("COMFYUI_URL", COMFYUI_URL),
+        ("STUDIO_PORT", STUDIO_PORT),
+        ("RUNTIME_VERSION", str(RUNTIME_VERSION)),
+        ("DEV_MODE", str(DEV_MODE)),
+        ("REPO_URL", REPO_URL),
+        ("REPO_BRANCH", REPO_BRANCH),
+        ("API_KEY", API_KEY[:3] + "***" if API_KEY else "-"),
+        ("CIVITAI_API_KEY", CIVITAI_API_KEY[:6] + "***" if CIVITAI_API_KEY else "-"),
+        ("HF_TOKEN", HF_TOKEN[:6] + "***" if HF_TOKEN else "-"),
+        ("MAX_CONCURRENT_DOWNLOADS", str(MAX_CONCURRENT_DOWNLOADS)),
+        ("LLAMA_SERVER_PATH", str(LLAMA_SERVER_PATH)),
+        ("LLAMA_SERVER_PORT", str(LLAMA_SERVER_PORT)),
+    ]
+    if args.json:
+        print(json.dumps(dict(items), indent=2))
+        return
+    print(f"\n  {_bold('Settings')}\n")
+    for k, v in items:
+        print(f"  {k:30s} {v}")
+    print()
+
+
+def cmd_config_get(args):
+    """Get a single setting value."""
+    import v2.app.settings as s
+    val = getattr(s, args.key, None)
+    if val is None:
+        print(_red(f"  Unknown setting: {args.key}"))
+        sys.exit(1)
+    print(val)
+
+
+def cmd_config_set(args):
+    """Set a setting (placeholder — writes to env only, not DB yet)."""
+    print(_yellow("  config set is not implemented yet (needs DB settings table)."))
+    print(f"  Would set: {args.key} = {args.value}")
+
+
 # ── Argument parser ─────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1130,7 +2252,7 @@ def build_parser() -> argparse.ArgumentParser:
             gallery images, job outputs, user uploads, preset thumbnails.
             Every file is validated, hashed, and tracked in SQLite.
 
-            Files are stored in a sharded flat directory (STUDIO_DIR/media/)
+            Files are stored in a sharded flat directory (V2_DIR/media/)
             with thumbnails at three sizes (xs=100px, sm=200px, md=400px).
         """),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1253,6 +2375,193 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--regenerate", action="store_true", help="Regenerate thumbnails")
     p.add_argument("--size", choices=["xs", "sm", "md"], help="Regenerate only this size")
     p.set_defaults(func=cmd_media_thumb)
+
+    # ── catalog ──
+
+    cat_parser = subparsers.add_parser("catalog", help="Model catalog operations",
+        description="Manage the model catalog: parents, versions, files, CivitAI import.",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    cat_sub = cat_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = cat_sub.add_parser("stats", help="Catalog statistics", parents=[common])
+    p.set_defaults(func=cmd_catalog_stats)
+
+    p = cat_sub.add_parser("list", help="List models", parents=[common])
+    p.add_argument("--search", "-s", help="Search by name")
+    p.add_argument("--category", help="Filter by category")
+    p.add_argument("--type", help="Filter by CivitAI type")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--offset", type=int, default=0)
+    p.set_defaults(func=cmd_catalog_list)
+
+    p = cat_sub.add_parser("info", help="Model detail", parents=[common])
+    p.add_argument("id", help="Model ID")
+    p.set_defaults(func=cmd_catalog_info)
+
+    p = cat_sub.add_parser("import", help="Import from CivitAI (upsert)", parents=[common])
+    p.add_argument("civitai_id", type=int, help="CivitAI model ID")
+    p.add_argument("--versions", help="Comma-separated CivitAI version IDs (default: all)")
+    p.add_argument("--category", help="Override category")
+    p.add_argument("--api-key", help="CivitAI API key (default: from settings)")
+    p.set_defaults(func=cmd_catalog_import)
+
+    p = cat_sub.add_parser("versions", help="List versions of a model", parents=[common])
+    p.add_argument("model_id", help="Model ID")
+    p.set_defaults(func=cmd_catalog_versions)
+
+    p = cat_sub.add_parser("files", help="List files of a version", parents=[common])
+    p.add_argument("version_id", help="Version ID")
+    p.set_defaults(func=cmd_catalog_files)
+
+    # ── download ──
+
+    dl_parser = subparsers.add_parser("download", help="Download queue operations",
+        description="Manage the download scheduler: queue, cancel, retry, cleanup.")
+    dl_sub = dl_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = dl_sub.add_parser("list", help="List downloads", parents=[common])
+    p.add_argument("--active", action="store_true", help="Only active (queued + downloading)")
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=cmd_download_list)
+
+    p = dl_sub.add_parser("status", help="Download detail", parents=[common])
+    p.add_argument("id", help="Download ID")
+    p.set_defaults(func=cmd_download_status)
+
+    p = dl_sub.add_parser("cancel", help="Cancel a download", parents=[common])
+    p.add_argument("id", help="Download ID")
+    p.set_defaults(func=cmd_download_cancel)
+
+    p = dl_sub.add_parser("retry", help="Retry a failed download", parents=[common])
+    p.add_argument("id", help="Download ID")
+    p.set_defaults(func=cmd_download_retry)
+
+    p = dl_sub.add_parser("cleanup", help="Remove temp files", parents=[common])
+    p.set_defaults(func=cmd_download_cleanup)
+
+    p = dl_sub.add_parser("queue", help="Queue statistics", parents=[common])
+    p.set_defaults(func=cmd_download_queue)
+
+    # ── gallery ──
+
+    gal_parser = subparsers.add_parser("gallery", help="Gallery operations",
+        description="Download, monitor, and inspect gallery images for cataloged models.",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    gal_sub = gal_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = gal_sub.add_parser("stats", help="Total gallery statistics", parents=[common],
+        description="Aggregate counts and sizes for card and community images.")
+    p.set_defaults(func=cmd_gallery_stats)
+
+    p = gal_sub.add_parser("status", help="Gallery status per model/version", parents=[common],
+        description="Show which models/versions have gallery images and how many.")
+    p.add_argument("model_id", nargs="?", help="Model ID (optional, shows all if omitted)")
+    p.add_argument("--vers-id", help="Version ID (with model_id)", dest="version")
+    p.add_argument("--empty", action="store_true", help="Show only models/versions without gallery")
+    p.set_defaults(func=cmd_gallery_status)
+
+    p = gal_sub.add_parser("download", help="Download gallery images", parents=[common],
+        description=dedent("""\
+            Download gallery images for a cataloged model.
+            Interactive if no model_id given. Shows live progress by default.
+            Ctrl+C detaches without stopping the job.
+        """),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("model_id", nargs="?", help="Model ID (interactive if omitted)")
+    p.add_argument("--all", action="store_true", help="Card + community all versions, no prompt")
+    p.add_argument("--cards", action="store_true", help="Only card images")
+    p.add_argument("--vers-id", help="Download community for this specific version", dest="version")
+    p.add_argument("--background", action="store_true", help="Enqueue and exit (no live monitor)")
+    p.set_defaults(func=cmd_gallery_download)
+
+    p = gal_sub.add_parser("jobs", help="List active gallery jobs (snapshot)", parents=[common])
+    p.set_defaults(func=cmd_gallery_jobs)
+
+    p = gal_sub.add_parser("job", help="Monitor a gallery job (live)", parents=[common],
+        description="Live progress monitor. Ctrl+C exits without stopping. --json for snapshot.")
+    p.add_argument("id", help="Job ID")
+    p.set_defaults(func=cmd_gallery_job)
+
+    p = gal_sub.add_parser("stop", help="Stop a running gallery job", parents=[common])
+    p.add_argument("id", help="Job ID")
+    p.set_defaults(func=cmd_gallery_stop)
+
+    p = gal_sub.add_parser("cleanup", help="Remove interrupted/failed jobs", parents=[common],
+        description="Shows a report of interrupted/failed jobs, then deletes them.")
+    p.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+    p.set_defaults(func=cmd_gallery_cleanup)
+
+    p = gal_sub.add_parser("resume", help="Resume interrupted gallery jobs", parents=[common],
+        description=dedent("""\
+            Re-fetches from CivitAI and enqueues only missing images.
+            Dedup ensures nothing is downloaded twice.
+            Interactive if no job_id given.
+        """),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("job_id", nargs="?", help="Job ID to resume (interactive if omitted)")
+    p.add_argument("--all", action="store_true", help="Resume all interrupted jobs")
+    p.add_argument("--background", action="store_true", help="Don't show live monitor")
+    p.set_defaults(func=cmd_gallery_resume)
+
+    # ── http ──
+
+    http_parser = subparsers.add_parser("http", help="HTTP client stats and log",
+        description="Monitor outgoing HTTP API calls.")
+    http_sub = http_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = http_sub.add_parser("stats", help="HTTP call statistics", parents=[common])
+    p.set_defaults(func=cmd_http_stats)
+
+    p = http_sub.add_parser("log", help="Recent HTTP calls", parents=[common])
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--caller", help="Filter by caller name")
+    p.set_defaults(func=cmd_http_log)
+
+    # ── db ──
+
+    db_parser = subparsers.add_parser("db", help="Database operations",
+        description="Database inspection and maintenance.")
+    db_sub = db_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = db_sub.add_parser("tables", help="List tables with row counts", parents=[common])
+    p.set_defaults(func=cmd_db_tables)
+
+    p = db_sub.add_parser("integrity", help="Run integrity check", parents=[common])
+    p.set_defaults(func=cmd_db_integrity)
+
+    p = db_sub.add_parser("size", help="Database file size", parents=[common])
+    p.set_defaults(func=cmd_db_size)
+
+    # ── store ──
+
+    store_parser = subparsers.add_parser("store", help="Model store operations",
+        description="Physical model file storage.")
+    store_sub = store_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = store_sub.add_parser("stats", help="Store statistics", parents=[common])
+    p.set_defaults(func=cmd_store_stats)
+
+    p = store_sub.add_parser("list", help="List stored files", parents=[common])
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=cmd_store_list)
+
+    # ── config ──
+
+    cfg_parser = subparsers.add_parser("config", help="Settings",
+        description="View and manage application settings.")
+    cfg_sub = cfg_parser.add_subparsers(dest="subcommand", title="subcommands")
+
+    p = cfg_sub.add_parser("list", help="List all settings", parents=[common])
+    p.set_defaults(func=cmd_config_list)
+
+    p = cfg_sub.add_parser("get", help="Get a setting", parents=[common])
+    p.add_argument("key", help="Setting name (e.g. API_KEY)")
+    p.set_defaults(func=cmd_config_get)
+
+    p = cfg_sub.add_parser("set", help="Set a setting", parents=[common])
+    p.add_argument("key", help="Setting name")
+    p.add_argument("value", help="New value")
+    p.set_defaults(func=cmd_config_set)
 
     return parser
 
