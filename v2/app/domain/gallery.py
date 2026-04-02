@@ -29,9 +29,9 @@ import sqlite3
 
 from v2.app.db import get_conn, register_schema
 from v2.app.settings import now_iso
-from v2.app import media_store
-from v2.app import download_scheduler
-from v2.app.civitai_client import (
+from v2.app.stores import media as media_store
+from v2.app.domain import download as download_scheduler
+from v2.app.clients.civitai import (
     CivitaiClient,
     extract_cdn_id_from_url,
     build_cdn_url,

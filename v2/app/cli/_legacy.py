@@ -102,11 +102,11 @@ def _init():
     global _initialized
     if _initialized:
         return
-    from v2.app import media_store        # registers schema
-    from v2.app import model_store        # registers schema
-    from v2.app import catalog            # registers schema
-    from v2.app import download_scheduler # registers schema
-    from v2.app import gallery            # registers schema + callback
+    from v2.app.stores import media as media_store        # registers schema
+    from v2.app.stores import model as model_store        # registers schema
+    from v2.app.domain import catalog            # registers schema
+    from v2.app.domain import download as download_scheduler # registers schema
+    from v2.app.domain import gallery            # registers schema + callback
     from v2.app.db import init_db
     init_db()
     _initialized = True
@@ -122,7 +122,7 @@ def _db_conn():
 def _get_media_store():
     """Get media_store module (initializes DB on first call)."""
     _init()
-    from v2.app import media_store
+    from v2.app.stores import media as media_store
     return media_store
 
 
@@ -1113,7 +1113,7 @@ def cmd_media_thumb(args):
 
 def _get_catalog():
     _init()
-    from v2.app import catalog
+    from v2.app.domain import catalog
     return catalog
 
 
@@ -1205,7 +1205,7 @@ def cmd_catalog_info(args):
 
 def cmd_catalog_import(args):
     """Import a model from CivitAI (upsert)."""
-    from v2.app.civitai_client import CivitaiClient
+    from v2.app.clients.civitai import CivitaiClient
     from v2.app.settings import CIVITAI_API_KEY
     cat = _get_catalog()
 
@@ -1291,7 +1291,7 @@ def cmd_catalog_files(args):
 
 def _get_scheduler():
     _init()
-    from v2.app import download_scheduler
+    from v2.app.domain import download as download_scheduler
     return download_scheduler
 
 
@@ -1387,7 +1387,7 @@ def cmd_download_queue(args):
 
 def _get_gallery():
     _init()
-    from v2.app import gallery
+    from v2.app.domain import gallery
     return gallery
 
 
@@ -1789,7 +1789,7 @@ def cmd_gallery_resume(args):
     g = _get_gallery()
     cat = _get_catalog()
     from v2.app.settings import CIVITAI_API_KEY
-    from v2.app.civitai_client import CivitaiClient
+    from v2.app.clients.civitai import CivitaiClient
     import time as _time
 
     api_key = CIVITAI_API_KEY
@@ -1884,7 +1884,7 @@ def cmd_gallery_resume(args):
                 conn.commit()
                 continue
 
-            from v2.app.civitai_client import extract_cdn_id_from_url, build_cdn_url
+            from v2.app.clients.civitai import extract_cdn_id_from_url, build_cdn_url
             enqueued = 0
             for version in model_data.get("modelVersions", []):
                 for img in client.extract_card_images(version):
@@ -1892,14 +1892,14 @@ def cmd_gallery_resume(args):
                     if not cdn_id:
                         continue
                     # Dedup: check if already in media store by origin
-                    from v2.app import media_store
+                    from v2.app.stores import media as media_store
                     existing = media_store.get_by_origin("civitai", cdn_id)
                     if existing:
                         continue
                     media_type = img.get("type", "image")
                     url = build_cdn_url(cdn_id, media_type)
                     ext = ".mp4" if media_type == "video" else ".jpeg"
-                    from v2.app import download_scheduler
+                    from v2.app.domain import download as download_scheduler
                     download_scheduler.enqueue(
                         url=url,
                         callback="gallery_deliver",
@@ -1944,7 +1944,7 @@ def cmd_gallery_resume(args):
                 origin_key = str(image_id) if image_id else cdn_id
 
                 # Dedup
-                from v2.app import media_store
+                from v2.app.stores import media as media_store
                 existing = media_store.get_by_origin("civitai", origin_key)
                 if existing:
                     continue
@@ -1954,7 +1954,7 @@ def cmd_gallery_resume(args):
                 ext = ".mp4" if media_type == "video" else ".jpeg"
                 stats_data = normalized.get("stats", {})
 
-                from v2.app import download_scheduler
+                from v2.app.domain import download as download_scheduler
                 download_scheduler.enqueue(
                     url=url,
                     callback="gallery_deliver",
@@ -2125,7 +2125,7 @@ def cmd_db_size(args):
 
 def cmd_store_stats(args):
     """Show model store statistics."""
-    from v2.app import model_store as ms
+    from v2.app.stores import model as ms
     if args.json:
         print(json.dumps({"count": ms.count(), "total_bytes": ms.total_size()}, indent=2))
         return
