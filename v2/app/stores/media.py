@@ -721,3 +721,160 @@ def count_by_type() -> dict:
     conn = get_conn()
     rows = conn.execute("SELECT type, COUNT(*) FROM media GROUP BY type").fetchall()
     return {r[0]: r[1] for r in rows}
+
+
+def stats() -> dict:
+    """Comprehensive statistics for the media store."""
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media").fetchone()
+    thumb_stats = conn.execute(
+        "SELECT size, COUNT(*), COALESCE(SUM(file_size), 0) FROM media_thumbs GROUP BY size ORDER BY size"
+    ).fetchall()
+    by_type = conn.execute(
+        "SELECT type, COUNT(*), COALESCE(SUM(file_size), 0) FROM media GROUP BY type ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    by_origin = conn.execute(
+        "SELECT origin, COUNT(*), COALESCE(SUM(file_size), 0) FROM media GROUP BY origin ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    by_format = conn.execute(
+        "SELECT ext, COUNT(*), COALESCE(SUM(file_size), 0) FROM media GROUP BY ext ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    by_schema = conn.execute(
+        "SELECT schema_version, COUNT(*) FROM media GROUP BY schema_version ORDER BY schema_version"
+    ).fetchall()
+    media_with_thumbs = conn.execute(
+        "SELECT COUNT(DISTINCT media_id) FROM media_thumbs"
+    ).fetchone()[0]
+    return {
+        "total_count": total[0], "total_bytes": total[1],
+        "total_thumb_bytes": sum(r[2] for r in thumb_stats),
+        "by_type": {r[0]: {"count": r[1], "bytes": r[2]} for r in by_type},
+        "by_origin": {r[0]: {"count": r[1], "bytes": r[2]} for r in by_origin},
+        "by_format": {r[0]: {"count": r[1], "bytes": r[2]} for r in by_format},
+        "by_schema": {r[0]: r[1] for r in by_schema},
+        "thumb_coverage": media_with_thumbs,
+        "thumbs": {r[0]: {"count": r[1], "bytes": r[2]} for r in thumb_stats},
+    }
+
+
+def get_by_prefix(prefix: str) -> dict | None:
+    """Find media by ID prefix (min 8 chars)."""
+    conn = get_conn()
+    if len(prefix) >= 32:
+        row = conn.execute("SELECT * FROM media WHERE id = ?", (prefix,)).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM media WHERE id LIKE ?", (prefix + "%",)).fetchone()
+    return dict(row) if row else None
+
+
+def find(
+    type: str | None = None,
+    origin: str | None = None,
+    ext: str | None = None,
+    search: str | None = None,
+    sort: str = "created_at",
+    desc: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Search media with filters. Returns (rows, total_count)."""
+    conn = get_conn()
+    clauses, params = [], []
+    if type:
+        clauses.append("type = ?"); params.append(type)
+    if origin:
+        clauses.append("origin = ?"); params.append(origin)
+    if ext:
+        e = ext if ext.startswith(".") else f".{ext}"
+        clauses.append("ext = ?"); params.append(e)
+    if search:
+        clauses.append("(original_name LIKE ? OR origin_id LIKE ? OR id LIKE ?)")
+        pat = f"%{search}%"; params.extend([pat, pat, pat])
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    order = "DESC" if desc else "ASC"
+    rows = conn.execute(
+        f"SELECT * FROM media {where} ORDER BY {sort} {order} LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+    total = conn.execute(f"SELECT COUNT(*) FROM media {where}", params).fetchone()[0]
+    return [dict(r) for r in rows], total
+
+
+def find_by_name(name: str) -> list[dict]:
+    """Find media by original_name substring."""
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM media WHERE original_name LIKE ?", (f"%{name}%",)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def find_duplicates() -> list[dict]:
+    """Find media with duplicate hashes."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT hash, COUNT(*) as cnt, GROUP_CONCAT(id, ',') as ids
+        FROM media WHERE hash IS NOT NULL
+        GROUP BY hash HAVING cnt > 1 ORDER BY cnt DESC
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def all_file_paths() -> tuple[set, set]:
+    """Return (media_paths, thumb_paths) — all relative paths tracked in DB."""
+    conn = get_conn()
+    media_paths = {r[0] for r in conn.execute("SELECT file_path FROM media").fetchall()}
+    thumb_paths = {r[0] for r in conn.execute("SELECT file_path FROM media_thumbs").fetchall()}
+    return media_paths, thumb_paths
+
+
+def outdated_schema_count(current_version: int) -> int:
+    """Count media with schema_version below current."""
+    conn = get_conn()
+    return conn.execute(
+        "SELECT COUNT(*) FROM media WHERE schema_version < ?", (current_version,)
+    ).fetchone()[0]
+
+
+def find_for_reindex(force: bool = False) -> list[dict]:
+    """Get media records that need reindexing."""
+    conn = get_conn()
+    if force:
+        return [dict(r) for r in conn.execute("SELECT id, file_path, type, ext FROM media").fetchall()]
+    return [dict(r) for r in conn.execute(
+        "SELECT id, file_path, type, ext FROM media WHERE schema_version < ?", (SCHEMA_VERSION,)
+    ).fetchall()]
+
+
+def update_fields(media_id: str, **kwargs):
+    """Update specific fields on a media record."""
+    if not kwargs:
+        return
+    conn = get_conn()
+    set_clause = ", ".join(f"{k} = ?" for k in kwargs)
+    conn.execute(f"UPDATE media SET {set_clause} WHERE id = ?", list(kwargs.values()) + [media_id])
+    conn.commit()
+
+
+def delete_thumbs(media_id: str):
+    """Delete all thumbnails for a media (DB + files)."""
+    conn = get_conn()
+    rows = conn.execute("SELECT file_path FROM media_thumbs WHERE media_id = ?", (media_id,)).fetchall()
+    for r in rows:
+        p = _abs_path(r["file_path"])
+        if p.exists():
+            p.unlink()
+    conn.execute("DELETE FROM media_thumbs WHERE media_id = ?", (media_id,))
+    conn.commit()
+
+
+def insert_thumbs(media_id: str, thumbs: list[dict]):
+    """Insert thumbnail records and update media.thumb_path."""
+    conn = get_conn()
+    for t in thumbs:
+        conn.execute("""
+            INSERT INTO media_thumbs (media_id, size, file_path, file_size, width, height)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (media_id, t["size"], t["file_path"], t["file_size"], t["width"], t["height"]))
+    if thumbs:
+        conn.execute("UPDATE media SET thumb_path = ?, thumb_size = ? WHERE id = ?",
+                     (thumbs[0]["file_path"], thumbs[0]["file_size"], media_id))
+    conn.commit()
