@@ -101,10 +101,89 @@ def cmd_queue(args):
     print()
 
 
+def cmd_start(args):
+    """Launch the download scheduler as a subprocess."""
+    dl = _get_scheduler()
+    if dl.is_running():
+        from v2.app.cli._common import _green
+        print(f"  {_green('Scheduler is already running.')}")
+        return
+    import subprocess, os
+    from v2.app.core.settings import STUDIO_DIR
+    launcher = STUDIO_DIR / "v2" / "app" / "bin" / "studio-downloader"
+    if not launcher.exists():
+        print(_red(f"  Launcher not found: {launcher}"))
+        sys.exit(1)
+    env = os.environ.copy()
+    proc = subprocess.Popen(
+        [sys.executable, str(launcher)],
+        env=env,
+        stdout=None if args.verbose else subprocess.DEVNULL,
+        stderr=None if args.verbose else subprocess.DEVNULL,
+    )
+    import time
+    time.sleep(1)
+    if dl.is_running():
+        from v2.app.cli._common import _green
+        print(f"  {_green(f'Scheduler started (PID {proc.pid})')}")
+    else:
+        print(_red(f"  Scheduler failed to start. Run with --verbose to see output."))
+
+
+def cmd_stop(args):
+    """Signal the running scheduler to stop."""
+    dl = _get_scheduler()
+    if not dl.is_running():
+        print(_dim("  Scheduler is not running."))
+        return
+    from v2.app.core.db import get_conn
+    conn = get_conn()
+    row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
+    if not row:
+        print(_dim("  No scheduler lock found."))
+        return
+    pid = row["pid"]
+    import os, signal
+    try:
+        os.kill(pid, signal.SIGTERM)
+        print(f"  {_green(f'Sent SIGTERM to PID {pid}')}")
+    except ProcessLookupError:
+        # PID doesn't exist — clean up stale lock
+        conn.execute("DELETE FROM scheduler_lock WHERE id = 1")
+        conn.commit()
+        print(f"  {_yellow(f'PID {pid} not found. Cleaned stale lock.')}")
+    except PermissionError:
+        print(_red(f"  Permission denied to signal PID {pid}."))
+
+
+def cmd_running(args):
+    """Check if the download scheduler is running."""
+    dl = _get_scheduler()
+    running = dl.is_running()
+    if args.json:
+        print(json.dumps({"running": running}))
+        return
+    if running:
+        from v2.app.core.db import get_conn
+        conn = get_conn()
+        row = conn.execute("SELECT pid, started_at, heartbeat FROM scheduler_lock WHERE id = 1").fetchone()
+        print(f"  {_green('Scheduler is running')}")
+        if row:
+            print(f"  PID:       {row['pid']}")
+            print(f"  Started:   {_fmt_date(row['started_at'])}")
+            print(f"  Heartbeat: {_fmt_date(row['heartbeat'])}")
+    else:
+        print(f"  {_dim('Scheduler is not running.')}")
+
+
 def register(subparsers, common):
     """Register download subcommands with the argument parser."""
-    p = subparsers.add_parser("download", help="Download queue operations")
+    p = subparsers.add_parser("download", help="Download queue and scheduler operations")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")
+
+    sub.add_parser("start", help="Launch the download scheduler", parents=[common]).set_defaults(func=cmd_start)
+    sub.add_parser("stop", help="Stop the download scheduler", parents=[common]).set_defaults(func=cmd_stop)
+    sub.add_parser("running", help="Check if scheduler is running", parents=[common]).set_defaults(func=cmd_running)
 
     s = sub.add_parser("list", help="List downloads", parents=[common])
     s.add_argument("--active", action="store_true"); s.add_argument("--limit", type=int, default=50)

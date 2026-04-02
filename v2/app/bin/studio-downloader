@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Download scheduler — standalone process.
+
+Runs the download scheduler as an independent daemon.
+Processes queued downloads, calls delivery callbacks.
+
+Can be launched by:
+  - Shell:    studio-downloader
+  - CLI:      studio download start
+  - Backend:  subprocess.Popen(["studio-downloader"])
+  - start.sh: as a service alongside ComfyUI and backend
+
+Only one instance can run at a time (enforced by DB lock with heartbeat).
+If another instance is running, exits immediately.
+
+Ctrl+C stops gracefully (waits for active downloads to finish).
+"""
+import os
+import sys
+import signal
+from pathlib import Path
+
+# Add project root to Python path
+studio_dir = Path(os.environ.get("STUDIO_DIR", "/workspace/studio"))
+sys.path.insert(0, str(studio_dir))
+
+from v2.app.core.db import init_db
+from v2.app.stores import media    # registers schema
+from v2.app.stores import model    # registers schema
+from v2.app.domain import catalog  # registers schema
+from v2.app.domain import gallery  # registers schema + callback
+from v2.app.core import download   # registers schema
+
+
+def main():
+    # Initialize DB (creates tables if needed)
+    init_db()
+
+    # Try to start the scheduler (acquires exclusive lock)
+    started = download.init_scheduler()
+    if not started:
+        print("[studio-downloader] Another instance is already running. Exiting.")
+        sys.exit(1)
+
+    # Handle Ctrl+C and SIGTERM gracefully
+    def _shutdown(sig, frame):
+        print("\n[studio-downloader] Shutting down...")
+        download.stop_scheduler()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    # Keep the process alive — the poll thread does the work
+    print("[studio-downloader] Running. Ctrl+C to stop.")
+    try:
+        # Block forever — the daemon thread does the work
+        # signal.pause() waits for a signal (Ctrl+C, SIGTERM)
+        while True:
+            signal.pause()
+    except AttributeError:
+        # signal.pause() not available on Windows — fallback
+        import time
+        while True:
+            time.sleep(3600)
+
+
+if __name__ == "__main__":
+    main()

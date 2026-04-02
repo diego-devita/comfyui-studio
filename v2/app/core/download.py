@@ -66,45 +66,59 @@ def register_callback(name: str, func: callable):
 # ── Schema ───────────────────────────────────────────────────────────────────
 
 def _init_schema(conn: sqlite3.Connection):
-    """Create downloads table. Called by db.init_db()."""
+    """Create downloads + scheduler_lock tables. Called by db.init_db()."""
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS downloads (
             id              TEXT PRIMARY KEY,
             url             TEXT NOT NULL,
-            headers         TEXT,                       -- JSON dict of HTTP headers (auth, etc.)
-            callback        TEXT NOT NULL,              -- registered callback name
-            callback_args   TEXT DEFAULT '{}',          -- JSON dict passed to callback
-            filename        TEXT,                       -- temp filename in downloads dir
+            headers         TEXT,
+            callback        TEXT NOT NULL,
+            callback_args   TEXT DEFAULT '{}',
+            filename        TEXT,
             status          TEXT NOT NULL DEFAULT 'queued'
                             CHECK (status IN ('queued', 'downloading', 'done', 'error', 'cancelled')),
-            total_bytes     INTEGER,                    -- expected size (from Content-Length, nullable)
+            total_bytes     INTEGER,
             downloaded_bytes INTEGER DEFAULT 0,
             error           TEXT,
             retries         INTEGER DEFAULT 0,
             max_retries     INTEGER DEFAULT 3,
-            priority        INTEGER DEFAULT 0,          -- higher = picked first
-            created_at      TEXT NOT NULL,               -- ISO 8601 UTC
+            priority        INTEGER DEFAULT 0,
+            created_at      TEXT NOT NULL,
             started_at      TEXT,
             completed_at    TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_dl_status   ON downloads(status);
         CREATE INDEX IF NOT EXISTS idx_dl_priority ON downloads(priority DESC);
+
+        -- Singleton lock: only one scheduler process at a time.
+        -- CHECK (id = 1) guarantees at most one row.
+        -- heartbeat is updated every poll cycle; if stale (>30s), scheduler is dead.
+        CREATE TABLE IF NOT EXISTS scheduler_lock (
+            id          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+            pid         INTEGER NOT NULL,
+            started_at  TEXT NOT NULL,
+            heartbeat   TEXT NOT NULL
+        );
     """)
 
 
 register_schema("download_scheduler", _init_schema)
 
 
-# ── Worker pool ──────────────────────────────────────────────────────────────
+# ── Scheduler state ──────────────────────────────────────────────────────────
 
 _pool: ThreadPoolExecutor | None = None
 _running = False
 _poll_thread: threading.Thread | None = None
+_our_pid: int | None = None
 
 # How often the poll thread checks for new queued downloads (seconds)
 _POLL_INTERVAL = 2
+
+# Heartbeat older than this = scheduler is dead (seconds)
+_HEARTBEAT_TIMEOUT = 30
 
 # How often download progress is flushed to DB (bytes between flushes)
 _PROGRESS_FLUSH_BYTES = 256 * 1024  # every 256 KB
@@ -293,47 +307,127 @@ def _do_download(record: dict):
 
 
 def _poll_loop():
-    """Background thread that feeds the worker pool.
+    """Background thread: update heartbeat, feed worker pool, repeat.
 
-    Continuously checks for queued downloads and submits them to the pool.
-    Runs until _running is set to False.
+    Runs until _running is False. Updates the scheduler_lock heartbeat
+    every cycle so other processes know we're alive. If the heartbeat
+    update fails (someone stole our lock), we stop.
     """
     while _running:
         try:
+            # Update heartbeat — proves we're alive
+            conn = get_conn()
+            rows = conn.execute(
+                "UPDATE scheduler_lock SET heartbeat = ? WHERE id = 1 AND pid = ?",
+                (now_iso(), _our_pid),
+            ).rowcount
+            conn.commit()
+            if rows == 0:
+                # Someone deleted our lock or replaced it — stop gracefully
+                print("[downloader] Lost lock ownership, stopping.", flush=True)
+                break
+
+            # Check for queued work
             record = _get_next_queued()
             if record:
                 _pool.submit(_do_download, record)
             else:
-                # Nothing queued — wait before checking again
                 time.sleep(_POLL_INTERVAL)
         except Exception as e:
-            # Don't crash the poll loop on transient errors
-            print(f"[download_scheduler] Poll error: {e}", flush=True)
+            print(f"[downloader] Poll error: {e}", flush=True)
             time.sleep(_POLL_INTERVAL)
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def init_scheduler():
-    """Start the download scheduler.
+def _is_heartbeat_alive(conn) -> bool:
+    """Check if an existing scheduler lock has a fresh heartbeat."""
+    row = conn.execute("SELECT heartbeat FROM scheduler_lock WHERE id = 1").fetchone()
+    if not row:
+        return False
+    from datetime import datetime, timezone
+    try:
+        hb = datetime.fromisoformat(row["heartbeat"].replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - hb).total_seconds()
+        return age < _HEARTBEAT_TIMEOUT
+    except Exception:
+        return False
 
-    Creates the worker pool, recovers interrupted downloads, and starts
-    the poll loop. Call once at application startup, after init_db().
+
+def is_running() -> bool:
+    """Check if the download scheduler is running (any process).
+
+    Reads the heartbeat from the DB. If it's recent, the scheduler is alive.
+    Safe to call from any process (CLI, backend, etc.) — read-only.
     """
-    global _pool, _running, _poll_thread
+    try:
+        conn = get_conn()
+        return _is_heartbeat_alive(conn)
+    except Exception:
+        return False
 
+
+def init_scheduler() -> bool:
+    """Start the download scheduler in this process.
+
+    Acquires an exclusive lock in the DB to ensure only one scheduler
+    runs at a time across all processes. If another scheduler is alive
+    (fresh heartbeat), refuses to start.
+
+    Steps:
+      1. Check _running flag (same-process guard)
+      2. BEGIN EXCLUSIVE (cross-process guard)
+      3. Check heartbeat — if alive, abort
+      4. Claim lock with our PID
+      5. Recovery: reset 'downloading' → 'queued'
+      6. Start worker pool + poll thread
+
+    Returns:
+        True if started, False if another scheduler is already running.
+    """
+    global _pool, _running, _poll_thread, _our_pid
+    import os
+
+    # Same-process guard
     if _running:
-        return
+        return True
 
-    # Boot recovery: downloads that were 'downloading' when we crashed
-    # get reset to 'queued' so workers will retry them.
     conn = get_conn()
+
+    # Cross-process guard: exclusive transaction
+    try:
+        conn.execute("BEGIN EXCLUSIVE")
+        if _is_heartbeat_alive(conn):
+            conn.execute("ROLLBACK")
+            row = conn.execute("SELECT pid FROM scheduler_lock WHERE id = 1").fetchone()
+            pid = row["pid"] if row else "?"
+            print(f"[downloader] Another scheduler is running (PID {pid})", flush=True)
+            return False
+
+        # Claim the lock
+        _our_pid = os.getpid()
+        now = now_iso()
+        conn.execute("DELETE FROM scheduler_lock")
+        conn.execute(
+            "INSERT INTO scheduler_lock (id, pid, started_at, heartbeat) VALUES (1, ?, ?, ?)",
+            (_our_pid, now, now),
+        )
+        conn.execute("COMMIT")
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        print(f"[downloader] Failed to acquire lock: {e}", flush=True)
+        return False
+
+    # Recovery: downloads stuck in 'downloading' from a previous crash
     stuck = conn.execute(
         "UPDATE downloads SET status = 'queued' WHERE status = 'downloading'"
     ).rowcount
     conn.commit()
     if stuck:
-        print(f"[download_scheduler] Recovered {stuck} interrupted download(s)", flush=True)
+        print(f"[downloader] Recovered {stuck} interrupted download(s)", flush=True)
 
     # Start worker pool
     _pool = ThreadPoolExecutor(
@@ -342,28 +436,44 @@ def init_scheduler():
     )
     _running = True
 
-    # Start poll thread
+    # Start poll thread (updates heartbeat + feeds pool)
     _poll_thread = threading.Thread(target=_poll_loop, daemon=True, name="dl-poll")
     _poll_thread.start()
 
     queued = conn.execute("SELECT COUNT(*) FROM downloads WHERE status = 'queued'").fetchone()[0]
-    print(f"[download_scheduler] Started ({MAX_CONCURRENT_DOWNLOADS} workers, {queued} queued)", flush=True)
+    print(f"[downloader] Started (PID {_our_pid}, {MAX_CONCURRENT_DOWNLOADS} workers, {queued} queued)", flush=True)
+    return True
 
 
 def stop_scheduler():
     """Stop the download scheduler gracefully.
 
-    Signals the poll loop to stop, shuts down the worker pool.
-    Running downloads will complete before shutdown.
+    Signals the poll loop to stop, waits for running downloads to complete,
+    then releases the lock. If the lock release fails (crash), the heartbeat
+    goes stale and another process can take over.
     """
-    global _running, _pool, _poll_thread
+    global _running, _pool, _poll_thread, _our_pid
+
+    if not _running:
+        return
 
     _running = False
+
     if _pool:
         _pool.shutdown(wait=True)
         _pool = None
     _poll_thread = None
-    print("[download_scheduler] Stopped", flush=True)
+
+    # Release lock
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM scheduler_lock WHERE id = 1 AND pid = ?", (_our_pid,))
+        conn.commit()
+    except Exception:
+        pass  # Lock will expire via stale heartbeat
+
+    _our_pid = None
+    print("[downloader] Stopped", flush=True)
 
 
 def enqueue(
