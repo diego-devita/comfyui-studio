@@ -37,8 +37,8 @@ from pathlib import Path
 
 import httpx
 
-from v2.app.db import get_conn, register_schema
-from v2.app.settings import DOWNLOADS_DIR, MAX_CONCURRENT_DOWNLOADS, now_iso
+from v2.app.core.db import get_conn, register_schema
+from v2.app.core.settings import DOWNLOADS_DIR, MAX_CONCURRENT_DOWNLOADS, now_iso
 
 
 # ── Callback registry ────────────────────────────────────────────────────────

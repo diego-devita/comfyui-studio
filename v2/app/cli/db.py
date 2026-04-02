@@ -5,7 +5,7 @@ from v2.app.cli._common import _bold, _green, _red, _fmt_bytes
 
 
 def cmd_tables(args):
-    from v2.app.db import table_list, table_count
+    from v2.app.core.db import table_list, table_count
     tables = table_list()
     if args.json:
         print(json.dumps({t: table_count(t) for t in tables}, indent=2))
@@ -18,7 +18,7 @@ def cmd_tables(args):
 
 
 def cmd_integrity(args):
-    from v2.app.db import integrity_check
+    from v2.app.core.db import integrity_check
     result = integrity_check()
     if result == "ok":
         print(f"  {_green('Database integrity OK')}")
@@ -27,7 +27,7 @@ def cmd_integrity(args):
 
 
 def cmd_size(args):
-    from v2.app.db import db_size_bytes
+    from v2.app.core.db import db_size_bytes
     size = db_size_bytes()
     if args.json:
         print(json.dumps({"bytes": size}))

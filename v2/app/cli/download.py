@@ -11,7 +11,7 @@ from v2.app.cli._common import (
 
 def _get_scheduler():
     _init()
-    from v2.app.domain import download
+    from v2.app.core import download
     return download
 
 

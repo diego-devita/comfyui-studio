@@ -164,7 +164,7 @@ def cmd_doctor(args):
 
     # 1. Missing files
     print("  Checking files on disk...", end="", flush=True)
-    from v2.app.db import get_conn
+    from v2.app.core.db import get_conn
     conn = get_conn()
     all_media = conn.execute("SELECT id, file_path FROM media").fetchall()
     missing = [r for r in all_media if not ms._abs_path(r["file_path"]).exists()]
@@ -350,7 +350,7 @@ def cmd_delete(args):
 
 def cmd_verify(args):
     ms = _ms()
-    from v2.app.db import get_conn; conn = get_conn()
+    from v2.app.core.db import get_conn; conn = get_conn()
     if args.id:
         rows = conn.execute("SELECT id, file_path, hash FROM media WHERE id LIKE ?", (args.id + "%",)).fetchall()
     elif args.all:
@@ -375,7 +375,7 @@ def cmd_dedup(args):
     if args.json: print(json.dumps([dict(d) for d in dupes], indent=2)); return
     total_waste = 0
     print(f"\n  {_bold(f'{len(dupes)} duplicate group(s)')}\n")
-    from v2.app.db import get_conn; conn = get_conn()
+    from v2.app.core.db import get_conn; conn = get_conn()
     for d in dupes:
         ids = d["ids"].split(",")
         rows = conn.execute(

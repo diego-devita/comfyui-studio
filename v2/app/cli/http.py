@@ -5,7 +5,7 @@ from v2.app.cli._common import _bold, _green, _red, _dim, _fmt_bytes
 
 
 def cmd_stats(args):
-    from v2.app.http_client import http
+    from v2.app.core.http_client import http
     s = http.get_stats()
     if args.json:
         print(json.dumps({
@@ -29,7 +29,7 @@ def cmd_stats(args):
 
 
 def cmd_log(args):
-    from v2.app.http_client import http
+    from v2.app.core.http_client import http
     entries = http.get_log(limit=args.limit, caller=args.caller)
     if args.json:
         print(json.dumps([{

@@ -28,8 +28,8 @@ import sqlite3
 import uuid
 from pathlib import Path
 
-from v2.app.db import get_conn, register_schema
-from v2.app.settings import MODEL_STORE_DIR, now_iso
+from v2.app.core.db import get_conn, register_schema
+from v2.app.core.settings import MODEL_STORE_DIR, now_iso
 
 
 # ── Schema ───────────────────────────────────────────────────────────────────

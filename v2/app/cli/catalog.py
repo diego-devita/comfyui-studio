@@ -97,7 +97,7 @@ def cmd_info(args):
 
 def cmd_import(args):
     from v2.app.clients.civitai import CivitaiClient
-    from v2.app.settings import CIVITAI_API_KEY
+    from v2.app.core.settings import CIVITAI_API_KEY
     cat = _get_catalog()
 
     api_key = args.api_key or CIVITAI_API_KEY

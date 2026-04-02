@@ -71,7 +71,7 @@ def cmd_status(args):
 
 def cmd_download(args):
     g, cat = _gal(), _cat()
-    from v2.app.settings import CIVITAI_API_KEY
+    from v2.app.core.settings import CIVITAI_API_KEY
     api_key = CIVITAI_API_KEY
     if not api_key: print(_red("  CIVITAI_API_KEY not set.")); sys.exit(1)
 
@@ -196,7 +196,7 @@ def cmd_cleanup(args):
 
 def cmd_resume(args):
     g, cat = _gal(), _cat()
-    from v2.app.settings import CIVITAI_API_KEY
+    from v2.app.core.settings import CIVITAI_API_KEY
     api_key = CIVITAI_API_KEY
     if not api_key: print(_red("  CIVITAI_API_KEY not set.")); sys.exit(1)
 

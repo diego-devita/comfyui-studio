@@ -19,8 +19,8 @@ import json
 import sqlite3
 import uuid as _uuid
 
-from v2.app.db import get_conn, register_schema
-from v2.app.settings import now_iso
+from v2.app.core.db import get_conn, register_schema
+from v2.app.core.settings import now_iso
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -222,7 +222,7 @@ def _build_callback_args(
 
 def _enqueue_image(url, callback_args):
     """Enqueue a single image download via the download scheduler."""
-    from v2.app.domain import download as scheduler
+    from v2.app.core import download as scheduler
     scheduler.enqueue(url=url, callback="gallery_deliver", callback_args=callback_args)
 
 
@@ -279,7 +279,7 @@ def _deliver_gallery_media(file_path, args):
 
 
 # Register callback with download scheduler
-from v2.app.domain import download as _dl
+from v2.app.core import download as _dl
 _dl.register_callback("gallery_deliver", _deliver_gallery_media)
 
 

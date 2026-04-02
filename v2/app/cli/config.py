@@ -6,7 +6,7 @@ from v2.app.cli._common import _bold, _yellow, _red
 
 
 def cmd_list(args):
-    from v2.app.settings import (
+    from v2.app.core.settings import (
         WORKSPACE, STUDIO_DIR, V2_DIR, COMFYUI_DIR, DB_PATH,
         MEDIA_STORE_DIR, MODEL_STORE_DIR, DOWNLOADS_DIR,
         COMFYUI_PORT, COMFYUI_URL, STUDIO_PORT,

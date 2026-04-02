@@ -71,14 +71,14 @@ def _init():
     from v2.app.stores import media       # registers schema
     from v2.app.stores import model       # registers schema
     from v2.app.domain import catalog     # registers schema
-    from v2.app.domain import download    # registers schema
+    from v2.app.core import download    # registers schema
     from v2.app.domain import gallery     # registers schema + callback
-    from v2.app.db import init_db
+    from v2.app.core.db import init_db
     init_db()
     _initialized = True
 
 
 def _db_conn():
     _init()
-    from v2.app.db import get_conn
+    from v2.app.core.db import get_conn
     return get_conn()

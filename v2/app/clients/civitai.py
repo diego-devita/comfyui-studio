@@ -23,7 +23,7 @@ import json
 import re
 from typing import Any
 
-from v2.app.http_client import http
+from v2.app.core.http_client import http
 
 
 # ── CDN URL helpers ──────────────────────────────────────────────────────────

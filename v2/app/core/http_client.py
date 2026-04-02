@@ -12,7 +12,7 @@ Responsibilities:
   - Queryable stats (total calls, errors, avg duration)
 
 Usage:
-    from v2.app.http_client import http
+    from v2.app.core.http_client import http
 
     # Simple GET
     data = http.get_json("https://civitai.com/api/v1/models/12345",
