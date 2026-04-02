@@ -13,17 +13,19 @@ from pathlib import Path
 
 WORKSPACE   = Path(os.environ.get("WORKSPACE", "/workspace"))
 STUDIO_DIR  = WORKSPACE / "studio"
+V2_DIR      = STUDIO_DIR / "v2"
 COMFYUI_DIR = WORKSPACE / "ComfyUI"
 
 # ── Database ─────────────────────────────────────────────────────────────────
 
-DB_DIR  = STUDIO_DIR / "db"
+DB_DIR  = V2_DIR / "db"
 DB_PATH = DB_DIR / "studio.db"
 
 # ── Stores ───────────────────────────────────────────────────────────────────
 
-MEDIA_STORE_DIR = STUDIO_DIR / "media"
-MODEL_STORE_DIR = STUDIO_DIR / "models"
+MEDIA_STORE_DIR  = V2_DIR / "media"
+MODEL_STORE_DIR  = V2_DIR / "models"
+DOWNLOADS_DIR    = V2_DIR / "downloads"
 
 # ── ComfyUI ──────────────────────────────────────────────────────────────────
 
