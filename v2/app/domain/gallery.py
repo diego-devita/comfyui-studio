@@ -600,6 +600,149 @@ def set_model_preview(model_id: str, media_id: str):
     conn.commit()
 
 
+def list_stale_jobs() -> list[dict]:
+    """List interrupted and error gallery jobs."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM gallery_jobs WHERE status IN ('interrupted', 'error') ORDER BY created_at DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_stale_jobs() -> int:
+    """Delete all interrupted and error gallery jobs. Returns count deleted."""
+    conn = get_conn()
+    count = conn.execute(
+        "DELETE FROM gallery_jobs WHERE status IN ('interrupted', 'error')"
+    ).rowcount
+    conn.commit()
+    return count
+
+
+def resume_job(job_id: str, api_key: str) -> int:
+    """Resume an interrupted gallery job. Re-fetches from CivitAI, enqueues missing.
+
+    Returns number of new downloads enqueued.
+    """
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM gallery_jobs WHERE id = ? AND status = 'interrupted'", (job_id,)
+    ).fetchone()
+    if not row:
+        raise ValueError(f"Job not found or not interrupted: {job_id}")
+
+    job = dict(row)
+    model_id = job["model_id"]
+    version_id = job.get("version_id")
+    image_type = job["image_type"]
+    filters = json.loads(job.get("filters") or "{}")
+
+    from v2.app.domain import catalog as cat
+    from v2.app.domain import download as download_scheduler
+
+    # Set back to running
+    conn.execute("UPDATE gallery_jobs SET status = 'running' WHERE id = ?", (job_id,))
+    conn.commit()
+
+    client = CivitaiClient(api_key=api_key)
+    enqueued = 0
+
+    if image_type == "card":
+        model_source = cat.get_by_source_entity("model", model_id)
+        if not model_source:
+            conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
+            conn.commit()
+            raise ValueError("No CivitAI source for model")
+
+        civitai_model_id = int(model_source["source_id"])
+        model_data = client.get_model(civitai_model_id)
+
+        for version in model_data.get("modelVersions", []):
+            for img in client.extract_card_images(version):
+                cdn_id = img.get("cdn_id", "")
+                if not cdn_id:
+                    continue
+                existing = media_store.get_by_origin("civitai", cdn_id)
+                if existing:
+                    continue
+                media_type = img.get("type", "image")
+                url = build_cdn_url(cdn_id, media_type)
+                ext = ".mp4" if media_type == "video" else ".jpeg"
+                download_scheduler.enqueue(
+                    url=url, callback="gallery_deliver",
+                    callback_args={
+                        "origin": "civitai", "origin_id": cdn_id,
+                        "origin_url": url, "original_name": f"{cdn_id}{ext}",
+                        "model_id": model_id, "version_id": None,
+                        "image_type": "card", "civitai_image_id": None,
+                        "fetch_generation_data": False, "civitai_api_key": api_key,
+                        "gallery_job_id": job_id,
+                        "post_id": None, "post_title": None, "username": None, "stats": {},
+                    },
+                )
+                enqueued += 1
+
+    elif image_type == "community" and version_id:
+        version_source = cat.get_by_source_entity("version", version_id)
+        if not version_source:
+            conn.execute("UPDATE gallery_jobs SET status = 'interrupted' WHERE id = ?", (job_id,))
+            conn.commit()
+            raise ValueError("No CivitAI source for version")
+
+        civitai_vid = int(version_source["source_id"])
+        max_images = filters.get("max_images", 200)
+        completed = job.get("completed", 0)
+
+        for item in client.iter_images_trpc(
+            version_id=civitai_vid,
+            sort=filters.get("sort", "Most Reactions"),
+            period=filters.get("period", "AllTime"),
+            types=filters.get("types"),
+            with_meta=filters.get("with_meta", False),
+            from_platform=filters.get("from_platform", False),
+            limit=min(max_images, 200),
+        ):
+            normalized = client.normalize_trpc_image(item)
+            image_id = normalized.get("id")
+            cdn_id = normalized.get("cdn_id", "")
+            origin_key = str(image_id) if image_id else cdn_id
+
+            existing = media_store.get_by_origin("civitai", origin_key)
+            if existing:
+                continue
+
+            media_type = normalized.get("type", "image")
+            url = normalized.get("full_url") or build_cdn_url(cdn_id, media_type)
+            ext = ".mp4" if media_type == "video" else ".jpeg"
+            stats_data = normalized.get("stats", {})
+
+            download_scheduler.enqueue(
+                url=url, callback="gallery_deliver",
+                callback_args={
+                    "origin": "civitai", "origin_id": origin_key,
+                    "origin_url": url, "original_name": f"{image_id or cdn_id}{ext}",
+                    "model_id": model_id, "version_id": version_id,
+                    "image_type": "community", "civitai_image_id": image_id,
+                    "fetch_generation_data": filters.get("fetch_generation_data", True),
+                    "civitai_api_key": api_key, "gallery_job_id": job_id,
+                    "post_id": normalized.get("postId"),
+                    "post_title": normalized.get("postTitle"),
+                    "username": normalized.get("username"),
+                    "stats": {
+                        "reactions": (stats_data.get("heartCount", 0) or 0) + (stats_data.get("likeCount", 0) or 0),
+                        "comments": stats_data.get("commentCount", 0) or 0,
+                        "collected": stats_data.get("collectedCount", 0) or 0,
+                    },
+                    "civitai_url": f"https://civitai.com/images/{image_id}" if image_id else None,
+                },
+            )
+            enqueued += 1
+            if enqueued + completed >= max_images:
+                break
+
+    return enqueued
+
+
 def get_gallery_stats() -> dict:
     """Get aggregate gallery statistics.
 

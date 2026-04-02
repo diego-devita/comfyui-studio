@@ -1,11 +1,17 @@
 """CLI commands: studio store — model store operations."""
 
 import json
-from v2.app.cli._common import _bold, _dim, _fmt_bytes, _table, _db_conn
+from v2.app.cli._common import _init, _bold, _dim, _fmt_bytes, _table
+
+
+def _ms():
+    _init()
+    from v2.app.stores import model
+    return model
 
 
 def cmd_stats(args):
-    from v2.app.stores import model as ms
+    ms = _ms()
     if args.json:
         print(json.dumps({"count": ms.count(), "total_bytes": ms.total_size()}, indent=2))
         return
@@ -16,13 +22,10 @@ def cmd_stats(args):
 
 
 def cmd_list(args):
-    conn = _db_conn()
-    rows = conn.execute(
-        "SELECT * FROM model_store_files ORDER BY created_at DESC LIMIT ?",
-        (args.limit,)
-    ).fetchall()
+    ms = _ms()
+    rows = ms.list_files(limit=args.limit)
     if args.json:
-        print(json.dumps([dict(r) for r in rows], indent=2, default=str))
+        print(json.dumps(rows, indent=2, default=str))
         return
     if not rows:
         print(_dim("  Model store is empty."))
@@ -41,8 +44,7 @@ def register(subparsers, common):
         description="Physical model file storage.")
     sub = p.add_subparsers(dest="subcommand", title="subcommands")
 
-    s = sub.add_parser("stats", help="Store statistics", parents=[common])
-    s.set_defaults(func=cmd_stats)
+    sub.add_parser("stats", help="Store statistics", parents=[common]).set_defaults(func=cmd_stats)
 
     s = sub.add_parser("list", help="List stored files", parents=[common])
     s.add_argument("--limit", type=int, default=50)

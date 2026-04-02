@@ -395,3 +395,12 @@ def count() -> int:
     """Total number of stored model files."""
     conn = get_conn()
     return conn.execute("SELECT COUNT(*) FROM model_store_files").fetchone()[0]
+
+
+def list_files(limit: int = 50) -> list[dict]:
+    """List stored files, newest first."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM model_store_files ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
