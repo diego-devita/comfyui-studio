@@ -8,6 +8,9 @@ Default build targets **NVIDIA B200** (192 GB VRAM). Supports any GPU from V100 
 
 https://diego-devita.github.io/comfyui-studio/
 
+> The application wrapping the models catalog and integrations with civitAI is under heavy refactoring in a v2 flavour to be ready soon.
+> It was designed to be cli friendly, powered by sqlite, easy to import/export the whole state and strongly decoupled from ComfyUI that can be replaced at any moment
+
 ---
 
 ## Deploy on RunPod
@@ -92,7 +95,7 @@ ComfyUI graph editor is also available at `https://<POD_ID>-8188.proxy.runpod.ne
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    DOCKER IMAGE (build time)                          │
+│                    DOCKER IMAGE (build time)                         │
 │                                                                      │
 │  /comfyui           ComfyUI + 38 custom nodes (baked in)             │
 │  /app/bootstrap.py  First-boot installer                             │
@@ -101,7 +104,7 @@ ComfyUI graph editor is also available at `https://<POD_ID>-8188.proxy.runpod.ne
 │                                                                      │
 │  NOT in image: models, workflows, live app code, user data           │
 ├──────────────────────────────────────────────────────────────────────┤
-│                PERSISTENT VOLUME (runtime)                            │
+│                PERSISTENT VOLUME (runtime)                           │
 │                                                                      │
 │  /workspace/studio/                    ← STUDIO_DIR                  │
 │    .repo/                              ← git clone (staging only)    │
@@ -110,13 +113,13 @@ ComfyUI graph editor is also available at `https://<POD_ID>-8188.proxy.runpod.ne
 │    catalogs/                           ← models, loras, llm-models   │
 │    workflows/                          ← workflow library            │
 │    presets/                            ← saved presets               │
-│    assets/input/ + assets/output/      ← ComfyUI I/O                │
+│    assets/input/ + assets/output/      ← ComfyUI I/O                 │
 │    jobs/                               ← job history records         │
 │    llm/                                ← LLM models + config         │
 │    db/                                 ← SQLite database             │
 │    version.json                        ← component version tracking  │
-│  /workspace/ComfyUI/                   ← copied from /comfyui       │
-│  /workspace/ComfyUI/models/            ← downloaded via Model Mgr   │
+│  /workspace/ComfyUI/                   ← copied from /comfyui        │
+│  /workspace/ComfyUI/models/            ← downloaded via Model Mgr    │
 └──────────────────────────────────────────────────────────────────────┘
 
 Bootstrap flow (first boot only):
